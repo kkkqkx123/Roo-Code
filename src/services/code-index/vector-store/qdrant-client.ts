@@ -501,7 +501,7 @@ export class QdrantVectorStore implements IVectorStore {
 	): Promise<void> {
 		try {
 			const processedPoints = points.map((point) => {
-				if (point.payload?.filePath) {
+				if (typeof point.payload?.filePath === "string") {
 					const segments = point.payload.filePath.split(path.sep).filter(Boolean)
 					const pathSegments = segments.reduce(
 						(acc: Record<string, string>, segment: string, index: number) => {
@@ -686,8 +686,9 @@ export class QdrantVectorStore implements IVectorStore {
 		} catch (error: unknown) {
 			// Extract more detailed error information
 			const errorMessage = error instanceof Error ? error.message : String(error)
-			const errorStatus = (error as Record<string, unknown>)?.status || (error as Record<string, unknown>)?.response?.status || (error as Record<string, unknown>)?.statusCode
-			const errorDetails = (error as Record<string, unknown>)?.response?.data || (error as Record<string, unknown>)?.data || ""
+			const errorObj = error as Record<string, unknown> | undefined
+			const errorStatus = errorObj?.status || (errorObj?.response as Record<string, unknown>)?.status || errorObj?.statusCode
+			const errorDetails = (errorObj?.response as Record<string, unknown>)?.data || errorObj?.data || ""
 
 			console.error(`[QdrantVectorStore] Failed to delete points by file paths:`, {
 				error: errorMessage,
