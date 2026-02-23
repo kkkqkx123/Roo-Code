@@ -15,6 +15,18 @@ export const CODEBASE_INDEX_DEFAULTS = {
 } as const
 
 /**
+ * Vector Storage Configuration Types
+ */
+
+export type VectorStorageMode = "auto" | "preset" | "custom"
+
+export type VectorStoragePreset = "tiny" | "small" | "medium" | "large"
+
+export const vectorStorageModeSchema = z.enum(["auto", "preset", "custom"])
+
+export const vectorStoragePresetSchema = z.enum(["tiny", "small", "medium", "large"])
+
+/**
  * CodebaseIndexConfig
  */
 
@@ -34,6 +46,9 @@ export const codebaseIndexConfigSchema = z.object({
 	// OpenAI Compatible specific fields
 	codebaseIndexOpenAiCompatibleBaseUrl: z.string().optional(),
 	codebaseIndexOpenAiCompatibleModelDimension: z.number().optional(),
+	// Vector storage configuration
+	vectorStorageMode: vectorStorageModeSchema.optional(),
+	vectorStoragePreset: vectorStoragePresetSchema.optional(),
 })
 
 export type CodebaseIndexConfig = z.infer<typeof codebaseIndexConfigSchema>

@@ -1,5 +1,6 @@
 import * as vscode from "vscode"
 import { Ignore } from "ignore"
+import { QdrantClient } from "@qdrant/js-client-rest"
 
 import type { EmbedderProvider } from "@coder/types"
 
@@ -14,6 +15,7 @@ import { OpenAiEmbedder } from "./embedders/openai"
 import { OpenAICompatibleEmbedder } from "./embedders/openai-compatible"
 import { GeminiEmbedder } from "./embedders/gemini"
 import { QdrantVectorStore } from "./vector-store/qdrant-client"
+import { VectorStorageConfigManager } from "./vector-storage-config-manager"
 import { codeParser, DirectoryScanner, FileWatcher } from "./processors"
 import { ICodeParser, IEmbedder, IFileWatcher, IVectorStore } from "./interfaces"
 import { CodeIndexConfigManager } from "./config-manager"
@@ -121,8 +123,36 @@ export class CodeIndexServiceFactory {
 			throw new Error(t("embeddings:serviceFactory.qdrantUrlMissing"))
 		}
 
-		// Assuming constructor is updated: new QdrantVectorStore(workspacePath, url, vectorSize, apiKey?)
-		return new QdrantVectorStore(this.workspacePath, config.qdrantUrl, vectorSize, config.qdrantApiKey)
+		// Create vector storage config manager if vector storage config is available
+		let vectorStorageConfigManager: VectorStorageConfigManager | undefined
+		if (config.vectorStorageConfig) {
+			// We need to create a temporary QdrantClient to pass to the config manager
+			// This will be replaced when the vector store is fully initialized
+			const tempClient = new QdrantClient({
+				url: config.qdrantUrl,
+				apiKey: config.qdrantApiKey,
+			})
+			
+			// Generate collection name from workspace path
+			const { createHash } = require("crypto")
+			const hash = createHash("sha256").update(this.workspacePath).digest("hex")
+			const collectionName = `ws-${hash.substring(0, 16)}`
+			
+			vectorStorageConfigManager = new VectorStorageConfigManager(
+				config.vectorStorageConfig,
+				tempClient,
+				collectionName,
+			)
+		}
+
+		// Create vector store with optional vector storage config manager
+		return new QdrantVectorStore(
+			this.workspacePath,
+			config.qdrantUrl,
+			vectorSize,
+			config.qdrantApiKey,
+			vectorStorageConfigManager,
+		)
 	}
 
 	/**

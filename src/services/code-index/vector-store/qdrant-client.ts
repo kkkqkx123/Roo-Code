@@ -6,6 +6,7 @@ import { IVectorStore } from "../interfaces/vector-store"
 import { Payload, VectorStoreSearchResult } from "../interfaces"
 import { DEFAULT_MAX_SEARCH_RESULTS, DEFAULT_SEARCH_MIN_SCORE, QDRANT_CODE_BLOCK_NAMESPACE } from "../constants"
 import { t } from "../../../i18n"
+import { VectorStorageConfigManager } from "../vector-storage-config-manager"
 
 /**
  * Qdrant implementation of the vector store interface
@@ -18,13 +19,23 @@ export class QdrantVectorStore implements IVectorStore {
 	private readonly collectionName: string
 	private readonly qdrantUrl: string = "http://localhost:6333"
 	private readonly workspacePath: string
+	private vectorStorageConfigManager?: VectorStorageConfigManager
 
 	/**
 	 * Creates a new Qdrant vector store
 	 * @param workspacePath Path to the workspace
 	 * @param url Optional URL to the Qdrant server
+	 * @param vectorSize Size of the embedding vectors
+	 * @param apiKey Optional API key for Qdrant
+	 * @param vectorStorageConfigManager Optional vector storage configuration manager
 	 */
-	constructor(workspacePath: string, url: string, vectorSize: number, apiKey?: string) {
+	constructor(
+		workspacePath: string,
+		url: string,
+		vectorSize: number,
+		apiKey?: string,
+		vectorStorageConfigManager?: VectorStorageConfigManager,
+	) {
 		// Parse the URL to determine the appropriate QdrantClient configuration
 		const parsedUrl = this.parseQdrantUrl(url)
 
@@ -81,6 +92,7 @@ export class QdrantVectorStore implements IVectorStore {
 		const hash = createHash("sha256").update(workspacePath).digest("hex")
 		this.vectorSize = vectorSize
 		this.collectionName = `ws-${hash.substring(0, 16)}`
+		this.vectorStorageConfigManager = vectorStorageConfigManager
 	}
 
 	/**
@@ -153,16 +165,37 @@ export class QdrantVectorStore implements IVectorStore {
 
 			if (collectionInfo === null) {
 				// Collection info not retrieved (assume not found or inaccessible), create it
+				const config = await this.getCollectionConfig()
 				await this.client.createCollection(this.collectionName, {
 					vectors: {
 						size: this.vectorSize,
 						distance: this.DISTANCE_METRIC,
-						on_disk: true,
+						on_disk: config.vectors.on_disk,
 					},
-					hnsw_config: {
-						m: 64,
-						ef_construct: 512,
-						on_disk: true,
+					hnsw_config: config.hnsw && {
+						m: config.hnsw.m,
+						ef_construct: config.hnsw.ef_construct,
+						on_disk: true, // Always use disk storage for HNSW
+					},
+					quantization_config: config.vectors.quantization?.enabled
+						? {
+								scalar: config.vectors.quantization.type === "scalar"
+									? {
+											type: "int8",
+											always_ram: false,
+									  }
+									: undefined,
+								product: config.vectors.quantization.type === "product"
+									? {
+											product: {
+												always_ram: false,
+											},
+									  }
+									: undefined,
+						  }
+						: undefined,
+					optimizers_config: config.wal && {
+						indexing_threshold: 0,
 					},
 				})
 				created = true
@@ -195,8 +228,8 @@ export class QdrantVectorStore implements IVectorStore {
 			// Create payload indexes
 			await this._createPayloadIndexes()
 			return created
-		} catch (error: any) {
-			const errorMessage = error?.message || error
+		} catch (error: unknown) {
+			const errorMessage = error instanceof Error ? error.message : String(error)
 			console.error(
 				`[QdrantVectorStore] Failed to initialize Qdrant collection "${this.collectionName}":`,
 				errorMessage,
@@ -248,16 +281,37 @@ export class QdrantVectorStore implements IVectorStore {
 				`[QdrantVectorStore] Creating new collection ${this.collectionName} with vector size ${this.vectorSize}...`,
 			)
 			recreationAttempted = true
+			const config = await this.getCollectionConfig()
 			await this.client.createCollection(this.collectionName, {
 				vectors: {
 					size: this.vectorSize,
 					distance: this.DISTANCE_METRIC,
-					on_disk: true,
+					on_disk: config.vectors.on_disk,
 				},
-				hnsw_config: {
-					m: 64,
-					ef_construct: 512,
-					on_disk: true,
+				hnsw_config: config.hnsw && {
+					m: config.hnsw.m,
+					ef_construct: config.hnsw.ef_construct,
+					on_disk: true, // Always use disk storage for HNSW
+				},
+				quantization_config: config.vectors.quantization?.enabled
+					? {
+							scalar: config.vectors.quantization.type === "scalar"
+								? {
+										type: "int8",
+										always_ram: false,
+								  }
+								: undefined,
+							product: config.vectors.quantization.type === "product"
+								? {
+										product: {
+											always_ram: false,
+										},
+								  }
+								: undefined,
+					  }
+					: undefined,
+				optimizers_config: config.wal && {
+					indexing_threshold: 0,
 				},
 			})
 			console.log(`[QdrantVectorStore] Successfully created new collection ${this.collectionName}`)
@@ -302,12 +356,12 @@ export class QdrantVectorStore implements IVectorStore {
 				field_name: "type",
 				field_schema: "keyword",
 			})
-		} catch (indexError: any) {
-			const errorMessage = (indexError?.message || "").toLowerCase()
+		} catch (indexError: unknown) {
+			const errorMessage = (indexError instanceof Error ? indexError.message : String(indexError) || "").toLowerCase()
 			if (!errorMessage.includes("already exists")) {
 				console.warn(
 					`[QdrantVectorStore] Could not create payload index for type on ${this.collectionName}. Details:`,
-					indexError?.message || indexError,
+					indexError instanceof Error ? indexError.message : indexError,
 				)
 			}
 		}
@@ -319,12 +373,12 @@ export class QdrantVectorStore implements IVectorStore {
 					field_name: `pathSegments.${i}`,
 					field_schema: "keyword",
 				})
-			} catch (indexError: any) {
-				const errorMessage = (indexError?.message || "").toLowerCase()
+			} catch (indexError: unknown) {
+				const errorMessage = (indexError instanceof Error ? indexError.message : String(indexError) || "").toLowerCase()
 				if (!errorMessage.includes("already exists")) {
 					console.warn(
 						`[QdrantVectorStore] Could not create payload index for pathSegments.${i} on ${this.collectionName}. Details:`,
-						indexError?.message || indexError,
+						indexError instanceof Error ? indexError.message : indexError,
 					)
 				}
 			}
@@ -339,7 +393,7 @@ export class QdrantVectorStore implements IVectorStore {
 		points: Array<{
 			id: string
 			vector: number[]
-			payload: Record<string, any>
+			payload: Record<string, unknown>
 		}>,
 	): Promise<void> {
 		try {
@@ -526,11 +580,11 @@ export class QdrantVectorStore implements IVectorStore {
 				filter,
 				wait: true,
 			})
-		} catch (error: any) {
+		} catch (error: unknown) {
 			// Extract more detailed error information
-			const errorMessage = error?.message || String(error)
-			const errorStatus = error?.status || error?.response?.status || error?.statusCode
-			const errorDetails = error?.response?.data || error?.data || ""
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			const errorStatus = (error as Record<string, unknown>)?.status || (error as Record<string, unknown>)?.response?.status || (error as Record<string, unknown>)?.statusCode
+			const errorDetails = (error as Record<string, unknown>)?.response?.data || (error as Record<string, unknown>)?.data || ""
 
 			console.error(`[QdrantVectorStore] Failed to delete points by file paths:`, {
 				error: errorMessage,
@@ -683,6 +737,105 @@ export class QdrantVectorStore implements IVectorStore {
 			console.log("[QdrantVectorStore] Marked indexing as incomplete (in progress)")
 		} catch (error) {
 			console.error("[QdrantVectorStore] Failed to mark indexing as incomplete:", error)
+			throw error
+		}
+	}
+
+	/**
+		* Gets the collection configuration from the vector storage config manager
+		* Falls back to default configuration if no manager is set
+		*/
+	private async getCollectionConfig(): Promise<{
+		vectors: { on_disk: boolean; quantization?: { enabled: boolean; type: string; bits?: number } }
+		hnsw?: { m: number; ef_construct: number }
+		wal?: { capacity_mb: number; segments: number }
+	}> {
+		if (this.vectorStorageConfigManager) {
+			const config = await this.vectorStorageConfigManager.getCollectionConfig()
+			return {
+				vectors: {
+					on_disk: config.vectors.on_disk,
+					quantization: config.vectors.quantization,
+				},
+				hnsw: config.hnsw,
+				wal: config.wal,
+			}
+		}
+
+		// Fallback to default configuration (medium preset)
+		return {
+			vectors: {
+				on_disk: true,
+			},
+			hnsw: {
+				m: 64,
+				ef_construct: 512,
+			},
+		}
+	}
+
+	/**
+	 * Sets collection configuration based on estimation result
+	 * Used before indexing to set initial configuration based on estimated size
+	 * @param estimation The size estimation result
+	 */
+	async setCollectionConfigFromEstimation(estimation: {
+		estimatedVectorCount: number
+		estimatedTokenCount: number
+		fileCount: number
+		totalFileSize: number
+	}): Promise<void> {
+		if (!this.vectorStorageConfigManager) {
+			console.warn("[QdrantVectorStore] No vector storage config manager available, skipping config update")
+			return
+		}
+
+		try {
+			const config = this.vectorStorageConfigManager.getCollectionConfigFromEstimation(estimation)
+
+			// Check if collection exists
+			const exists = await this.collectionExists()
+			if (!exists) {
+				console.log(
+					`[QdrantVectorStore] Collection does not exist yet, config will be applied during initialization`,
+				)
+				return
+			}
+
+			// Apply configuration to existing collection
+			const updateParams: Record<string, unknown> = {}
+
+			// Apply HNSW configuration
+			if (config.hnsw) {
+				updateParams.hnsw_config = config.hnsw
+				updateParams.optimizers_config = {
+					indexing_threshold: 0, // Disable background optimizer threshold
+				}
+			}
+
+			// Apply quantization configuration
+			if (config.vectors.quantization?.enabled) {
+				updateParams.quantization_config = {
+					scalar: {
+						type: "int8",
+					},
+				}
+			}
+
+			// Apply WAL configuration
+			if (config.wal) {
+				updateParams.wal_config = config.wal
+			}
+
+			// Update collection if there are changes
+			if (Object.keys(updateParams).length > 0) {
+				await this.client.updateCollection(this.collectionName, updateParams)
+				console.log(
+					`[QdrantVectorStore] Updated collection configuration based on estimation: ${estimation.estimatedVectorCount} vectors`,
+				)
+			}
+		} catch (error) {
+			console.error("[QdrantVectorStore] Failed to set collection config from estimation:", error)
 			throw error
 		}
 	}

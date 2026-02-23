@@ -1,4 +1,4 @@
-import type { Mock } from "vitest"
+import { beforeEach, describe, expect, it, vitest, type Mock } from "vitest"
 import * as vscode from "vscode"
 import { createHash } from "crypto"
 import debounce from "lodash.debounce"
@@ -46,8 +46,8 @@ describe("CacheManager", () => {
 			globalStorageUri: { fsPath: "/mock/storage" } as vscode.Uri,
 		} as vscode.ExtensionContext
 
-		// Mock Uri.joinPath
-		;(vscode.Uri.joinPath as Mock).mockReturnValue(mockCachePath)
+			// Mock Uri.joinPath
+			; (vscode.Uri.joinPath as Mock).mockReturnValue(mockCachePath)
 
 		// Create cache manager instance
 		cacheManager = new CacheManager(mockContext, mockWorkspacePath)
@@ -72,7 +72,7 @@ describe("CacheManager", () => {
 		it("should load existing cache file successfully", async () => {
 			const mockCache = { "file1.ts": "hash1", "file2.ts": "hash2" }
 			const mockBuffer = Buffer.from(JSON.stringify(mockCache))
-			;(vscode.workspace.fs.readFile as Mock).mockResolvedValue(mockBuffer)
+				; (vscode.workspace.fs.readFile as Mock).mockResolvedValue(mockBuffer)
 
 			await cacheManager.initialize()
 
@@ -81,7 +81,7 @@ describe("CacheManager", () => {
 		})
 
 		it("should handle missing cache file by creating empty cache", async () => {
-			;(vscode.workspace.fs.readFile as Mock).mockRejectedValue(new Error("File not found"))
+			; (vscode.workspace.fs.readFile as Mock).mockRejectedValue(new Error("File not found"))
 
 			await cacheManager.initialize()
 
@@ -141,8 +141,8 @@ describe("CacheManager", () => {
 		})
 
 		it("should handle save errors gracefully", async () => {
-			const consoleErrorSpy = vitest.spyOn(console, "error").mockImplementation(() => {})
-			;(safeWriteJson as Mock).mockRejectedValue(new Error("Save failed"))
+			const consoleErrorSpy = vitest.spyOn(console, "error").mockImplementation(() => { })
+				; (safeWriteJson as Mock).mockRejectedValue(new Error("Save failed"))
 
 			cacheManager.updateHash("test.ts", "hash")
 
@@ -159,9 +159,9 @@ describe("CacheManager", () => {
 		it("should clear cache file and reset state", async () => {
 			cacheManager.updateHash("test.ts", "hash")
 
-			// Reset the mock to ensure safeWriteJson succeeds for clearCacheFile
-			;(safeWriteJson as Mock).mockClear()
-			;(safeWriteJson as Mock).mockResolvedValue(undefined)
+				// Reset the mock to ensure safeWriteJson succeeds for clearCacheFile
+				; (safeWriteJson as Mock).mockClear()
+				; (safeWriteJson as Mock).mockResolvedValue(undefined)
 
 			await cacheManager.clearCacheFile()
 
@@ -170,8 +170,8 @@ describe("CacheManager", () => {
 		})
 
 		it("should handle clear errors gracefully", async () => {
-			const consoleErrorSpy = vitest.spyOn(console, "error").mockImplementation(() => {})
-			;(safeWriteJson as Mock).mockRejectedValue(new Error("Save failed"))
+			const consoleErrorSpy = vitest.spyOn(console, "error").mockImplementation(() => { })
+				; (safeWriteJson as Mock).mockRejectedValue(new Error("Save failed"))
 
 			await cacheManager.clearCacheFile()
 

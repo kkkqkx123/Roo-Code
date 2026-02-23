@@ -1,5 +1,6 @@
 import { ApiHandlerOptions } from "../../../shared/api" // Adjust path if needed
 import { EmbedderProvider } from "./manager"
+import { VectorStorageConfig } from "./vector-storage-config"
 
 /**
  * Configuration state for the code indexing feature
@@ -16,6 +17,7 @@ export interface CodeIndexConfig {
 	qdrantApiKey?: string
 	searchMinScore?: number
 	searchMaxResults?: number
+	vectorStorageConfig?: VectorStorageConfig
 }
 
 /**
@@ -33,4 +35,6 @@ export type PreviousConfigSnapshot = {
 	geminiApiKey?: string
 	qdrantUrl?: string
 	qdrantApiKey?: string
+	vectorStorageMode?: string
+	vectorStoragePreset?: string
 }

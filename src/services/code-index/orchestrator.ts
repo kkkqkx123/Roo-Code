@@ -5,6 +5,7 @@ import { CodeIndexStateManager, IndexingState } from "./state-manager"
 import { IFileWatcher, IVectorStore, BatchProcessingSummary } from "./interfaces"
 import { DirectoryScanner } from "./processors"
 import { CacheManager } from "./cache-manager"
+import { TokenBasedSizeEstimator } from "./token-based-size-estimator"
 import { t } from "../../i18n"
 
 /**
@@ -131,6 +132,24 @@ export class CodeIndexOrchestrator {
 
 			if (collectionCreated) {
 				await this.cacheManager.clearCacheFile()
+
+				// Estimate collection size for new collections and set appropriate configuration
+				console.log("[CodeIndexOrchestrator] New collection created, estimating collection size...")
+				try {
+					const sizeEstimator = new TokenBasedSizeEstimator()
+					const estimation = await sizeEstimator.estimateCollectionSize(this.workspacePath)
+					console.log(
+						`[CodeIndexOrchestrator] Estimated ${estimation.estimatedVectorCount} vectors from ${estimation.fileCount} files (${estimation.estimatedTokenCount} tokens)`,
+					)
+
+					// Set collection configuration based on estimation
+					if (this.vectorStore.setCollectionConfigFromEstimation) {
+						await this.vectorStore.setCollectionConfigFromEstimation(estimation)
+					}
+				} catch (error) {
+					console.warn("[CodeIndexOrchestrator] Failed to estimate collection size, using default config:", error)
+					// Continue with default configuration
+				}
 			}
 
 			// Check if the collection already has indexed data

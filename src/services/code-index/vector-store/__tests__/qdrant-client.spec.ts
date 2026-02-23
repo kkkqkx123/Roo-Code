@@ -4,6 +4,7 @@ import { createHash } from "crypto"
 import { QdrantVectorStore } from "../qdrant-client"
 import { getWorkspacePath } from "../../../../utils/path"
 import { DEFAULT_MAX_SEARCH_RESULTS, DEFAULT_SEARCH_MIN_SCORE } from "../../constants"
+import { vitest, describe, beforeEach, it, expect } from "vitest"
 
 // Mocks
 vitest.mock("@qdrant/js-client-rest")

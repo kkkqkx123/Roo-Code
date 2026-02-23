@@ -1,6 +1,6 @@
 import { CodeIndexManager } from "../manager"
 import { CodeIndexServiceFactory } from "../service-factory"
-import type { MockedClass } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi, vitest, type MockedClass } from "vitest"
 import * as path from "path"
 
 // Helper: create a mock vscode.Uri from an fsPath
@@ -176,14 +176,14 @@ describe("CodeIndexManager - handleSettingsChange regression", () => {
 					searchMinScore: 0.4,
 				}),
 			}
-			;(manager as any)._configManager = mockConfigManager
+				; (manager as any)._configManager = mockConfigManager
 
 			// Mock cache manager
 			const mockCacheManager = {
 				initialize: vi.fn(),
 				clearCacheFile: vi.fn(),
 			}
-			;(manager as any)._cacheManager = mockCacheManager
+				; (manager as any)._cacheManager = mockCacheManager
 
 			// Mock the feature state to simulate valid configuration that would normally trigger restart
 			vi.spyOn(manager, "isFeatureEnabled", "get").mockReturnValue(true)
@@ -243,18 +243,18 @@ describe("CodeIndexManager - handleSettingsChange regression", () => {
 					searchMinScore: 0.4,
 				}),
 			}
-			;(manager as any)._configManager = mockConfigManager
+				; (manager as any)._configManager = mockConfigManager
 
 			// Mock cache manager
 			const mockCacheManager = {
 				initialize: vi.fn(),
 				clearCacheFile: vi.fn(),
 			}
-			;(manager as any)._cacheManager = mockCacheManager
+				; (manager as any)._cacheManager = mockCacheManager
 
-			// Simulate an initialized manager by setting the required properties
-			;(manager as any)._orchestrator = { stopWatcher: vi.fn(), stopIndexing: vi.fn() }
-			;(manager as any)._searchService = {}
+				// Simulate an initialized manager by setting the required properties
+				; (manager as any)._orchestrator = { stopWatcher: vi.fn(), stopIndexing: vi.fn() }
+				; (manager as any)._searchService = {}
 
 			// Verify manager is considered initialized
 			expect(manager.isInitialized).toBe(true)
@@ -308,7 +308,7 @@ describe("CodeIndexManager - handleSettingsChange regression", () => {
 
 		it("should handle case when config manager is not set", async () => {
 			// Ensure config manager is not set (edge case)
-			;(manager as any)._configManager = undefined
+			; (manager as any)._configManager = undefined
 
 			// This should not throw an error
 			await expect(manager.handleSettingsChange()).resolves.not.toThrow()
@@ -369,7 +369,7 @@ describe("CodeIndexManager - handleSettingsChange regression", () => {
 					searchMinScore: 0.4,
 				}),
 			}
-			;(manager as any)._configManager = mockConfigManager
+				; (manager as any)._configManager = mockConfigManager
 		})
 
 		it("should validate embedder during _recreateServices when validation succeeds", async () => {
@@ -466,14 +466,14 @@ describe("CodeIndexManager - handleSettingsChange regression", () => {
 					searchMinScore: 0.4,
 				}),
 			}
-			;(manager as any)._configManager = mockConfigManager
+				; (manager as any)._configManager = mockConfigManager
 
 			// Mock cache manager
 			mockCacheManager = {
 				initialize: vi.fn(),
 				clearCacheFile: vi.fn(),
 			}
-			;(manager as any)._cacheManager = mockCacheManager
+				; (manager as any)._cacheManager = mockCacheManager
 
 			// Mock state manager
 			mockStateManager = (manager as any)._stateManager
@@ -486,10 +486,10 @@ describe("CodeIndexManager - handleSettingsChange regression", () => {
 				currentItemUnit: "items",
 			})
 
-			// Mock orchestrator and search service to simulate initialized state
-			;(manager as any)._orchestrator = { stopWatcher: vi.fn(), stopIndexing: vi.fn(), state: "Error" }
-			;(manager as any)._searchService = {}
-			;(manager as any)._serviceFactory = {}
+				// Mock orchestrator and search service to simulate initialized state
+				; (manager as any)._orchestrator = { stopWatcher: vi.fn(), stopIndexing: vi.fn(), state: "Error" }
+				; (manager as any)._searchService = {}
+				; (manager as any)._serviceFactory = {}
 		})
 
 		it("should clear error state when recoverFromError is called", async () => {
@@ -614,14 +614,14 @@ describe("CodeIndexManager - handleSettingsChange regression", () => {
 				throw new Error("State update failed")
 			})
 
-			// Setup manager with service instances
-			;(manager as any)._configManager = mockConfigManager
-			;(manager as any)._serviceFactory = {}
-			;(manager as any)._orchestrator = { stopWatcher: vi.fn(), stopIndexing: vi.fn() }
-			;(manager as any)._searchService = {}
+				// Setup manager with service instances
+				; (manager as any)._configManager = mockConfigManager
+				; (manager as any)._serviceFactory = {}
+				; (manager as any)._orchestrator = { stopWatcher: vi.fn(), stopIndexing: vi.fn() }
+				; (manager as any)._searchService = {}
 
 			// Spy on console.error
-			const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+			const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => { })
 
 			// Act - should not throw despite setSystemState error
 			await expect(manager.recoverFromError()).resolves.not.toThrow()
@@ -717,11 +717,11 @@ describe("CodeIndexManager - handleSettingsChange regression", () => {
 				} as any,
 			}
 
-			// Patch workspaceFolders to include both folders
-			;(vscode.workspace as any).workspaceFolders = [
-				{ uri: folderAUri, name: "folderA", index: 0 },
-				{ uri: folderBUri, name: "folderB", index: 1 },
-			]
+				// Patch workspaceFolders to include both folders
+				; (vscode.workspace as any).workspaceFolders = [
+					{ uri: folderAUri, name: "folderA", index: 0 },
+					{ uri: folderBUri, name: "folderB", index: 1 },
+				]
 
 			const managerA = CodeIndexManager.getInstance(sharedContext as any, folderAPath)!
 			const managerB = CodeIndexManager.getInstance(sharedContext as any, folderBPath)!
@@ -754,7 +754,7 @@ describe("CodeIndexManager - handleSettingsChange regression", () => {
 				stopWatcher: vi.fn(),
 				state: "Indexing",
 			}
-			;(manager as any)._orchestrator = mockOrchestrator
+				; (manager as any)._orchestrator = mockOrchestrator
 
 			manager.stopIndexing()
 
@@ -762,7 +762,7 @@ describe("CodeIndexManager - handleSettingsChange regression", () => {
 		})
 
 		it("should be safe to call when orchestrator is not set", () => {
-			;(manager as any)._orchestrator = undefined
+			; (manager as any)._orchestrator = undefined
 
 			expect(() => manager.stopIndexing()).not.toThrow()
 		})
@@ -775,14 +775,14 @@ describe("CodeIndexManager - handleSettingsChange regression", () => {
 				stopWatcher: vi.fn(),
 				state: "Indexing",
 			}
-			;(manager as any)._orchestrator = mockOrchestrator
+				; (manager as any)._orchestrator = mockOrchestrator
 
 			const mockConfigManager = {
 				loadConfiguration: vi.fn().mockResolvedValue({ requiresRestart: false }),
 				isFeatureConfigured: true,
 				isFeatureEnabled: false,
 			}
-			;(manager as any)._configManager = mockConfigManager
+				; (manager as any)._configManager = mockConfigManager
 
 			const mockStateManager = (manager as any)._stateManager
 			mockStateManager.setSystemState = vi.fn()

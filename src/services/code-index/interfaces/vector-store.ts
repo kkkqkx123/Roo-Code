@@ -7,6 +7,20 @@ export type PointStruct = {
 	payload: Record<string, any>
 }
 
+/**
+ * Size estimation result
+ */
+export interface SizeEstimationResult {
+	/** Estimated number of vectors */
+	estimatedVectorCount: number
+	/** Estimated total token count */
+	estimatedTokenCount: number
+	/** Number of files processed */
+	fileCount: number
+	/** Total file size in bytes */
+	totalFileSize: number
+}
+
 export interface IVectorStore {
 	/**
 	 * Initializes the vector store
@@ -80,6 +94,13 @@ export interface IVectorStore {
 	 * Should be called at the start of indexing to indicate work in progress
 	 */
 	markIndexingIncomplete(): Promise<void>
+
+	/**
+	 * Sets collection configuration based on estimation result
+	 * Used before indexing to set initial configuration based on estimated size
+	 * @param estimation The size estimation result
+	 */
+	setCollectionConfigFromEstimation?(estimation: SizeEstimationResult): Promise<void>
 }
 
 export interface VectorStoreSearchResult {

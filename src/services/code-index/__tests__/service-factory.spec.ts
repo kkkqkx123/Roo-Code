@@ -1,4 +1,4 @@
-import type { MockedClass, MockedFunction } from "vitest"
+import { beforeEach, describe, expect, it, vitest, type MockedClass, type MockedFunction } from "vitest"
 import { CodeIndexServiceFactory } from "../service-factory"
 import { OpenAiEmbedder } from "../embedders/openai"
 import { OpenAICompatibleEmbedder } from "../embedders/openai-compatible"

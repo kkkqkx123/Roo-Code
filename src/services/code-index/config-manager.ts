@@ -4,6 +4,7 @@ import { EmbedderProvider } from "./interfaces/manager"
 import { CodeIndexConfig, PreviousConfigSnapshot } from "./interfaces/config"
 import { DEFAULT_SEARCH_MIN_SCORE, DEFAULT_MAX_SEARCH_RESULTS } from "./constants"
 import { getDefaultModelId, getModelDimension, getModelScoreThreshold } from "../../shared/embeddingModels"
+import { VectorStorageConfig, DEFAULT_VECTOR_STORAGE_CONFIG } from "./interfaces/vector-storage-config"
 
 /**
  * Manages configuration state and validation for the code indexing feature.
@@ -21,6 +22,7 @@ export class CodeIndexConfigManager {
 	private qdrantApiKey?: string
 	private searchMinScore?: number
 	private searchMaxResults?: number
+	private vectorStorageConfig: VectorStorageConfig = DEFAULT_VECTOR_STORAGE_CONFIG
 
 	constructor(private readonly contextProxy: ContextProxy) {
 		// Initialize with current configuration to avoid false restart triggers
@@ -49,6 +51,8 @@ export class CodeIndexConfigManager {
 			codebaseIndexSearchMinScore: undefined,
 			codebaseIndexSearchMaxResults: undefined,
 			codebaseIndexOpenAiCompatibleModelDimension: undefined,
+			vectorStorageMode: "auto",
+			vectorStoragePreset: "medium",
 		}
 
 		const {
@@ -59,6 +63,8 @@ export class CodeIndexConfigManager {
 			codebaseIndexEmbedderModelId,
 			codebaseIndexSearchMinScore,
 			codebaseIndexSearchMaxResults,
+			vectorStorageMode,
+			vectorStoragePreset,
 		} = codebaseIndexConfig
 
 		const openAiKey = this.contextProxy?.getSecret("codeIndexOpenAiKey") ?? ""
@@ -113,6 +119,13 @@ export class CodeIndexConfigManager {
 				: undefined
 
 		this.geminiOptions = geminiApiKey ? { apiKey: geminiApiKey } : undefined
+
+		// Load vector storage configuration
+		this.vectorStorageConfig = {
+			mode: (vectorStorageMode as VectorStorageConfig["mode"]) ?? "auto",
+			preset: (vectorStoragePreset as VectorStorageConfig["preset"]) ?? "medium",
+			thresholds: DEFAULT_VECTOR_STORAGE_CONFIG.thresholds,
+		}
 	}
 
 	/**
@@ -147,6 +160,8 @@ export class CodeIndexConfigManager {
 			geminiApiKey: this.geminiOptions?.apiKey ?? "",
 			qdrantUrl: this.qdrantUrl ?? "",
 			qdrantApiKey: this.qdrantApiKey ?? "",
+			vectorStorageMode: this.vectorStorageConfig.mode,
+			vectorStoragePreset: this.vectorStorageConfig.preset,
 		}
 
 		// Refresh secrets from VSCode storage to ensure we have the latest values
@@ -170,6 +185,7 @@ export class CodeIndexConfigManager {
 				qdrantUrl: this.qdrantUrl,
 				qdrantApiKey: this.qdrantApiKey,
 				searchMinScore: this.currentSearchMinScore,
+				vectorStorageConfig: this.vectorStorageConfig,
 			},
 			requiresRestart,
 		}
@@ -288,6 +304,16 @@ export class CodeIndexConfigManager {
 			return true
 		}
 
+		// Vector storage configuration changes
+		const prevVectorStorageMode = prev?.vectorStorageMode ?? "auto"
+		const prevVectorStoragePreset = prev?.vectorStoragePreset ?? "medium"
+		const currentVectorStorageMode = this.vectorStorageConfig.mode
+		const currentVectorStoragePreset = this.vectorStorageConfig.preset ?? "medium"
+
+		if (prevVectorStorageMode !== currentVectorStorageMode || prevVectorStoragePreset !== currentVectorStoragePreset) {
+			return true
+		}
+
 		// Vector dimension changes (still important for compatibility)
 		if (this._hasVectorDimensionChanged(prevProvider, prev?.modelId)) {
 			return true
@@ -338,6 +364,7 @@ export class CodeIndexConfigManager {
 			qdrantApiKey: this.qdrantApiKey,
 			searchMinScore: this.currentSearchMinScore,
 			searchMaxResults: this.currentSearchMaxResults,
+			vectorStorageConfig: this.vectorStorageConfig,
 		}
 	}
 
@@ -418,5 +445,12 @@ export class CodeIndexConfigManager {
 	 */
 	public get currentSearchMaxResults(): number {
 		return this.searchMaxResults ?? DEFAULT_MAX_SEARCH_RESULTS
+	}
+
+	/**
+		* Gets the current vector storage configuration
+		*/
+	public get vectorStorageConfig(): VectorStorageConfig {
+		return this.vectorStorageConfig
 	}
 }

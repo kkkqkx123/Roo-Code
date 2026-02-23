@@ -13,6 +13,7 @@ import * as ProgressPrimitive from "@radix-ui/react-progress"
 import { AlertTriangle } from "lucide-react"
 
 import { type IndexingStatus, type EmbedderProvider, CODEBASE_INDEX_DEFAULTS } from "@coder/types"
+import type { VectorStorageMode, VectorStoragePreset } from "@coder/types"
 
 import { vscode } from "@src/utils/vscode"
 import { useExtensionState } from "@src/context/ExtensionStateContext"
@@ -60,6 +61,10 @@ interface LocalCodeIndexSettings {
 	codebaseIndexEmbedderModelDimension?: number // Generic dimension for all providers
 	codebaseIndexSearchMaxResults?: number
 	codebaseIndexSearchMinScore?: number
+
+	// Vector storage configuration
+	vectorStorageMode: VectorStorageMode
+	vectorStoragePreset: VectorStoragePreset
 
 	// Secret settings (start empty, will be loaded separately)
 	codeIndexOpenAiKey?: string
@@ -150,6 +155,8 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 		codebaseIndexEmbedderModelDimension: undefined,
 		codebaseIndexSearchMaxResults: CODEBASE_INDEX_DEFAULTS.DEFAULT_SEARCH_RESULTS,
 		codebaseIndexSearchMinScore: CODEBASE_INDEX_DEFAULTS.DEFAULT_SEARCH_MIN_SCORE,
+		vectorStorageMode: "auto",
+		vectorStoragePreset: "medium",
 		codeIndexOpenAiKey: "",
 		codeIndexQdrantApiKey: "",
 		codebaseIndexOpenAiCompatibleBaseUrl: "",
@@ -183,6 +190,8 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 					codebaseIndexConfig.codebaseIndexSearchMaxResults ?? CODEBASE_INDEX_DEFAULTS.DEFAULT_SEARCH_RESULTS,
 				codebaseIndexSearchMinScore:
 					codebaseIndexConfig.codebaseIndexSearchMinScore ?? CODEBASE_INDEX_DEFAULTS.DEFAULT_SEARCH_MIN_SCORE,
+				vectorStorageMode: (codebaseIndexConfig.vectorStorageMode as VectorStorageMode) ?? "auto",
+				vectorStoragePreset: (codebaseIndexConfig.vectorStoragePreset as VectorStoragePreset) ?? "medium",
 				codeIndexOpenAiKey: "",
 				codeIndexQdrantApiKey: "",
 				codebaseIndexOpenAiCompatibleBaseUrl: codebaseIndexConfig.codebaseIndexOpenAiCompatibleBaseUrl || "",
@@ -1015,6 +1024,95 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 											</VSCodeButton>
 										</div>
 									</div>
+								</div>
+							)}
+						</div>
+
+						{/* Vector Storage Configuration Disclosure */}
+						<div className="mt-4">
+							<button
+								onClick={() => setIsAdvancedSettingsOpen(!isAdvancedSettingsOpen)}
+								className="flex items-center text-xs text-vscode-foreground hover:text-vscode-textLink-foreground focus:outline-none"
+								aria-expanded={isAdvancedSettingsOpen}>
+								<span
+									className={`codicon codicon-${isAdvancedSettingsOpen ? "chevron-down" : "chevron-right"} mr-1`}></span>
+								<span className="text-base font-semibold">
+									{t("settings:codeIndex.vectorStorageConfigLabel")}
+								</span>
+							</button>
+
+							{isAdvancedSettingsOpen && (
+								<div className="mt-4 space-y-4">
+									{/* Vector Storage Mode */}
+									<div className="space-y-2">
+										<label className="text-sm font-medium">
+											{t("settings:codeIndex.vectorStorageModeLabel")}
+										</label>
+										<Select
+											value={currentSettings.vectorStorageMode}
+											onValueChange={(value: VectorStorageMode) => {
+												updateSetting("vectorStorageMode", value)
+											}}>
+											<SelectTrigger className="w-full">
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="auto">
+													{t("settings:codeIndex.vectorStorageModeAuto")}
+												</SelectItem>
+												<SelectItem value="preset">
+													{t("settings:codeIndex.vectorStorageModePreset")}
+												</SelectItem>
+											</SelectContent>
+										</Select>
+										<p className="text-xs text-vscode-descriptionForeground">
+											{t("settings:codeIndex.vectorStorageModeDescription")}
+										</p>
+									</div>
+
+									{/* Preset Selection (only shown when mode is preset) */}
+									{currentSettings.vectorStorageMode === "preset" && (
+										<div className="space-y-2">
+											<label className="text-sm font-medium">
+												{t("settings:codeIndex.vectorStoragePresetLabel")}
+											</label>
+											<Select
+												value={currentSettings.vectorStoragePreset}
+												onValueChange={(value: VectorStoragePreset) => {
+													updateSetting("vectorStoragePreset", value)
+												}}>
+												<SelectTrigger className="w-full">
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													<SelectItem value="tiny">
+														{t("settings:codeIndex.vectorStoragePresetTiny")}
+													</SelectItem>
+													<SelectItem value="small">
+														{t("settings:codeIndex.vectorStoragePresetSmall")}
+													</SelectItem>
+													<SelectItem value="medium">
+														{t("settings:codeIndex.vectorStoragePresetMedium")}
+													</SelectItem>
+													<SelectItem value="large">
+														{t("settings:codeIndex.vectorStoragePresetLarge")}
+													</SelectItem>
+												</SelectContent>
+											</Select>
+											<p className="text-xs text-vscode-descriptionForeground">
+												{t("settings:codeIndex.vectorStoragePresetDescription")}
+											</p>
+										</div>
+									)}
+
+									{/* Auto Mode Info */}
+									{currentSettings.vectorStorageMode === "auto" && (
+										<div className="p-3 bg-vscode-textBlockQuote-background rounded-md">
+											<p className="text-xs text-vscode-descriptionForeground">
+												{t("settings:codeIndex.vectorStorageAutoInfo")}
+											</p>
+										</div>
+									)}
 								</div>
 							)}
 						</div>
