@@ -1,0 +1,35 @@
+{
+	"$schema": "https://turbo.build/schema.json",
+	"tasks": {
+		"lint": {},
+		"check-types": {
+			"dependsOn": [
+				"@coder/types#build"
+			]
+		},
+		"test": {
+			"dependsOn": [
+				"@coder/types#build"
+			]
+		},
+		"format": {},
+		"clean": {
+			"cache": false
+		},
+		"build": {
+			"outputs": [
+				"dist/**"
+			],
+			"inputs": [
+				"src/**",
+				"package.json",
+				"tsconfig.json",
+				"tsup.config.ts",
+				"vite.config.ts"
+			]
+		},
+		"watch:tsc": {
+			"cache": false
+		}
+	}
+}

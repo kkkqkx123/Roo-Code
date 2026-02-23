@@ -1,0 +1,28 @@
+{
+	"name": "@coder/types",
+	"version": "1.112.0",
+	"description": "TypeScript type definitions for Coder.",
+	"publishConfig": {
+		"access": "public",
+		"name": "@coder/types",
+		"registry": "https://registry.npmjs.org/"
+	},
+	"author": "Coder Team",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/CoderInc/coder.git"
+	},
+	"bugs": {
+		"url": "https://github.com/CoderInc/coder/issues"
+	},
+	"homepage": "https://coder.com",
+	"keywords": [
+		"roo",
+		"coder",
+		"ai"
+	],
+	"files": [
+		"dist"
+	]
+}
