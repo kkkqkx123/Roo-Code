@@ -17,7 +17,6 @@ export interface CodeIndexConfig {
 	qdrantApiKey?: string
 	searchMinScore?: number
 	searchMaxResults?: number
-	vectorStorageConfig?: VectorStorageConfig
 }
 
 /**
@@ -36,5 +35,4 @@ export type PreviousConfigSnapshot = {
 	qdrantUrl?: string
 	qdrantApiKey?: string
 	vectorStorageMode?: string
-	vectorStoragePreset?: string
 }

@@ -2064,6 +2064,10 @@ export class ClineProvider
 				codebaseIndexOpenAiCompatibleBaseUrl: codebaseIndexConfig?.codebaseIndexOpenAiCompatibleBaseUrl,
 				codebaseIndexSearchMaxResults: codebaseIndexConfig?.codebaseIndexSearchMaxResults,
 				codebaseIndexSearchMinScore: codebaseIndexConfig?.codebaseIndexSearchMinScore,
+				// Vector storage configuration
+				vectorStorageMode: codebaseIndexConfig?.vectorStorageMode ?? "auto",
+				vectorStoragePreset: codebaseIndexConfig?.vectorStoragePreset ?? "medium",
+				vectorStorageThresholds: codebaseIndexConfig?.vectorStorageThresholds,
 			},
 			// Only set mdmCompliant if there's an actual MDM policy
 			// undefined means no MDM policy, true means compliant, false means non-compliant
@@ -2199,6 +2203,10 @@ export class ClineProvider
 					stateValues.codebaseIndexConfig?.codebaseIndexOpenAiCompatibleBaseUrl,
 				codebaseIndexSearchMaxResults: stateValues.codebaseIndexConfig?.codebaseIndexSearchMaxResults,
 				codebaseIndexSearchMinScore: stateValues.codebaseIndexConfig?.codebaseIndexSearchMinScore,
+				// Vector storage configuration
+				vectorStorageMode: stateValues.codebaseIndexConfig?.vectorStorageMode ?? "auto",
+				vectorStoragePreset: stateValues.codebaseIndexConfig?.vectorStoragePreset ?? "medium",
+				vectorStorageThresholds: stateValues.codebaseIndexConfig?.vectorStorageThresholds,
 			},
 			profileThresholds: stateValues.profileThresholds ?? {},
 			lockApiConfigAcrossModes: this.context.workspaceState.get("lockApiConfigAcrossModes", false),

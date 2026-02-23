@@ -18,11 +18,21 @@ export const CODEBASE_INDEX_DEFAULTS = {
  * Vector Storage Configuration Types
  */
 
-export type VectorStorageMode = "auto" | "preset" | "custom"
+/**
+ * Vector storage mode
+ * auto: Automatically select preset based on codebase size
+ * tiny/small/medium/large: Use specific preset directly
+ * custom: Use custom configuration
+ */
+export type VectorStorageMode = "auto" | "tiny" | "small" | "medium" | "large" | "custom"
 
+/**
+ * Vector storage preset types (kept for backward compatibility)
+ * @deprecated Use VectorStorageMode instead
+ */
 export type VectorStoragePreset = "tiny" | "small" | "medium" | "large"
 
-export const vectorStorageModeSchema = z.enum(["auto", "preset", "custom"])
+export const vectorStorageModeSchema = z.enum(["auto", "tiny", "small", "medium", "large", "custom"])
 
 export const vectorStoragePresetSchema = z.enum(["tiny", "small", "medium", "large"])
 
@@ -49,6 +59,15 @@ export const codebaseIndexConfigSchema = z.object({
 	// Vector storage configuration
 	vectorStorageMode: vectorStorageModeSchema.optional(),
 	vectorStoragePreset: vectorStoragePresetSchema.optional(),
+	// Vector storage thresholds for auto mode
+	vectorStorageThresholds: z
+		.object({
+			tiny: z.number().optional(),
+			small: z.number().optional(),
+			medium: z.number().optional(),
+			large: z.number().optional(),
+		})
+		.optional(),
 })
 
 export type CodebaseIndexConfig = z.infer<typeof codebaseIndexConfigSchema>

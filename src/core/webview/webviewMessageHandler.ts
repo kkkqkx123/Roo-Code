@@ -1931,6 +1931,10 @@ export const webviewMessageHandler = async (
 					codebaseIndexOpenAiCompatibleBaseUrl: settings.codebaseIndexOpenAiCompatibleBaseUrl,
 					codebaseIndexSearchMaxResults: settings.codebaseIndexSearchMaxResults,
 					codebaseIndexSearchMinScore: settings.codebaseIndexSearchMinScore,
+					// Vector storage configuration
+					vectorStorageMode: settings.vectorStorageMode,
+					vectorStoragePreset: settings.vectorStoragePreset,
+					vectorStorageThresholds: settings.vectorStorageThresholds,
 				}
 
 				// Save global state first

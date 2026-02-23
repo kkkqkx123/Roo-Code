@@ -38,15 +38,13 @@ export class VectorStorageConfigManager {
 		if (this.config.mode === "auto") {
 			const collectionSize = await this.estimateCollectionSize()
 			return this.getAutoConfig(collectionSize)
-		} else if (this.config.mode === "preset") {
+		}
+		if (this.config.mode === "preset") {
 			const preset = this.config.preset ?? "medium"
 			return VECTOR_STORAGE_PRESETS[preset].customConfig
-		} else if (this.config.mode === "custom") {
-			return this.config.customConfig ?? DEFAULT_CUSTOM_VECTOR_STORAGE_CONFIG
 		}
-
-		// Fallback to medium preset
-		return VECTOR_STORAGE_PRESETS.medium.customConfig
+		// custom mode
+		return this.config.customConfig ?? DEFAULT_CUSTOM_VECTOR_STORAGE_CONFIG
 	}
 
 	/**
@@ -58,15 +56,13 @@ export class VectorStorageConfigManager {
 	getCollectionConfigFromEstimation(estimation: SizeEstimationResult): CustomVectorStorageConfig {
 		if (this.config.mode === "auto") {
 			return this.getAutoConfig(estimation.estimatedVectorCount)
-		} else if (this.config.mode === "preset") {
+		}
+		if (this.config.mode === "preset") {
 			const preset = this.config.preset ?? "medium"
 			return VECTOR_STORAGE_PRESETS[preset].customConfig
-		} else if (this.config.mode === "custom") {
-			return this.config.customConfig ?? DEFAULT_CUSTOM_VECTOR_STORAGE_CONFIG
 		}
-
-		// Fallback to medium preset
-		return VECTOR_STORAGE_PRESETS.medium.customConfig
+		// custom mode
+		return this.config.customConfig ?? DEFAULT_CUSTOM_VECTOR_STORAGE_CONFIG
 	}
 
 	/**

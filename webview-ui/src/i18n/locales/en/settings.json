@@ -263,14 +263,20 @@
 		"vectorStorageModeLabel": "Storage Mode",
 		"vectorStorageModeDescription": "Choose how vector storage configuration is determined",
 		"vectorStorageModeAuto": "Auto (automatically adjust based on collection size)",
-		"vectorStorageModePreset": "Preset (manually select a preset)",
+		"vectorStorageModeCustom": "Custom (advanced configuration)",
 		"vectorStoragePresetLabel": "Preset Configuration",
 		"vectorStoragePresetDescription": "Select the preset configuration for your collection",
 		"vectorStoragePresetTiny": "Tiny (≤2,000 vectors)",
 		"vectorStoragePresetSmall": "Small (2,000-10,000 vectors)",
 		"vectorStoragePresetMedium": "Medium (10,000-100,000 vectors)",
 		"vectorStoragePresetLarge": "Large (≥100,000 vectors)",
-		"vectorStorageAutoInfo": "In Auto mode, the vector storage configuration is automatically selected based on the number of vectors in your collection. This ensures optimal performance as your codebase grows."
+		"vectorStorageAutoInfo": "In Auto mode, the vector storage configuration is automatically selected based on the number of vectors in your collection. This ensures optimal performance as your codebase grows.",
+		"vectorStorageThresholdsLabel": "Auto Mode Thresholds",
+		"vectorStorageThresholdTiny": "Tiny Threshold",
+		"vectorStorageThresholdSmall": "Small Threshold",
+		"vectorStorageThresholdMedium": "Medium Threshold",
+		"vectorStorageThresholdLarge": "Large Threshold",
+		"vectorStorageThresholdsDescription": "Set the vector count thresholds for switching between different presets in Auto mode."
 	},
 	"autoApprove": {
 		"description": "Run these actions without asking for permission. Only enable for actions you fully trust and if you understand the security risks.",

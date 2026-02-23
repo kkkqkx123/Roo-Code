@@ -22,7 +22,7 @@ export class CodeIndexConfigManager {
 	private qdrantApiKey?: string
 	private searchMinScore?: number
 	private searchMaxResults?: number
-	private vectorStorageConfig: VectorStorageConfig = DEFAULT_VECTOR_STORAGE_CONFIG
+	private _vectorStorageConfig: VectorStorageConfig = DEFAULT_VECTOR_STORAGE_CONFIG
 
 	constructor(private readonly contextProxy: ContextProxy) {
 		// Initialize with current configuration to avoid false restart triggers
@@ -53,6 +53,7 @@ export class CodeIndexConfigManager {
 			codebaseIndexOpenAiCompatibleModelDimension: undefined,
 			vectorStorageMode: "auto",
 			vectorStoragePreset: "medium",
+			vectorStorageThresholds: undefined,
 		}
 
 		const {
@@ -65,6 +66,7 @@ export class CodeIndexConfigManager {
 			codebaseIndexSearchMaxResults,
 			vectorStorageMode,
 			vectorStoragePreset,
+			vectorStorageThresholds,
 		} = codebaseIndexConfig
 
 		const openAiKey = this.contextProxy?.getSecret("codeIndexOpenAiKey") ?? ""
@@ -113,18 +115,37 @@ export class CodeIndexConfigManager {
 		this.openAiCompatibleOptions =
 			openAiCompatibleBaseUrl && openAiCompatibleApiKey
 				? {
-						baseUrl: openAiCompatibleBaseUrl,
-						apiKey: openAiCompatibleApiKey,
-					}
+					baseUrl: openAiCompatibleBaseUrl,
+					apiKey: openAiCompatibleApiKey,
+				}
 				: undefined
 
 		this.geminiOptions = geminiApiKey ? { apiKey: geminiApiKey } : undefined
 
 		// Load vector storage configuration
-		this.vectorStorageConfig = {
-			mode: (vectorStorageMode as VectorStorageConfig["mode"]) ?? "auto",
-			preset: (vectorStoragePreset as VectorStorageConfig["preset"]) ?? "medium",
-			thresholds: DEFAULT_VECTOR_STORAGE_CONFIG.thresholds,
+		// If vectorStorageMode is "preset", convert it to the actual preset value for backward compatibility
+		let effectiveMode: VectorStorageConfig["mode"] = (vectorStorageMode as VectorStorageConfig["mode"]) ?? "auto"
+		if ((vectorStorageMode as string) === "preset" && vectorStoragePreset) {
+			// Backward compatibility: convert old "preset" mode to actual preset
+			effectiveMode = vectorStoragePreset as VectorStorageConfig["mode"]
+		}
+
+		// Ensure thresholds have all required fields
+		const defaultThresholds = DEFAULT_VECTOR_STORAGE_CONFIG.thresholds ?? {
+			tiny: 2000,
+			small: 10000,
+			medium: 100000,
+			large: 1000000,
+		}
+		const savedThresholds = codebaseIndexConfig.vectorStorageThresholds
+		this._vectorStorageConfig = {
+			mode: effectiveMode,
+			thresholds: {
+				tiny: savedThresholds?.tiny ?? defaultThresholds.tiny,
+				small: savedThresholds?.small ?? defaultThresholds.small,
+				medium: savedThresholds?.medium ?? defaultThresholds.medium,
+				large: savedThresholds?.large ?? defaultThresholds.large,
+			},
 		}
 	}
 
@@ -160,8 +181,7 @@ export class CodeIndexConfigManager {
 			geminiApiKey: this.geminiOptions?.apiKey ?? "",
 			qdrantUrl: this.qdrantUrl ?? "",
 			qdrantApiKey: this.qdrantApiKey ?? "",
-			vectorStorageMode: this.vectorStorageConfig.mode,
-			vectorStoragePreset: this.vectorStorageConfig.preset,
+			vectorStorageMode: this._vectorStorageConfig.mode,
 		}
 
 		// Refresh secrets from VSCode storage to ensure we have the latest values
@@ -185,7 +205,6 @@ export class CodeIndexConfigManager {
 				qdrantUrl: this.qdrantUrl,
 				qdrantApiKey: this.qdrantApiKey,
 				searchMinScore: this.currentSearchMinScore,
-				vectorStorageConfig: this.vectorStorageConfig,
 			},
 			requiresRestart,
 		}
@@ -305,12 +324,11 @@ export class CodeIndexConfigManager {
 		}
 
 		// Vector storage configuration changes
+		// With the new design, mode directly contains the preset (auto/tiny/small/medium/large/custom)
 		const prevVectorStorageMode = prev?.vectorStorageMode ?? "auto"
-		const prevVectorStoragePreset = prev?.vectorStoragePreset ?? "medium"
-		const currentVectorStorageMode = this.vectorStorageConfig.mode
-		const currentVectorStoragePreset = this.vectorStorageConfig.preset ?? "medium"
+		const currentVectorStorageMode = this._vectorStorageConfig.mode
 
-		if (prevVectorStorageMode !== currentVectorStorageMode || prevVectorStoragePreset !== currentVectorStoragePreset) {
+		if (prevVectorStorageMode !== currentVectorStorageMode) {
 			return true
 		}
 
@@ -364,7 +382,6 @@ export class CodeIndexConfigManager {
 			qdrantApiKey: this.qdrantApiKey,
 			searchMinScore: this.currentSearchMinScore,
 			searchMaxResults: this.currentSearchMaxResults,
-			vectorStorageConfig: this.vectorStorageConfig,
 		}
 	}
 
@@ -451,6 +468,6 @@ export class CodeIndexConfigManager {
 		* Gets the current vector storage configuration
 		*/
 	public get vectorStorageConfig(): VectorStorageConfig {
-		return this.vectorStorageConfig
+		return this._vectorStorageConfig
 	}
 }

@@ -59,6 +59,9 @@ export interface CustomVectorStorageConfig {
 
 /**
  * Vector storage configuration mode
+ * auto: Automatically select preset based on codebase size
+ * preset: Use a specific preset (tiny/small/medium/large)
+ * custom: Use custom configuration
  */
 export type VectorStorageMode = "auto" | "preset" | "custom"
 
@@ -68,11 +71,11 @@ export type VectorStorageMode = "auto" | "preset" | "custom"
 export interface VectorStorageConfig {
 	/** Configuration mode */
 	mode: VectorStorageMode
-	/** Preset configuration (only used when mode is "preset") */
+	/** Preset to use (only used when mode is "preset") */
 	preset?: VectorStoragePreset
 	/** Custom configuration (only used when mode is "custom") */
 	customConfig?: CustomVectorStorageConfig
-	/** Thresholds for auto mode */
+	/** Thresholds for auto mode - determines when to switch between presets */
 	thresholds?: {
 		tiny: number
 		small: number

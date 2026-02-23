@@ -64,7 +64,13 @@ interface LocalCodeIndexSettings {
 
 	// Vector storage configuration
 	vectorStorageMode: VectorStorageMode
-	vectorStoragePreset: VectorStoragePreset
+	vectorStoragePreset: VectorStoragePreset // Kept for backward compatibility
+	vectorStorageThresholds?: {
+		tiny: number
+		small: number
+		medium: number
+		large: number
+	}
 
 	// Secret settings (start empty, will be loaded separately)
 	codeIndexOpenAiKey?: string
@@ -157,6 +163,12 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 		codebaseIndexSearchMinScore: CODEBASE_INDEX_DEFAULTS.DEFAULT_SEARCH_MIN_SCORE,
 		vectorStorageMode: "auto",
 		vectorStoragePreset: "medium",
+		vectorStorageThresholds: {
+			tiny: 2000,
+			small: 10000,
+			medium: 100000,
+			large: 1000000,
+		},
 		codeIndexOpenAiKey: "",
 		codeIndexQdrantApiKey: "",
 		codebaseIndexOpenAiCompatibleBaseUrl: "",
@@ -192,6 +204,12 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 					codebaseIndexConfig.codebaseIndexSearchMinScore ?? CODEBASE_INDEX_DEFAULTS.DEFAULT_SEARCH_MIN_SCORE,
 				vectorStorageMode: (codebaseIndexConfig.vectorStorageMode as VectorStorageMode) ?? "auto",
 				vectorStoragePreset: (codebaseIndexConfig.vectorStoragePreset as VectorStoragePreset) ?? "medium",
+				vectorStorageThresholds: codebaseIndexConfig.vectorStorageThresholds ?? {
+					tiny: 2000,
+					small: 10000,
+					medium: 100000,
+					large: 1000000,
+				},
 				codeIndexOpenAiKey: "",
 				codeIndexQdrantApiKey: "",
 				codebaseIndexOpenAiCompatibleBaseUrl: codebaseIndexConfig.codebaseIndexOpenAiCompatibleBaseUrl || "",
@@ -1060,8 +1078,20 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 												<SelectItem value="auto">
 													{t("settings:codeIndex.vectorStorageModeAuto")}
 												</SelectItem>
-												<SelectItem value="preset">
-													{t("settings:codeIndex.vectorStorageModePreset")}
+												<SelectItem value="tiny">
+													{t("settings:codeIndex.vectorStoragePresetTiny")}
+												</SelectItem>
+												<SelectItem value="small">
+													{t("settings:codeIndex.vectorStoragePresetSmall")}
+												</SelectItem>
+												<SelectItem value="medium">
+													{t("settings:codeIndex.vectorStoragePresetMedium")}
+												</SelectItem>
+												<SelectItem value="large">
+													{t("settings:codeIndex.vectorStoragePresetLarge")}
+												</SelectItem>
+												<SelectItem value="custom">
+													{t("settings:codeIndex.vectorStorageModeCustom")}
 												</SelectItem>
 											</SelectContent>
 										</Select>
@@ -1070,46 +1100,101 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 										</p>
 									</div>
 
-									{/* Preset Selection (only shown when mode is preset) */}
-									{currentSettings.vectorStorageMode === "preset" && (
-										<div className="space-y-2">
-											<label className="text-sm font-medium">
-												{t("settings:codeIndex.vectorStoragePresetLabel")}
-											</label>
-											<Select
-												value={currentSettings.vectorStoragePreset}
-												onValueChange={(value: VectorStoragePreset) => {
-													updateSetting("vectorStoragePreset", value)
-												}}>
-												<SelectTrigger className="w-full">
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent>
-													<SelectItem value="tiny">
-														{t("settings:codeIndex.vectorStoragePresetTiny")}
-													</SelectItem>
-													<SelectItem value="small">
-														{t("settings:codeIndex.vectorStoragePresetSmall")}
-													</SelectItem>
-													<SelectItem value="medium">
-														{t("settings:codeIndex.vectorStoragePresetMedium")}
-													</SelectItem>
-													<SelectItem value="large">
-														{t("settings:codeIndex.vectorStoragePresetLarge")}
-													</SelectItem>
-												</SelectContent>
-											</Select>
-											<p className="text-xs text-vscode-descriptionForeground">
-												{t("settings:codeIndex.vectorStoragePresetDescription")}
-											</p>
-										</div>
-									)}
-
 									{/* Auto Mode Info */}
 									{currentSettings.vectorStorageMode === "auto" && (
 										<div className="p-3 bg-vscode-textBlockQuote-background rounded-md">
 											<p className="text-xs text-vscode-descriptionForeground">
 												{t("settings:codeIndex.vectorStorageAutoInfo")}
+											</p>
+										</div>
+									)}
+
+									{/* Threshold Configuration (only shown when mode is auto) */}
+									{currentSettings.vectorStorageMode === "auto" && (
+										<div className="space-y-3">
+											<label className="text-sm font-medium">
+												{t("settings:codeIndex.vectorStorageThresholdsLabel")}
+											</label>
+											<div className="grid grid-cols-2 gap-3">
+												<div className="space-y-1">
+													<label className="text-xs text-vscode-descriptionForeground">
+														{t("settings:codeIndex.vectorStorageThresholdTiny")}
+													</label>
+													<input
+														type="number"
+														className="w-full px-2 py-1 text-sm bg-vscode-input-background border border-vscode-input-border rounded"
+														value={currentSettings.vectorStorageThresholds?.tiny ?? 2000}
+														onChange={(e) => {
+															const value = parseInt(e.target.value)
+															if (!isNaN(value) && value > 0) {
+																updateSetting("vectorStorageThresholds", {
+																	...currentSettings.vectorStorageThresholds,
+																	tiny: value,
+																})
+															}
+														}}
+													/>
+												</div>
+												<div className="space-y-1">
+													<label className="text-xs text-vscode-descriptionForeground">
+														{t("settings:codeIndex.vectorStorageThresholdSmall")}
+													</label>
+													<input
+														type="number"
+														className="w-full px-2 py-1 text-sm bg-vscode-input-background border border-vscode-input-border rounded"
+														value={currentSettings.vectorStorageThresholds?.small ?? 10000}
+														onChange={(e) => {
+															const value = parseInt(e.target.value)
+															if (!isNaN(value) && value > 0) {
+																updateSetting("vectorStorageThresholds", {
+																	...currentSettings.vectorStorageThresholds,
+																	small: value,
+																})
+															}
+														}}
+													/>
+												</div>
+												<div className="space-y-1">
+													<label className="text-xs text-vscode-descriptionForeground">
+														{t("settings:codeIndex.vectorStorageThresholdMedium")}
+													</label>
+													<input
+														type="number"
+														className="w-full px-2 py-1 text-sm bg-vscode-input-background border border-vscode-input-border rounded"
+														value={currentSettings.vectorStorageThresholds?.medium ?? 100000}
+														onChange={(e) => {
+															const value = parseInt(e.target.value)
+															if (!isNaN(value) && value > 0) {
+																updateSetting("vectorStorageThresholds", {
+																	...currentSettings.vectorStorageThresholds,
+																	medium: value,
+																})
+															}
+														}}
+													/>
+												</div>
+												<div className="space-y-1">
+													<label className="text-xs text-vscode-descriptionForeground">
+														{t("settings:codeIndex.vectorStorageThresholdLarge")}
+													</label>
+													<input
+														type="number"
+														className="w-full px-2 py-1 text-sm bg-vscode-input-background border border-vscode-input-border rounded"
+														value={currentSettings.vectorStorageThresholds?.large ?? 1000000}
+														onChange={(e) => {
+															const value = parseInt(e.target.value)
+															if (!isNaN(value) && value > 0) {
+																updateSetting("vectorStorageThresholds", {
+																	...currentSettings.vectorStorageThresholds,
+																	large: value,
+																})
+															}
+														}}
+													/>
+												</div>
+											</div>
+											<p className="text-xs text-vscode-descriptionForeground">
+												{t("settings:codeIndex.vectorStorageThresholdsDescription")}
 											</p>
 										</div>
 									)}
