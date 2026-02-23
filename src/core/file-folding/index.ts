@@ -3,7 +3,7 @@ import { extractFoldingItems, FoldingItem } from "./name-extractor"
 import { mergeFunctionBlocks, formatMergedSections, MergedSection } from "./function-merger"
 import { applyRandomDrop, estimateAvgTokensPerSection } from "./random-dropper"
 import { extractFoldingData, ParsedDefinitionLine } from "./definition-parser"
-import { formatFoldedFile, FormatOptions } from "./formatter"
+import { formatFoldedFile, FormatOptions, formatSectionsWithOriginalContent } from "./formatter"
 import { tiktoken } from "../../utils/tiktoken"
 import { RooIgnoreController } from "../ignore/RooIgnoreController"
 
@@ -39,6 +39,8 @@ export interface FoldFilesOptions {
 	mergeFunctions?: boolean
 	/** Maximum line span before interrupting function merging (default: 100) */
 	maxLineSpan?: number
+	/** Format mode: 'detailed' (full content) or 'minimal' (names only, no 'other' types) */
+	mode?: "detailed" | "minimal"
 }
 
 /**
@@ -83,6 +85,7 @@ export async function foldFiles(
 		rooIgnoreController,
 		mergeFunctions = true,
 		maxLineSpan = 100,
+		mode = "detailed",
 	} = options
 
 	const result: FoldFilesResult = {
@@ -129,8 +132,20 @@ export async function foldFiles(
 				})) as MergedSection[]
 			}
 
-			// Format sections to content
-			const content = formatMergedSections(sections)
+			// Format sections to content based on mode
+			let content: string
+			if (mode === "detailed") {
+				// In detailed mode, we need parsed lines to show full content
+				const foldingData = await extractFoldingData(absolutePath, rooIgnoreController)
+				if (foldingData) {
+					content = formatSectionsWithOriginalContent(sections, foldingData.parsedLines, "detailed")
+				} else {
+					content = formatMergedSections(sections)
+				}
+			} else {
+				// Minimal mode: use simplified format
+				content = formatMergedSections(sections)
+			}
 
 			// Calculate tokens for this file
 			const fileContent = `<system-reminder>
@@ -224,7 +239,24 @@ ${content}
 
 			// Only include files that have at least one section
 			if (keptSectionsForFile.length > 0) {
-				const content = formatMergedSections(keptSectionsForFile)
+				// Format sections to content based on mode
+				let content: string
+				if (mode === "detailed") {
+					// In detailed mode, we need parsed lines to show full content
+					const foldingData = await extractFoldingData(
+						path.isAbsolute(file.filePath) ? file.filePath : path.resolve(cwd, file.filePath),
+						rooIgnoreController,
+					)
+					if (foldingData) {
+						content = formatSectionsWithOriginalContent(keptSectionsForFile, foldingData.parsedLines, "detailed")
+					} else {
+						content = formatMergedSections(keptSectionsForFile)
+					}
+				} else {
+					// Minimal mode: use simplified format
+					content = formatMergedSections(keptSectionsForFile)
+				}
+
 				const fileContent = `<system-reminder>
 ## File Context: ${file.filePath}
 ${content}

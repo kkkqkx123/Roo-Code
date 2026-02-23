@@ -11,6 +11,8 @@ export interface FormatOptions {
 	wrapInSystemReminder?: boolean
 	/** Custom header format (default: "## File Context: {filePath}") */
 	headerFormat?: string
+	/** Format mode: 'detailed' (full content) or 'minimal' (names only, no 'other' types) */
+	mode?: "detailed" | "minimal"
 }
 
 /**
@@ -24,6 +26,7 @@ export interface FormatOptions {
 export function formatSectionsWithOriginalContent(
 	sections: MergedSection[],
 	parsedLines: ParsedDefinitionLine[],
+	mode: "detailed" | "minimal" = "detailed",
 ): string {
 	const lines: string[] = []
 
@@ -34,29 +37,39 @@ export function formatSectionsWithOriginalContent(
 		lineMap.set(key, parsed)
 	}
 
-	// First, output all 'other' type items (const/let/var declarations) in order
-	for (const parsed of parsedLines) {
-		if (parsed.type === "other") {
-			const range = parsed.endLine ? `${parsed.startLine}--${parsed.endLine}` : `${parsed.startLine}`
-			lines.push(`${range} | ${parsed.content}`)
+	// In minimal mode, skip 'other' types entirely
+	if (mode === "detailed") {
+		// First, output all 'other' type items (const/let/var declarations) in order
+		for (const parsed of parsedLines) {
+			if (parsed.type === "other") {
+				const range = parsed.endLine ? `${parsed.startLine}--${parsed.endLine}` : `${parsed.startLine}`
+				lines.push(`${range} | ${parsed.content}`)
+			}
 		}
 	}
 
 	// Then output merged sections
 	for (const section of sections) {
 		if (section.type === "functions") {
-			// Functions are merged together - collect all function names
-			const functionLines: string[] = []
-			for (const name of section.names) {
-				const key = `function:${name}`
-				const parsed = lineMap.get(key)
-				if (parsed) {
-					const range = parsed.endLine ? `${parsed.startLine}--${parsed.endLine}` : `${parsed.startLine}`
-					functionLines.push(`${range} | ${parsed.content}`)
+			if (mode === "detailed") {
+				// Functions are merged together - collect all function names with full content
+				const functionLines: string[] = []
+				for (const name of section.names) {
+					const key = `function:${name}`
+					const parsed = lineMap.get(key)
+					if (parsed) {
+						const range = parsed.endLine ? `${parsed.startLine}--${parsed.endLine}` : `${parsed.startLine}`
+						functionLines.push(`${range} | ${parsed.content}`)
+					}
 				}
-			}
-			if (functionLines.length > 0) {
-				lines.push(functionLines.join("\n"))
+				if (functionLines.length > 0) {
+					lines.push(functionLines.join("\n"))
+				}
+			} else {
+				// Minimal mode: only show function names
+				if (section.names.length > 0) {
+					lines.push(`${section.startLine} | ${section.names.join(", ")}`)
+				}
 			}
 		} else {
 			// Class, interface, type are displayed separately
@@ -64,8 +77,13 @@ export function formatSectionsWithOriginalContent(
 			const key = `${section.type}:${name}`
 			const parsed = lineMap.get(key)
 			if (parsed) {
-				const range = parsed.endLine ? `${parsed.startLine}--${parsed.endLine}` : `${parsed.startLine}`
-				lines.push(`${range} | ${parsed.content}`)
+				if (mode === "detailed") {
+					const range = parsed.endLine ? `${parsed.startLine}--${parsed.endLine}` : `${parsed.startLine}`
+					lines.push(`${range} | ${parsed.content}`)
+				} else {
+					// Minimal mode: only show type and name
+					lines.push(`${section.startLine} | ${section.type} ${name}`)
+				}
 			}
 		}
 	}
@@ -86,10 +104,10 @@ export function formatFoldedFile(
 	parsedLines: ParsedDefinitionLine[],
 	options: FormatOptions = {},
 ): string {
-	const { filePath, wrapInSystemReminder = true, headerFormat = "## File Context: {filePath}" } = options
+	const { filePath, wrapInSystemReminder = true, headerFormat = "## File Context: {filePath}", mode = "detailed" } = options
 
 	// Format the sections
-	const content = formatSectionsWithOriginalContent(sections, parsedLines)
+	const content = formatSectionsWithOriginalContent(sections, parsedLines, mode)
 
 	// If no wrapping requested, return content as-is
 	if (!wrapInSystemReminder) {

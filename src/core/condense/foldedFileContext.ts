@@ -47,6 +47,8 @@ export interface FoldedFileContextOptions {
 	mergeFunctions?: boolean
 	/** Maximum line span before interrupting function merging (default: 100) */
 	maxLineSpan?: number
+	/** Format mode: 'detailed' (full content) or 'minimal' (names only, no 'other' types) */
+	mode?: "detailed" | "minimal"
 }
 
 /**
@@ -104,6 +106,7 @@ export async function generateFoldedFileContext(
 		rooIgnoreController,
 		mergeFunctions = true,
 		maxLineSpan = 100,
+		mode = "minimal",
 	} = options
 
 	// Support legacy maxCharacters option by converting to approximate token count
@@ -139,6 +142,7 @@ export async function generateFoldedFileContext(
 				formatOptions: {
 					filePath,
 					wrapInSystemReminder: true,
+					mode,
 				},
 			})
 
@@ -233,7 +237,7 @@ export async function generateFoldedFileContext(
 
 			// Only include files that have at least one section
 			if (keptSectionsForFile.length > 0) {
-				const content = formatSectionsWithOriginalContent(keptSectionsForFile, file.parsedLines)
+				const content = formatSectionsWithOriginalContent(keptSectionsForFile, file.parsedLines, mode)
 				const fileContent = `<system-reminder>
 ## File Context: ${file.filePath}
 ${content}

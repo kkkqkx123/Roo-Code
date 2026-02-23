@@ -44,12 +44,12 @@ describe("foldedFileContext", () => {
 
 		it("should generate folded context for a TypeScript file with its own system-reminder block", async () => {
 			const mockDefinitions = `1--5 | export interface User
-7--12 | export function createUser(name: string): User
-14--28 | export class UserService`
+	7--12 | export function createUser(name: string): User
+	14--28 | export class UserService`
 
 			mockedParseSourceCodeDefinitions.mockResolvedValue(mockDefinitions)
 
-			const result = await generateFoldedFileContext(["/test/user.ts"], { cwd: "/test" })
+			const result = await generateFoldedFileContext(["/test/user.ts"], { cwd: "/test", mode: "detailed" })
 
 			// Each file should be wrapped in its own <system-reminder> block
 			expect(result.content).toContain("<system-reminder>")
@@ -64,11 +64,11 @@ describe("foldedFileContext", () => {
 
 		it("should generate folded context for a JavaScript file with its own system-reminder block", async () => {
 			const mockDefinitions = `1--3 | function greet(name)
-5--15 | class Calculator`
+	5--15 | class Calculator`
 
 			mockedParseSourceCodeDefinitions.mockResolvedValue(mockDefinitions)
 
-			const result = await generateFoldedFileContext(["/test/utils.js"], { cwd: "/test" })
+			const result = await generateFoldedFileContext(["/test/utils.js"], { cwd: "/test", mode: "detailed" })
 
 			expect(result.content).toContain("<system-reminder>")
 			expect(result.content).toContain("## File Context: /test/utils.js")
@@ -114,6 +114,7 @@ describe("foldedFileContext", () => {
 
 			const result = await generateFoldedFileContext(["/test/valid.ts", "/test/missing.ts", "/test/file.xyz"], {
 				cwd: "/test",
+				mode: "detailed",
 			})
 
 			// Only the first file should be processed, the other two return error strings
@@ -150,11 +151,11 @@ describe("foldedFileContext", () => {
 
 		it("should handle Python files with its own system-reminder block", async () => {
 			const mockDefinitions = `1--2 | def greet(name)
-4--12 | class Person`
+	4--12 | class Person`
 
 			mockedParseSourceCodeDefinitions.mockResolvedValue(mockDefinitions)
 
-			const result = await generateFoldedFileContext(["/test/person.py"], { cwd: "/test" })
+			const result = await generateFoldedFileContext(["/test/person.py"], { cwd: "/test", mode: "detailed" })
 
 			expect(result.content).toContain("<system-reminder>")
 			expect(result.content).toContain("## File Context: /test/person.py")
