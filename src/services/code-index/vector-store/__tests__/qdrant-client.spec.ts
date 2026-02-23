@@ -1,5 +1,6 @@
 import { QdrantClient } from "@qdrant/js-client-rest"
 import { createHash } from "crypto"
+import { AxiosError } from "axios"
 
 import { QdrantVectorStore } from "../qdrant-client"
 import { getWorkspacePath } from "../../../../utils/path"
@@ -515,11 +516,15 @@ describe("QdrantVectorStore", () => {
 
 	describe("initialize", () => {
 		it("should create a new collection if none exists and return true", async () => {
-			// Mock getCollection to throw a 404-like error
-			mockQdrantClientInstance.getCollection.mockRejectedValue({
-				response: { status: 404 },
-				message: "Not found",
+			// Mock getCollection to throw a 404-like error with AxiosError structure
+			const axiosError = new AxiosError("Not found", "ERR_BAD_REQUEST", undefined, undefined, {
+				status: 404,
+				data: undefined,
+				headers: {},
+				statusText: "Not Found",
+				config: {} as any,
 			})
+			mockQdrantClientInstance.getCollection.mockRejectedValue(axiosError)
 			mockQdrantClientInstance.createCollection.mockResolvedValue(true as any) // Cast to any to satisfy QdrantClient types if strict
 			mockQdrantClientInstance.createPayloadIndex.mockResolvedValue({} as any) // Mock successful index creation
 
@@ -566,6 +571,7 @@ describe("QdrantVectorStore", () => {
 						},
 					},
 				},
+				points_count: 0,
 			} as any) // Cast to any to satisfy QdrantClient types
 			mockQdrantClientInstance.createPayloadIndex.mockResolvedValue({} as any)
 
@@ -594,6 +600,13 @@ describe("QdrantVectorStore", () => {
 			const differentVectorSize = 768
 			// Mock getCollection to return existing collection info with different vector size first,
 			// then return 404 to confirm deletion
+			const axiosError = new AxiosError("Not found", "ERR_BAD_REQUEST", undefined, undefined, {
+				status: 404,
+				data: undefined,
+				headers: {},
+				statusText: "Not Found",
+				config: {} as any,
+			})
 			mockQdrantClientInstance.getCollection
 				.mockResolvedValueOnce({
 					config: {
@@ -603,11 +616,9 @@ describe("QdrantVectorStore", () => {
 							},
 						},
 					},
+					points_count: 0,
 				} as any)
-				.mockRejectedValueOnce({
-					response: { status: 404 },
-					message: "Not found",
-				})
+				.mockRejectedValueOnce(axiosError)
 			mockQdrantClientInstance.deleteCollection.mockResolvedValue(true as any)
 			mockQdrantClientInstance.createCollection.mockResolvedValue(true as any)
 			mockQdrantClientInstance.createPayloadIndex.mockResolvedValue({} as any)
@@ -667,10 +678,14 @@ describe("QdrantVectorStore", () => {
 				; (console.warn as any).mockRestore()
 		})
 		it("should re-throw error from createCollection when no collection initially exists", async () => {
-			mockQdrantClientInstance.getCollection.mockRejectedValue({
-				response: { status: 404 },
-				message: "Not found",
+			const axiosError = new AxiosError("Not found", "ERR_BAD_REQUEST", undefined, undefined, {
+				status: 404,
+				data: undefined,
+				headers: {},
+				statusText: "Not Found",
+				config: {} as any,
 			})
+			mockQdrantClientInstance.getCollection.mockRejectedValue(axiosError)
 			const createError = new Error("Create Collection Failed")
 			mockQdrantClientInstance.createCollection.mockRejectedValue(createError)
 			vitest.spyOn(console, "error").mockImplementation(() => { }) // Suppress console.error
@@ -689,10 +704,14 @@ describe("QdrantVectorStore", () => {
 		})
 		it("should log but not fail if payload index creation errors occur", async () => {
 			// Mock successful collection creation
-			mockQdrantClientInstance.getCollection.mockRejectedValue({
-				response: { status: 404 },
-				message: "Not found",
+			const axiosError = new AxiosError("Not found", "ERR_BAD_REQUEST", undefined, undefined, {
+				status: 404,
+				data: undefined,
+				headers: {},
+				statusText: "Not Found",
+				config: {} as any,
 			})
+			mockQdrantClientInstance.getCollection.mockRejectedValue(axiosError)
 			mockQdrantClientInstance.createCollection.mockResolvedValue(true as any)
 
 			// Mock payload index creation to fail
@@ -736,6 +755,7 @@ describe("QdrantVectorStore", () => {
 						},
 					},
 				},
+				points_count: 0,
 			} as any)
 
 			const deleteError = new Error("Delete Collection Failed")
@@ -768,6 +788,13 @@ describe("QdrantVectorStore", () => {
 
 		it("should throw vectorDimensionMismatch error when createCollection fails during recreation", async () => {
 			const differentVectorSize = 768
+			const axiosError = new AxiosError("Not found", "ERR_BAD_REQUEST", undefined, undefined, {
+				status: 404,
+				data: undefined,
+				headers: {},
+				statusText: "Not Found",
+				config: {} as any,
+			})
 			mockQdrantClientInstance.getCollection
 				.mockResolvedValueOnce({
 					config: {
@@ -777,12 +804,10 @@ describe("QdrantVectorStore", () => {
 							},
 						},
 					},
+					points_count: 0,
 				} as any)
 				// Second call should return 404 to confirm deletion
-				.mockRejectedValueOnce({
-					response: { status: 404 },
-					message: "Not found",
-				})
+				.mockRejectedValueOnce(axiosError)
 
 			// Delete succeeds but create fails
 			mockQdrantClientInstance.deleteCollection.mockResolvedValue(true as any)
@@ -816,6 +841,13 @@ describe("QdrantVectorStore", () => {
 
 		it("should verify collection deletion before proceeding with recreation", async () => {
 			const differentVectorSize = 768
+			const axiosError = new AxiosError("Not found", "ERR_BAD_REQUEST", undefined, undefined, {
+				status: 404,
+				data: undefined,
+				headers: {},
+				statusText: "Not Found",
+				config: {} as any,
+			})
 			mockQdrantClientInstance.getCollection
 				.mockResolvedValueOnce({
 					config: {
@@ -825,12 +857,10 @@ describe("QdrantVectorStore", () => {
 							},
 						},
 					},
+					points_count: 0,
 				} as any)
 				// Second call should return 404 to confirm deletion
-				.mockRejectedValueOnce({
-					response: { status: 404 },
-					message: "Not found",
-				})
+				.mockRejectedValueOnce(axiosError)
 
 			mockQdrantClientInstance.deleteCollection.mockResolvedValue(true as any)
 			mockQdrantClientInstance.createCollection.mockResolvedValue(true as any)
@@ -859,6 +889,7 @@ describe("QdrantVectorStore", () => {
 							},
 						},
 					},
+					points_count: 0,
 				} as any)
 				// Second call should still return the collection (deletion failed)
 				.mockResolvedValueOnce({
@@ -869,6 +900,7 @@ describe("QdrantVectorStore", () => {
 							},
 						},
 					},
+					points_count: 0,
 				} as any)
 
 			mockQdrantClientInstance.deleteCollection.mockResolvedValue(true as any)
@@ -903,6 +935,13 @@ describe("QdrantVectorStore", () => {
 			// Create a new vector store with the new dimension
 			const newVectorStore = new QdrantVectorStore(mockWorkspacePath, mockQdrantUrl, newVectorSize, mockApiKey)
 
+			const axiosError = new AxiosError("Not found", "ERR_BAD_REQUEST", undefined, undefined, {
+				status: 404,
+				data: undefined,
+				headers: {},
+				statusText: "Not Found",
+				config: {} as any,
+			})
 			mockQdrantClientInstance.getCollection
 				.mockResolvedValueOnce({
 					config: {
@@ -912,12 +951,10 @@ describe("QdrantVectorStore", () => {
 							},
 						},
 					},
+					points_count: 0,
 				} as any)
 				// Second call should return 404 to confirm deletion
-				.mockRejectedValueOnce({
-					response: { status: 404 },
-					message: "Not found",
-				})
+				.mockRejectedValueOnce(axiosError)
 
 			mockQdrantClientInstance.deleteCollection.mockResolvedValue(true as any)
 			mockQdrantClientInstance.createCollection.mockResolvedValue(true as any)
@@ -955,6 +992,7 @@ describe("QdrantVectorStore", () => {
 						},
 					},
 				},
+				points_count: 0,
 			} as any)
 
 			// Test deletion failure with specific error message
@@ -986,6 +1024,7 @@ describe("QdrantVectorStore", () => {
 			config: {
 				/* collection data */
 			},
+			points_count: 0,
 		} as any)
 
 		const result = await vectorStore.collectionExists()
@@ -996,10 +1035,14 @@ describe("QdrantVectorStore", () => {
 	})
 
 	it("should return false when collection does not exist (404 error)", async () => {
-		mockQdrantClientInstance.getCollection.mockRejectedValue({
-			response: { status: 404 },
-			message: "Not found",
+		const axiosError = new AxiosError("Not found", "ERR_BAD_REQUEST", undefined, undefined, {
+			status: 404,
+			data: undefined,
+			headers: {},
+			statusText: "Not Found",
+			config: {} as any,
 		})
+		mockQdrantClientInstance.getCollection.mockRejectedValue(axiosError)
 
 		const result = await vectorStore.collectionExists()
 

@@ -7,6 +7,7 @@ import { DirectoryScanner } from "./processors"
 import { CacheManager } from "./cache-manager"
 import { TokenBasedSizeEstimator } from "./token-based-size-estimator"
 import { t } from "../../i18n"
+import { QdrantConnectionError } from "./vector-store/qdrant-errors"
 
 /**
  * Manages the code indexing workflow, coordinating between different services and managers.
@@ -88,8 +89,9 @@ export class CodeIndexOrchestrator {
 
 	/**
 	 * Initiates the indexing process (initial scan and starts watcher).
+	 * @param isRetryAfterError Whether this is a retry after an error state (default: false)
 	 */
-	public async startIndexing(): Promise<void> {
+	public async startIndexing(isRetryAfterError: boolean = false): Promise<void> {
 		// Check if workspace is available first
 		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
 			this.stateManager.setSystemState("Error", t("embeddings:orchestrator.indexingRequiresWorkspace"))
@@ -123,8 +125,47 @@ export class CodeIndexOrchestrator {
 		// Track whether we successfully connected to Qdrant and started indexing
 		// This helps us decide whether to preserve cache on error
 		let indexingStarted = false
+		let hasExistingData = false
 
 		try {
+			// Check collection existence and data if retrying after error
+			if (isRetryAfterError) {
+				try {
+					const collectionExists = await this.vectorStore.collectionExists()
+					
+					if (collectionExists) {
+						hasExistingData = await this.vectorStore.hasIndexedData()
+						if (hasExistingData) {
+							console.log(
+								"[CodeIndexOrchestrator] Error retry: Collection exists with indexed data. Reusing existing collection for incremental scan.",
+							)
+							this.stateManager.setSystemState("Indexing", "Reusing existing collection...")
+						} else {
+							console.log(
+								"[CodeIndexOrchestrator] Error retry: Collection exists but has no indexed data. Will perform full scan.",
+							)
+						}
+					} else {
+						console.log(
+							"[CodeIndexOrchestrator] Error retry: Collection does not exist. Will create new collection and perform full scan.",
+						)
+					}
+				} catch (error) {
+					if (error instanceof QdrantConnectionError) {
+						console.error("[CodeIndexOrchestrator] Failed to connect to Qdrant:", error.message)
+						this.stateManager.setSystemState(
+							"Error",
+							t("embeddings:orchestrator.failedToConnect", {
+								errorMessage: error.message,
+							}),
+						)
+						this._isProcessing = false
+						return
+					}
+					throw error
+				}
+			}
+
 			const collectionCreated = await this.vectorStore.initialize()
 
 			// Successfully connected to Qdrant
@@ -154,7 +195,10 @@ export class CodeIndexOrchestrator {
 
 			// Check if the collection already has indexed data
 			// If it does, we can skip the full scan and just start the watcher
-			const hasExistingData = await this.vectorStore.hasIndexedData()
+			// When retrying after error, we already checked this above
+			if (!isRetryAfterError) {
+				hasExistingData = await this.vectorStore.hasIndexedData()
+			}
 
 			if (hasExistingData && !collectionCreated) {
 				// Collection exists with data - run incremental scan to catch any new/changed files

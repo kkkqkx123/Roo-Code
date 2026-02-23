@@ -47,6 +47,8 @@
 		"fileWatcherStarted": "File watcher started.",
 		"fileWatcherStopped": "File watcher stopped.",
 		"failedDuringInitialScan": "Failed during initial scan: {{errorMessage}}",
+		"failedToConnect": "Connection failed: {{errorMessage}}",
+		"unexpectedError": "Unexpected error: {{errorMessage}}",
 		"unknownError": "Unknown error",
 		"indexingRequiresWorkspace": "Indexing requires an open workspace folder",
 		"indexingStopped": "Indexing stopped by user.",

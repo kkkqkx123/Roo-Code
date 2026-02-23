@@ -47,6 +47,8 @@
 		"fileWatcherStarted": "文件监控已启动。",
 		"fileWatcherStopped": "文件监控已停止。",
 		"failedDuringInitialScan": "初始扫描失败：{{errorMessage}}",
+		"failedToConnect": "连接失败：{{errorMessage}}",
+		"unexpectedError": "意外错误：{{errorMessage}}",
 		"unknownError": "未知错误",
 		"indexingRequiresWorkspace": "索引需要打开的工作区文件夹",
 		"indexingStopped": "用户已停止索引。",

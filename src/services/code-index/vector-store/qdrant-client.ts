@@ -1,4 +1,5 @@
 import { QdrantClient, Schemas } from "@qdrant/js-client-rest"
+import { AxiosError } from "axios"
 import { createHash } from "crypto"
 import * as path from "path"
 import { v5 as uuidv5 } from "uuid"
@@ -7,6 +8,7 @@ import { Payload, VectorStoreSearchResult } from "../interfaces"
 import { DEFAULT_MAX_SEARCH_RESULTS, DEFAULT_SEARCH_MIN_SCORE, QDRANT_CODE_BLOCK_NAMESPACE } from "../constants"
 import { t } from "../../../i18n"
 import { VectorStorageConfigManager } from "../vector-storage-config-manager"
+import { QdrantConnectionError, QdrantCollectionNotFoundError } from "./qdrant-errors"
 
 /**
  * Qdrant implementation of the vector store interface
@@ -139,19 +141,62 @@ export class QdrantVectorStore implements IVectorStore {
 		}
 	}
 
-	private async getCollectionInfo(): Promise<Schemas["CollectionInfo"] | null> {
+	private async getCollectionInfo(): Promise<Schemas["CollectionInfo"]> {
 		try {
-			const collectionInfo = await this.client.getCollection(this.collectionName)
-			return collectionInfo
-		} catch (error: unknown) {
-			if (error instanceof Error) {
-				console.warn(
-					`[QdrantVectorStore] Warning during getCollectionInfo for "${this.collectionName}". Collection may not exist or another error occurred:`,
-					error.message,
-				)
+			const response = await this.client.getCollection(this.collectionName)
+			return response as Schemas["CollectionInfo"]
+		} catch (error) {
+			if (error instanceof AxiosError) {
+				if (error.response?.status === 404) {
+					throw new QdrantCollectionNotFoundError(this.collectionName)
+				}
+				if (error.code === "ECONNREFUSED" || error.code === "ETIMEDOUT" || error.code === "ENOTFOUND") {
+					throw new QdrantConnectionError(
+						`Failed to connect to Qdrant: ${error.message}`,
+						error,
+					)
+				}
 			}
-			return null
+			throw error
 		}
+	}
+
+	/**
+	 * Retry mechanism with exponential backoff for connection errors
+	 * @param operation The async operation to retry
+	 * @param maxRetries Maximum number of retry attempts (default: 3)
+	 * @param initialDelay Initial delay in milliseconds (default: 1000)
+	 * @returns Promise resolving to the operation result
+	 */
+	private async retryWithBackoff<T>(
+		operation: () => Promise<T>,
+		maxRetries: number = 3,
+		initialDelay: number = 1000,
+	): Promise<T> {
+		let lastError: unknown
+
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			try {
+				return await operation()
+			} catch (error) {
+				lastError = error
+
+				if (error instanceof QdrantConnectionError) {
+					if (attempt < maxRetries) {
+						const delay = initialDelay * Math.pow(2, attempt)
+						console.log(
+							`[QdrantVectorStore] Connection error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`,
+						)
+						await new Promise((resolve) => setTimeout(resolve, delay))
+						continue
+					}
+				}
+
+				throw error
+			}
+		}
+
+		throw lastError || new Error("Retry failed")
 	}
 
 	/**
@@ -161,45 +206,96 @@ export class QdrantVectorStore implements IVectorStore {
 	async initialize(): Promise<boolean> {
 		let created = false
 		try {
-			const collectionInfo = await this.getCollectionInfo()
+			let collectionInfo: Schemas["CollectionInfo"] | undefined
 
-			if (collectionInfo === null) {
-				// Collection info not retrieved (assume not found or inaccessible), create it
-				const config = await this.getCollectionConfig()
-				await this.client.createCollection(this.collectionName, {
-					vectors: {
-						size: this.vectorSize,
-						distance: this.DISTANCE_METRIC,
-						on_disk: config.vectors.on_disk,
-					},
-					hnsw_config: config.hnsw && {
-						m: config.hnsw.m,
-						ef_construct: config.hnsw.ef_construct,
-						on_disk: true, // Always use disk storage for HNSW
-					},
-					quantization_config: config.vectors.quantization?.enabled
-						? {
-								scalar: config.vectors.quantization.type === "scalar"
-									? {
-											type: "int8",
-											always_ram: false,
-									  }
-									: undefined,
-								product: config.vectors.quantization.type === "product"
-									? {
-											product: {
+			try {
+				collectionInfo = await this.retryWithBackoff(() => this.getCollectionInfo())
+			} catch (error) {
+				if (error instanceof QdrantCollectionNotFoundError) {
+					// Collection does not exist, create it
+					const config = await this.getCollectionConfig()
+					await this.client.createCollection(this.collectionName, {
+						vectors: {
+							size: this.vectorSize,
+							distance: this.DISTANCE_METRIC,
+							on_disk: config.vectors.on_disk,
+						},
+						hnsw_config: config.hnsw && {
+							m: config.hnsw.m,
+							ef_construct: config.hnsw.ef_construct,
+							on_disk: true, // Always use disk storage for HNSW
+						},
+						quantization_config: config.vectors.quantization?.enabled
+							? {
+									scalar: config.vectors.quantization.type === "scalar"
+										? {
+												type: "int8",
 												always_ram: false,
-											},
-									  }
-									: undefined,
-						  }
-						: undefined,
-					optimizers_config: config.wal && {
-						indexing_threshold: 0,
-					},
-				})
-				created = true
-			} else {
+										  }
+										: undefined,
+									product: config.vectors.quantization.type === "product"
+										? {
+												product: {
+													always_ram: false,
+												},
+										  }
+										: undefined,
+							  }
+							: undefined,
+						optimizers_config: config.wal && {
+							indexing_threshold: 0,
+						},
+					})
+					created = true
+				} else if (error instanceof QdrantConnectionError) {
+					// Re-throw connection errors
+					throw error
+				} else {
+					// Log warning for other errors but still try to create collection
+					const errorMessage = error instanceof Error ? error.message : String(error)
+					console.warn(
+						`Warning during getCollectionInfo for "${this.collectionName}":`,
+						errorMessage,
+					)
+					// Try to create collection anyway
+					const config = await this.getCollectionConfig()
+					await this.client.createCollection(this.collectionName, {
+						vectors: {
+							size: this.vectorSize,
+							distance: this.DISTANCE_METRIC,
+							on_disk: config.vectors.on_disk,
+						},
+						hnsw_config: config.hnsw && {
+							m: config.hnsw.m,
+							ef_construct: config.hnsw.ef_construct,
+							on_disk: true, // Always use disk storage for HNSW
+						},
+						quantization_config: config.vectors.quantization?.enabled
+							? {
+									scalar: config.vectors.quantization.type === "scalar"
+										? {
+												type: "int8",
+												always_ram: false,
+										  }
+										: undefined,
+									product: config.vectors.quantization.type === "product"
+										? {
+												product: {
+													always_ram: false,
+												},
+										  }
+										: undefined,
+							  }
+							: undefined,
+						optimizers_config: config.wal && {
+							indexing_threshold: 0,
+						},
+					})
+					created = true
+				}
+			}
+
+			if (!created && collectionInfo) {
 				// Collection exists, check vector size
 				const vectorsConfig = collectionInfo.config?.params?.vectors
 				let existingVectorSize: number
@@ -243,6 +339,7 @@ export class QdrantVectorStore implements IVectorStore {
 			// Otherwise, provide a more user-friendly error message that includes the original error
 			throw new Error(
 				t("embeddings:vectorStore.qdrantConnectionFailed", { qdrantUrl: this.qdrantUrl, errorMessage }),
+				{ cause: error },
 			)
 		}
 	}
@@ -271,9 +368,17 @@ export class QdrantVectorStore implements IVectorStore {
 			await new Promise((resolve) => setTimeout(resolve, 100))
 
 			// Step 3: Verify the collection is actually deleted
-			const verificationInfo = await this.getCollectionInfo()
-			if (verificationInfo !== null) {
+			try {
+				await this.getCollectionInfo()
 				throw new Error("Collection still exists after deletion attempt")
+			} catch (verificationError) {
+				if (verificationError instanceof QdrantCollectionNotFoundError) {
+					// Expected: collection should not exist
+					console.log(`[QdrantVectorStore] Verified collection ${this.collectionName} is deleted`)
+				} else {
+					// Unexpected error
+					throw verificationError
+				}
 			}
 
 			// Step 4: Create the new collection with correct dimensions
@@ -338,10 +443,8 @@ export class QdrantVectorStore implements IVectorStore {
 				t("embeddings:vectorStore.vectorDimensionMismatch", {
 					errorMessage: contextualErrorMessage,
 				}),
+				{ cause: recreationError },
 			)
-
-			// Preserve the original error context
-			dimensionMismatchError.cause = recreationError
 			throw dimensionMismatchError
 		}
 	}
@@ -635,8 +738,24 @@ export class QdrantVectorStore implements IVectorStore {
 	 * @returns Promise resolving to boolean indicating if the collection exists
 	 */
 	async collectionExists(): Promise<boolean> {
-		const collectionInfo = await this.getCollectionInfo()
-		return collectionInfo !== null
+		try {
+			await this.getCollectionInfo()
+			return true
+		} catch (error) {
+			if (error instanceof QdrantConnectionError) {
+				throw error
+			}
+			if (error instanceof QdrantCollectionNotFoundError) {
+				return false
+			}
+			// Log warning for non-404 errors but return false
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			console.warn(
+				`Warning during getCollectionInfo for "${this.collectionName}":`,
+				errorMessage,
+			)
+			return false
+		}
 	}
 
 	/**
@@ -646,9 +765,7 @@ export class QdrantVectorStore implements IVectorStore {
 	async hasIndexedData(): Promise<boolean> {
 		try {
 			const collectionInfo = await this.getCollectionInfo()
-			if (!collectionInfo) {
-				return false
-			}
+			
 			// Check if the collection has any points indexed
 			const pointsCount = collectionInfo.points_count ?? 0
 			if (pointsCount === 0) {
@@ -674,8 +791,13 @@ export class QdrantVectorStore implements IVectorStore {
 			)
 			return pointsCount > 0
 		} catch (error) {
-			console.warn("[QdrantVectorStore] Failed to check if collection has data:", error)
-			return false
+			if (error instanceof QdrantConnectionError) {
+				throw error
+			}
+			if (error instanceof QdrantCollectionNotFoundError) {
+				return false
+			}
+			throw error
 		}
 	}
 
