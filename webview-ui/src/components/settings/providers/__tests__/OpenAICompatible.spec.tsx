@@ -72,9 +72,7 @@ vi.mock("../../ModelPicker", () => ({
 	ModelPicker: () => <div data-testid="model-picker">Model Picker</div>,
 }))
 
-vi.mock("../../R1FormatSetting", () => ({
-	R1FormatSetting: () => <div data-testid="r1-format-setting">R1 Format Setting</div>,
-}))
+
 
 vi.mock("../../ThinkingBudget", () => ({
 	ThinkingBudget: () => <div data-testid="thinking-budget">Thinking Budget</div>,

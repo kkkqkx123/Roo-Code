@@ -17,7 +17,7 @@ import { Button, StandardTooltip } from "@src/components/ui"
 import { convertHeadersToObject } from "../utils/headers"
 import { inputEventTransform, noTransform } from "../transforms"
 import { ModelPicker } from "../ModelPicker"
-import { R1FormatSetting } from "../R1FormatSetting"
+
 import { ThinkingBudget } from "../ThinkingBudget"
 
 type OpenAICompatibleProps = {
@@ -146,10 +146,7 @@ export const OpenAICompatible = ({
 				errorMessage={modelValidationError}
 				simplifySettings={simplifySettings}
 			/>
-			<R1FormatSetting
-				onChange={handleInputChange("openAiR1FormatEnabled", noTransform)}
-				openAiR1FormatEnabled={apiConfiguration?.openAiR1FormatEnabled ?? false}
-			/>
+
 			<Checkbox
 				checked={apiConfiguration?.openAiStreamingEnabled ?? true}
 				onChange={handleInputChange("openAiStreamingEnabled", noTransform)}>
