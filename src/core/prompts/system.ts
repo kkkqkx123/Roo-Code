@@ -101,10 +101,10 @@ ${getSystemInfoSection(cwd)}
 ${getObjectiveSection()}
 
 ${await addCustomInstructions(baseInstructions, globalCustomInstructions || "", cwd, mode, {
-	language: language ?? formatLanguage(vscode.env.language),
-	rooIgnoreInstructions,
-	settings,
-})}`
+		language: language ?? formatLanguage(vscode.env.language),
+		rooIgnoreInstructions,
+		settings,
+	})}`
 
 	return basePrompt
 }

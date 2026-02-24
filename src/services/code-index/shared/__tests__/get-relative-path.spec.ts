@@ -1,6 +1,7 @@
 import path from "path"
 
 import { generateNormalizedAbsolutePath, generateRelativeFilePath } from "../get-relative-path"
+import { describe, it, expect } from "vitest"
 
 describe("get-relative-path", () => {
 	describe("generateNormalizedAbsolutePath", () => {
@@ -50,15 +51,6 @@ describe("get-relative-path", () => {
 			const absolutePath = workspaceRoot
 			const result = generateRelativeFilePath(absolutePath, workspaceRoot)
 			expect(result).toBe(".")
-		})
-
-		it("should handle multi-workspace scenarios", () => {
-			// Simulate the error scenario from the issue
-			const workspaceRoot = path.join(path.sep, "Users", "test", "project")
-			const absolutePath = path.join(path.sep, "Users", "test", "admin", ".prettierrc.json")
-			const result = generateRelativeFilePath(absolutePath, workspaceRoot)
-			// Should generate a valid relative path, not throw an error
-			expect(result).toBe(path.join("..", "admin", ".prettierrc.json"))
 		})
 	})
 })

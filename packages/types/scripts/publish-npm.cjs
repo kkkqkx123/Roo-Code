@@ -38,13 +38,6 @@ function updatePackageVersion(filePath, version) {
 		packageContent.version = version
 		fs.writeFileSync(filePath, JSON.stringify(packageContent, null, 2) + "\n")
 
-		try {
-			execSync(`npx prettier --write "${filePath}"`, { stdio: "pipe" })
-			console.log(`✨ Formatted ${path.basename(filePath)} with prettier`)
-		} catch (prettierError) {
-			console.warn(`⚠️  Could not format with prettier:`, prettierError.message)
-		}
-
 		const fileName = path.basename(filePath)
 		console.log(`✅ Updated ${fileName} version: ${oldVersion} → ${version}`)
 		return oldVersion

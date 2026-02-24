@@ -484,7 +484,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			isOutsideWorkspace: isPathOutsideWorkspace(absolutePath),
 		}
 
-		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(() => {})
+		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(() => { })
 	}
 }
 

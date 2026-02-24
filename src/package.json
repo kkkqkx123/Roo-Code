@@ -401,7 +401,6 @@
 		"lint": "eslint . --ext=ts --max-warnings=0",
 		"check-types": "tsc --noEmit",
 		"test": "vitest run",
-		"format": "prettier --write .",
 		"bundle": "tsx esbuild.mjs",
 		"vscode:prepublish": "pnpm bundle --production",
 		"vsix": "mkdirp ../bin && vsce package --no-dependencies --out ../bin",

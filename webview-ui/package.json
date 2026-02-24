@@ -7,7 +7,6 @@
 		"check-types": "tsc",
 		"pretest": "turbo run bundle --cwd ..",
 		"test": "vitest run",
-		"format": "prettier --write src",
 		"dev": "vite",
 		"build": "tsc -b && vite build",
 		"build:nightly": "tsc -b && vite build --mode nightly",

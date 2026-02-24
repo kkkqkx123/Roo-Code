@@ -1,5 +1,4 @@
 import js from "@eslint/js"
-import eslintConfigPrettier from "eslint-config-prettier"
 import typescriptEslint from "typescript-eslint"
 import pluginReactHooks from "eslint-plugin-react-hooks"
 import pluginReact from "eslint-plugin-react"
@@ -13,7 +12,6 @@ import { config } from "./base.js"
 export const reactConfig = [
 	...config,
 	js.configs.recommended,
-	eslintConfigPrettier,
 	...typescriptEslint.configs.recommended,
 	{
 		...pluginReact.configs.flat.recommended,

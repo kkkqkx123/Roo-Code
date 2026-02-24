@@ -6,7 +6,6 @@ Use pnpm and Turbo for monorepo task orchestration:
 - **Build**: `pnpm build` (Turbo builds all packages)
 - **Lint**: `pnpm lint` (ESLint with max-warnings=0, no errors permitted)
 - **Type check**: `pnpm check-types` (TypeScript strict mode)
-- **Format**: `pnpm format` (Prettier with tabs, 4 spaces, print width 120)
 - **Test file/path**: `cd src; npx vitest run utils\logging\__tests__`
 
 ## Architecture and Structure
@@ -20,7 +19,6 @@ Monorepo using pnpm workspaces (Node 22.14.0, pnpm 10.8.1):
 
 ## Code Style Guidelines
 
-- **Formatting**: Prettier (tabs, 4 spaces, 120 char width, semicolons off, bracket same line)
 - **Imports**: ES6 modules with path aliases from tsconfig (vscode → src/__mocks__/vscode.js)
 - **Naming**: camelCase for variables/functions, PascalCase for classes/types, UPPER_SNAKE_CASE for constants
 - **Types**: Strict TypeScript enabled via config/typescript/base.json, use type imports
