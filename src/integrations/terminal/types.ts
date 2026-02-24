@@ -5,6 +5,7 @@ export type RooTerminalProvider = "vscode" | "execa"
 export interface RooTerminal {
 	provider: RooTerminalProvider
 	id: number
+	initialCwd: string
 	busy: boolean
 	running: boolean
 	taskId?: string
