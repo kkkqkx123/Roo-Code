@@ -1,4 +1,4 @@
-import type { ApiMessage } from "@coder/types"
+import type { ApiMessage } from "../../task-persistence"
 import type Anthropic from "@anthropic-ai/sdk"
 
 /**
@@ -54,8 +54,8 @@ export function buildCleanConversationHistory(
 				? (rawContent as Anthropic.Messages.ContentBlockParam[])
 				: rawContent !== undefined
 					? ([
-							{ type: "text", text: rawContent } satisfies Anthropic.Messages.TextBlockParam,
-						] as Anthropic.Messages.ContentBlockParam[])
+						{ type: "text", text: rawContent } satisfies Anthropic.Messages.TextBlockParam,
+					] as Anthropic.Messages.ContentBlockParam[])
 					: []
 
 			const [first, ...rest] = contentArray
