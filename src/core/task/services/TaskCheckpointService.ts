@@ -1,9 +1,5 @@
-import {
-	type CheckpointRestoreOptions,
-	type CheckpointDiffOptions,
-	type CheckpointResult,
-	type DiffResult,
-} from "@coder/types"
+import type { CheckpointRestoreOptions, CheckpointDiffOptions } from "@coder/types"
+import type { CheckpointResult } from "../../../services/checkpoints/types"
 
 import {
 	getCheckpointService,
@@ -20,17 +16,13 @@ export class TaskCheckpointService {
 	checkpointService?: any
 	checkpointServiceInitializing = false
 
-	constructor(
-		private task: any,
-		private stateManager: any,
-		private interactionService: any,
-	) {}
+	constructor(private task: any) {}
 
 	/**
 	 * 保存检查点
 	 */
-	async checkpointSave(force: boolean = false, suppressMessage: boolean = false): Promise<CheckpointResult> {
-		return checkpointSave(this.task, force, suppressMessage)
+	async checkpointSave(force: boolean = false, suppressMessage: boolean = false): Promise<CheckpointResult | undefined> {
+		return (await checkpointSave(this.task, force, suppressMessage)) as CheckpointResult | undefined
 	}
 
 	/**
@@ -43,7 +35,7 @@ export class TaskCheckpointService {
 	/**
 	 * 查看检查点差异
 	 */
-	async checkpointDiff(options: CheckpointDiffOptions): Promise<DiffResult> {
+	async checkpointDiff(options: CheckpointDiffOptions): Promise<void> {
 		return checkpointDiff(this.task, options)
 	}
 

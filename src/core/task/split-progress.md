@@ -105,11 +105,17 @@ src/core/task/
 - `maybeWaitForProviderRateLimit()` - 等待提供商速率限制
 - `backoffAndAnnounce()` - 指数退避重试
 - `handleContextWindowExceededError()` - 处理上下文窗口超出错误
+- `getCurrentProfileId()` - 获取当前配置文件 ID
 - 流式响应处理
 - 上下文管理集成
 
 **复杂度**：⭐⭐⭐⭐⭐（最高）
 **原因**：包含核心的 API 通信逻辑，涉及流式处理、错误处理、重试机制、上下文管理等
+
+**Task.ts 委派状态**：✅ 已完成
+- 所有公共方法已通过 Task.ts 委派
+- 所有公共属性（`apiConfiguration`, `api`, `currentRequestAbortController`）已通过 getter/setter 委派
+- TaskApiService 构造函数已修改为通过参数接收 API 配置，不再依赖 Task 实例的属性
 
 #### ✅ TaskLifecycleService (`services/TaskLifecycleService.ts`)
 **职责**：管理任务生命周期
@@ -252,3 +258,10 @@ Task (主类)
 
 - 2024-02-24: 初始进度报告，完成 9/14 个模块（64%）
 - 2024-02-24: 完成 TaskApiService、TaskLifecycleService、TaskFactory，完成 12/14 个模块（86%）
+- 2024-02-24: 开始 Task.ts 主类重构
+  - ✅ 添加服务类导入
+  - ✅ 添加服务实例声明（使用下划线前缀避免命名冲突）
+  - ✅ 在构造函数中初始化所有服务（按依赖顺序）
+  - ✅ 验证构造函数重构无类型错误
+  - ⏳ 待完成：将方法委托到各个服务
+  - ⏳ 待完成：清理已迁移的代码

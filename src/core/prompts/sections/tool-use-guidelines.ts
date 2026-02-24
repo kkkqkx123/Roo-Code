@@ -1,9 +1,12 @@
 export function getToolUseGuidelinesSection(): string {
 	return `# Tool Use Guidelines
 
-1. Assess what information you already have and what information you need to proceed with the task.
-2. Choose the most appropriate tool based on the task and the tool descriptions provided. Assess if you need additional information to proceed, and which of the available tools would be most effective for gathering this information. For example using the list_files tool is more effective than running a command like \`ls\` in the terminal. It's critical that you think about each available tool and use the one that best fits the current step in the task.
-3. If multiple actions are needed, you may use multiple tools in a single message when appropriate, or use tools iteratively across messages. Each tool use should be informed by the results of previous tool uses. Do not assume the outcome of any tool use. Each step must be informed by the previous step's result.
-
-By carefully considering the user's response after tool executions, you can react accordingly and make informed decisions about how to proceed with the task. This iterative process helps ensure the overall success and accuracy of your work.`
+1. Assess what information you already have and what information you need to proceed with the task. If you lack basic information needed to proceed, use ask_followup_question to get clarification from the user.
+2. Based on what you learn, choose the right tool for each subtask:
+To read files, use read_file. Use slice mode for general exploration when you don't have a target line number. Use indentation mode with anchor_line when you have a specific line number from search results or errors, which ensures you get complete code blocks like whole functions rather than truncated snippets.
+To modify existing files, use edit_file for simple string replacements(very useful when edit multiple files or refactor). Use apply_diff with SEARCH/REPLACE blocks when you need more context to uniquely identify the target or want better tolerance for formatting variations. Never use write_to_file for editing existing files (except you want to completely rewrite).
+To create new files, use write_to_file with complete content, or use edit_file with empty old_string.
+To run system commands, use execute_command with relative paths when possible. Avoid commands that require interactive input. Always use 
+3. When the task is complete, use attempt_completion to present the final result. If you need more information or hit an error you can't resolve, use ask_followup_question (you can also use it when you find the task is too large). Never assume tool outcomes without seeing the actual results.
+`
 }

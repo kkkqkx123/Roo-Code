@@ -130,6 +130,18 @@ import { MessageManager } from "../message-manager"
 import { validateAndFixToolResultIds } from "./validateToolResultIds"
 import { mergeConsecutiveApiMessages } from "./mergeConsecutiveApiMessages"
 
+// Task services
+import { TaskStateManager } from "./managers/TaskStateManager"
+import { TaskMessageService } from "./services/TaskMessageService"
+import { TaskInteractionService } from "./services/TaskInteractionService"
+import { TaskToolService } from "./services/TaskToolService"
+import { TaskApiService } from "./services/TaskApiService"
+import { TaskContextService } from "./services/TaskContextService"
+import { TaskMetricsService } from "./services/TaskMetricsService"
+import { TaskCheckpointService } from "./services/TaskCheckpointService"
+import { TaskSubtaskService } from "./services/TaskSubtaskService"
+import { TaskLifecycleService } from "./services/TaskLifecycleService"
+
 export const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
 const DEFAULT_USAGE_COLLECTION_TIMEOUT_MS = 5000 // 5 seconds
 export const FORCED_CONTEXT_REDUCTION_PERCENT = 75 // Keep 75% of context (remove 25%) on context window errors
@@ -264,7 +276,6 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	providerRef: WeakRef<ClineProvider>
 	protected readonly globalStoragePath: string
 	abort: boolean = false
-	currentRequestAbortController?: AbortController
 	skipPrevResponseIdOnce: boolean = false
 
 	// TaskStatus
@@ -278,9 +289,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	isInitialized = false
 	isPaused: boolean = false
 
-	// API
-	apiConfiguration: ProviderSettings
-	api: ApiHandler
+	// API (delegated to TaskApiService via getters)
 	private static lastGlobalApiRequestTime?: number
 	private autoApprovalHandler: AutoApprovalHandler
 
@@ -415,6 +424,18 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	// MessageManager for high-level message operations (lazy initialized)
 	private _messageManager?: MessageManager
 
+	// Task Services (will be initialized in constructor)
+	private _stateManager: TaskStateManager
+	private _messageService: TaskMessageService
+	private _interactionService: TaskInteractionService
+	private _toolService: TaskToolService
+	private _apiService: TaskApiService
+	private _contextService: TaskContextService
+	private _metricsService: TaskMetricsService
+	private _checkpointService: TaskCheckpointService
+	private _subtaskService: TaskSubtaskService
+	private _lifecycleService: TaskLifecycleService
+
 	constructor({
 		provider,
 		apiConfiguration,
@@ -481,8 +502,6 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			console.error("Failed to initialize RooIgnoreController:", error)
 		})
 
-		this.apiConfiguration = apiConfiguration
-		this.api = buildApiHandler(this.apiConfiguration)
 		this.autoApprovalHandler = new AutoApprovalHandler()
 
 		this.consecutiveMistakeLimit = consecutiveMistakeLimit ?? DEFAULT_CONSECUTIVE_MISTAKE_LIMIT
@@ -558,6 +577,85 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			},
 			this.TOKEN_USAGE_EMIT_INTERVAL_MS,
 			{ leading: true, trailing: true, maxWait: this.TOKEN_USAGE_EMIT_INTERVAL_MS },
+		)
+
+		// Initialize Task Services
+		// Note: Services are initialized in dependency order
+		this._stateManager = new TaskStateManager(this, {
+			provider,
+			apiConfiguration,
+			enableCheckpoints,
+			checkpointTimeout,
+			enableBridge,
+			consecutiveMistakeLimit,
+			task,
+			images,
+			historyItem,
+			experiments: experimentsConfig,
+			startTask,
+			rootTask,
+			parentTask,
+			taskNumber,
+			onCreated,
+			initialTodos,
+			workspacePath,
+			initialStatus,
+		})
+
+		this._messageService = new TaskMessageService(
+			this,
+			this._stateManager,
+			this.globalStoragePath,
+			this.taskId,
+			this.rootTaskId,
+			this.parentTaskId,
+			this.taskNumber,
+			this.cwd,
+			this.initialStatus,
+		)
+
+		this._metricsService = new TaskMetricsService(this, this._messageService)
+
+		this._interactionService = new TaskInteractionService(this, this._stateManager, this._messageService)
+
+		this._toolService = new TaskToolService(
+			this,
+			this._stateManager,
+			this._interactionService,
+			this._metricsService,
+			this.consecutiveMistakeLimit,
+		)
+
+		this._apiService = new TaskApiService(
+			this,
+			this._stateManager,
+			this._messageService,
+			this._toolService,
+			this._interactionService,
+			this._metricsService,
+			apiConfiguration,
+			buildApiHandler(apiConfiguration),
+		)
+
+		this._contextService = new TaskContextService(
+			this,
+			this._stateManager,
+			this._apiService,
+			this._messageService,
+			this._interactionService,
+		)
+
+		this._checkpointService = new TaskCheckpointService(this)
+
+		this._subtaskService = new TaskSubtaskService(this, this._stateManager)
+
+		this._lifecycleService = new TaskLifecycleService(
+			this,
+			this._stateManager,
+			this._apiService,
+			this._interactionService,
+			this._messageService,
+			this._checkpointService,
 		)
 
 		onCreated?.(this)
@@ -1552,15 +1650,45 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	/**
+	 * Gets the current API configuration.
+	 * Delegated to TaskApiService.
+	 */
+	public get apiConfiguration(): ProviderSettings {
+		return this._apiService.apiConfiguration
+	}
+
+	/**
+	 * Gets the current API handler.
+	 * Delegated to TaskApiService.
+	 */
+	public get api(): ApiHandler {
+		return this._apiService.api
+	}
+
+	/**
+	 * Gets the current request abort controller.
+	 * Delegated to TaskApiService.
+	 */
+	public get currentRequestAbortController(): AbortController | undefined {
+		return this._apiService.currentRequestAbortController
+	}
+
+	/**
+	 * Sets the current request abort controller.
+	 * Delegated to TaskApiService.
+	 */
+	public set currentRequestAbortController(value: AbortController | undefined) {
+		this._apiService.currentRequestAbortController = value
+	}
+
+	/**
 	 * Updates the API configuration and rebuilds the API handler.
 	 * There is no tool-protocol switching or tool parser swapping.
 	 *
 	 * @param newApiConfiguration - The new API configuration to use
 	 */
 	public updateApiConfiguration(newApiConfiguration: ProviderSettings): void {
-		// Update the configuration and rebuild the API handler
-		this.apiConfiguration = newApiConfiguration
-		this.api = buildApiHandler(this.apiConfiguration)
+		this._apiService.updateApiConfiguration(newApiConfiguration)
 	}
 
 	public async submitUserMessage(
@@ -2219,11 +2347,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 * This immediately aborts the underlying stream rather than waiting for the next chunk.
 	 */
 	public cancelCurrentRequest(): void {
-		if (this.currentRequestAbortController) {
-			console.log(`[Task#${this.taskId}.${this.instanceId}] Aborting current HTTP request`)
-			this.currentRequestAbortController.abort()
-			this.currentRequestAbortController = undefined
-		}
+		this._apiService.cancelCurrentRequest()
 	}
 
 	/**
@@ -3834,217 +3958,17 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	private async getSystemPrompt(): Promise<string> {
-		const { mcpEnabled } = (await this.providerRef.deref()?.getState()) ?? {}
-		let mcpHub: McpHub | undefined
-		if (mcpEnabled ?? true) {
-			const provider = this.providerRef.deref()
-
-			if (!provider) {
-				throw new Error("Provider reference lost during view transition")
-			}
-
-			// Wait for MCP hub initialization through McpServerManager
-			mcpHub = await McpServerManager.getInstance(provider.context, provider)
-
-			if (!mcpHub) {
-				throw new Error("Failed to get MCP hub from server manager")
-			}
-
-			// Wait for MCP servers to be connected before generating system prompt
-			await pWaitFor(() => !mcpHub!.isConnecting, { timeout: 10_000 }).catch(() => {
-				console.error("MCP servers failed to connect in time")
-			})
-		}
-
-		const rooIgnoreInstructions = this.rooIgnoreController?.getInstructions()
-
-		const state = await this.providerRef.deref()?.getState()
-
-		const {
-			mode,
-			customModes,
-			customModePrompts,
-			customInstructions,
-			experiments,
-			language,
-			apiConfiguration,
-			enableSubfolderRules,
-			skillsEnabled,
-			disabledSkills,
-		} = state ?? {}
-
-		return await (async () => {
-			const provider = this.providerRef.deref()
-
-			if (!provider) {
-				throw new Error("Provider not available")
-			}
-
-			const modelInfo = this.api.getModel().info
-
-			return SYSTEM_PROMPT(
-				provider.context,
-				this.cwd,
-				false,
-				mcpHub,
-				this.diffStrategy,
-				mode ?? defaultModeSlug,
-				customModePrompts,
-				customModes,
-				customInstructions,
-				experiments,
-				language,
-				rooIgnoreInstructions,
-				{
-					todoListEnabled: apiConfiguration?.todoListEnabled ?? true,
-					useAgentRules:
-						vscode.workspace.getConfiguration(Package.name).get<boolean>("useAgentRules") ?? true,
-					enableSubfolderRules: enableSubfolderRules ?? false,
-					newTaskRequireTodos: vscode.workspace
-						.getConfiguration(Package.name)
-						.get<boolean>("newTaskRequireTodos", false),
-					isStealthModel: modelInfo?.isStealthModel,
-					skillsEnabled: skillsEnabled ?? true,
-					disabledSkills: disabledSkills ?? [],
-				},
-				undefined, // todoList
-				this.api.getModel().id,
-				provider.getSkillsManager(),
-			)
-		})()
+		return this._apiService.getSystemPrompt()
 	}
 
 	private getCurrentProfileId(state: any): string {
-		return (
-			state?.listApiConfigMeta?.find((profile: any) => profile.name === state?.currentApiConfigName)?.id ??
-			"default"
-		)
+		return this._apiService.getCurrentProfileId(state)
 	}
 
 	private async handleContextWindowExceededError(): Promise<void> {
-		const state = await this.providerRef.deref()?.getState()
-		const { profileThresholds = {}, mode, apiConfiguration } = state ?? {}
-
-		const { contextTokens } = this.getTokenUsage()
-		const modelInfo = this.api.getModel().info
-
-		const maxTokens = getModelMaxOutputTokens({
-			modelId: this.api.getModel().id,
-			model: modelInfo,
-			settings: this.apiConfiguration,
-		})
-
-		const contextWindow = modelInfo.contextWindow
-
-		// Get the current profile ID using the helper method
-		const currentProfileId = this.getCurrentProfileId(state)
-
-		// Log the context window error for debugging
-		console.warn(
-			`[Task#${this.taskId}] Context window exceeded for model ${this.api.getModel().id}. ` +
-			`Current tokens: ${contextTokens}, Context window: ${contextWindow}. ` +
-			`Forcing truncation to ${FORCED_CONTEXT_REDUCTION_PERCENT}% of current context.`,
-		)
-		// Send condenseTaskContextStarted to show in-progress indicator
-		await this.providerRef.deref()?.postMessageToWebview({ type: "condenseTaskContextStarted", text: this.taskId })
-
-		// Build tools for condensing metadata (same tools used for normal API calls)
-		const provider = this.providerRef.deref()
-		let allTools: import("openai").default.Chat.ChatCompletionTool[] = []
-		if (provider) {
-			const toolsResult = await buildNativeToolsArrayWithRestrictions({
-				provider,
-				cwd: this.cwd,
-				mode,
-				customModes: state?.customModes,
-				experiments: state?.experiments,
-				apiConfiguration,
-				disabledTools: state?.disabledTools,
-				modelInfo,
-				skillsEnabled: state?.skillsEnabled,
-				includeAllToolsWithRestrictions: false,
-			})
-			allTools = toolsResult.tools
-		}
-
-		// Build metadata with tools and taskId for the condensing API call
-		const metadata: ApiHandlerCreateMessageMetadata = {
-			mode,
-			taskId: this.taskId,
-			...(allTools.length > 0
-				? {
-					tools: allTools,
-					tool_choice: "auto",
-					parallelToolCalls: true,
-				}
-				: {}),
-		}
-
-		try {
-			// Generate environment details to include in the condensed summary
-			const environmentDetails = await getEnvironmentDetails(this, true)
-
-			// Force aggressive truncation by keeping only 75% of the conversation history
-			const truncateResult = await manageContext({
-				messages: this.apiConversationHistory,
-				totalTokens: contextTokens || 0,
-				maxTokens,
-				contextWindow,
-				apiHandler: this.api,
-				autoCondenseContext: true,
-				autoCondenseContextPercent: FORCED_CONTEXT_REDUCTION_PERCENT,
-				systemPrompt: await this.getSystemPrompt(),
-				taskId: this.taskId,
-				profileThresholds,
-				currentProfileId,
-				metadata,
-				environmentDetails,
-			})
-
-			if (truncateResult.messages !== this.apiConversationHistory) {
-				await this.overwriteApiConversationHistory(truncateResult.messages)
-			}
-
-			if (truncateResult.summary) {
-				const { summary, cost, prevContextTokens, newContextTokens = 0 } = truncateResult
-				const contextCondense: ContextCondense = { summary, cost, newContextTokens, prevContextTokens }
-				await this.say(
-					"condense_context",
-					undefined /* text */,
-					undefined /* images */,
-					false /* partial */,
-					undefined /* checkpoint */,
-					undefined /* progressStatus */,
-					{ isNonInteractive: true } /* options */,
-					contextCondense,
-				)
-			} else if (truncateResult.truncationId) {
-				// Sliding window truncation occurred (fallback when condensing fails or is disabled)
-				const contextTruncation: ContextTruncation = {
-					truncationId: truncateResult.truncationId,
-					messagesRemoved: truncateResult.messagesRemoved ?? 0,
-					prevContextTokens: truncateResult.prevContextTokens,
-					newContextTokens: truncateResult.newContextTokensAfterTruncation ?? 0,
-				}
-				await this.say(
-					"sliding_window_truncation",
-					undefined /* text */,
-					undefined /* images */,
-					false /* partial */,
-					undefined /* checkpoint */,
-					undefined /* progressStatus */,
-					{ isNonInteractive: true } /* options */,
-					undefined /* contextCondense */,
-					contextTruncation,
-				)
-			}
-		} finally {
-			// Notify webview that context management is complete (removes in-progress spinner)
-			// IMPORTANT: Must always be sent to dismiss the spinner, even on error
-			await this.providerRef
-				.deref()
-				?.postMessageToWebview({ type: "condenseTaskContextResponse", text: this.taskId })
-		}
+		// This method is now handled internally by TaskApiService
+		// Kept for backward compatibility but no longer used
+		throw new Error("handleContextWindowExceededError should be handled by TaskApiService")
 	}
 
 	/**
@@ -4054,494 +3978,20 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 * the `api_req_rate_limit_wait` say type (not an error).
 	 */
 	private async maybeWaitForProviderRateLimit(retryAttempt: number): Promise<void> {
-		const state = await this.providerRef.deref()?.getState()
-		const rateLimitSeconds =
-			state?.apiConfiguration?.rateLimitSeconds ?? this.apiConfiguration?.rateLimitSeconds ?? 0
-
-		if (rateLimitSeconds <= 0 || !Task.lastGlobalApiRequestTime) {
-			return
-		}
-
-		const now = performance.now()
-		const timeSinceLastRequest = now - Task.lastGlobalApiRequestTime
-		const rateLimitDelay = Math.ceil(
-			Math.min(rateLimitSeconds, Math.max(0, rateLimitSeconds * 1000 - timeSinceLastRequest) / 1000),
-		)
-
-		// Only show the countdown UX on the first attempt. Retry flows have their own delay messaging.
-		if (rateLimitDelay > 0 && retryAttempt === 0) {
-			for (let i = rateLimitDelay; i > 0; i--) {
-				// Send structured JSON data for i18n-safe transport
-				const delayMessage = JSON.stringify({ seconds: i })
-				await this.say("api_req_rate_limit_wait", delayMessage, undefined, true)
-				await delay(1000)
-			}
-			// Finalize the partial message so the UI doesn't keep rendering an in-progress spinner.
-			await this.say("api_req_rate_limit_wait", undefined, undefined, false)
-		}
+		// This method is now handled internally by TaskApiService
+		// Kept for backward compatibility but no longer used
+		throw new Error("maybeWaitForProviderRateLimit should be handled by TaskApiService")
 	}
 
 	public async *attemptApiRequest(
 		retryAttempt: number = 0,
 		options: { skipProviderRateLimit?: boolean } = {},
 	): ApiStream {
-		const state = await this.providerRef.deref()?.getState()
-
-		const {
-			apiConfiguration,
-			autoApprovalEnabled,
-			requestDelaySeconds,
-			mode,
-			autoCondenseContext = true,
-			autoCondenseContextPercent = 100,
-			profileThresholds = {},
-		} = state ?? {}
-
-		// Get condensing configuration for automatic triggers.
-		const customCondensingPrompt = state?.customSupportPrompts?.CONDENSE
-
-		if (!options.skipProviderRateLimit) {
-			await this.maybeWaitForProviderRateLimit(retryAttempt)
-		}
-
-		// Update last request time right before making the request so that subsequent
-		// requests — even from new subtasks — will honour the provider's rate-limit.
-		//
-		// NOTE: When recursivelyMakeClineRequests handles rate limiting, it sets the
-		// timestamp earlier to include the environment details build. We still set it
-		// here for direct callers (tests) and for the case where we didn't rate-limit
-		// in the caller.
-		Task.lastGlobalApiRequestTime = performance.now()
-
-		const systemPrompt = await this.getSystemPrompt()
-		const { contextTokens } = this.getTokenUsage()
-
-		if (contextTokens) {
-			const modelInfo = this.api.getModel().info
-
-			const maxTokens = getModelMaxOutputTokens({
-				modelId: this.api.getModel().id,
-				model: modelInfo,
-				settings: this.apiConfiguration,
-			})
-
-			const contextWindow = modelInfo.contextWindow
-
-			// Get the current profile ID using the helper method
-			const currentProfileId = this.getCurrentProfileId(state)
-			// Check if context management will likely run (threshold check)
-			// This allows us to show an in-progress indicator to the user
-			// We use the centralized willManageContext helper to avoid duplicating threshold logic
-			const lastMessage = this.apiConversationHistory[this.apiConversationHistory.length - 1]
-			const lastMessageContent = lastMessage?.content
-			let lastMessageTokens = 0
-			if (lastMessageContent) {
-				lastMessageTokens = Array.isArray(lastMessageContent)
-					? await this.api.countTokens(lastMessageContent)
-					: await this.api.countTokens([{ type: "text", text: lastMessageContent as string }])
-			}
-
-			const contextManagementWillRun = willManageContext({
-				totalTokens: contextTokens,
-				contextWindow,
-				maxTokens,
-				autoCondenseContext,
-				autoCondenseContextPercent,
-				profileThresholds,
-				currentProfileId,
-				lastMessageTokens,
-			})
-
-			// Send condenseTaskContextStarted BEFORE manageContext to show in-progress indicator
-			// This notification must be sent here (not earlier) because the early check uses stale token count
-			// (before user message is added to history), which could incorrectly skip showing the indicator
-			if (contextManagementWillRun && autoCondenseContext) {
-				await this.providerRef
-					.deref()
-					?.postMessageToWebview({ type: "condenseTaskContextStarted", text: this.taskId })
-			}
-
-			// Build tools for condensing metadata (same tools used for normal API calls)
-			// This ensures the condensing API call includes tool definitions for providers that need them
-			let contextMgmtTools: import("openai").default.Chat.ChatCompletionTool[] = []
-			{
-				const provider = this.providerRef.deref()
-				if (provider) {
-					const toolsResult = await buildNativeToolsArrayWithRestrictions({
-						provider,
-						cwd: this.cwd,
-						mode,
-						customModes: state?.customModes,
-						experiments: state?.experiments,
-						apiConfiguration,
-						disabledTools: state?.disabledTools,
-						modelInfo,
-						skillsEnabled: state?.skillsEnabled,
-						includeAllToolsWithRestrictions: false,
-					})
-					contextMgmtTools = toolsResult.tools
-				}
-			}
-
-			// Build metadata with tools and taskId for the condensing API call
-			const contextMgmtMetadata: ApiHandlerCreateMessageMetadata = {
-				mode,
-				taskId: this.taskId,
-				...(contextMgmtTools.length > 0
-					? {
-						tools: contextMgmtTools,
-						tool_choice: "auto",
-						parallelToolCalls: true,
-					}
-					: {}),
-			}
-
-			// Only generate environment details when context management will actually run.
-			// getEnvironmentDetails(this, true) triggers a recursive workspace listing which
-			// adds overhead - avoid this for the common case where context is below threshold.
-			const contextMgmtEnvironmentDetails = contextManagementWillRun
-				? await getEnvironmentDetails(this, true)
-				: undefined
-
-			// Get files read by Roo for code folding - only when context management will run
-			const contextMgmtFilesReadByRoo =
-				contextManagementWillRun && autoCondenseContext
-					? await this.getFilesReadByRooSafely("attemptApiRequest")
-					: undefined
-
-			try {
-				const truncateResult = await manageContext({
-					messages: this.apiConversationHistory,
-					totalTokens: contextTokens,
-					maxTokens,
-					contextWindow,
-					apiHandler: this.api,
-					autoCondenseContext,
-					autoCondenseContextPercent,
-					systemPrompt,
-					taskId: this.taskId,
-					customCondensingPrompt,
-					profileThresholds,
-					currentProfileId,
-					metadata: contextMgmtMetadata,
-					environmentDetails: contextMgmtEnvironmentDetails,
-					filesReadByRoo: contextMgmtFilesReadByRoo,
-					cwd: this.cwd,
-					rooIgnoreController: this.rooIgnoreController,
-				})
-				if (truncateResult.messages !== this.apiConversationHistory) {
-					await this.overwriteApiConversationHistory(truncateResult.messages)
-				}
-				if (truncateResult.error) {
-					await this.say("condense_context_error", truncateResult.error)
-				}
-				if (truncateResult.summary) {
-					const { summary, cost, prevContextTokens, newContextTokens = 0, condenseId } = truncateResult
-					const contextCondense: ContextCondense = {
-						summary,
-						cost,
-						newContextTokens,
-						prevContextTokens,
-						condenseId,
-					}
-					await this.say(
-						"condense_context",
-						undefined /* text */,
-						undefined /* images */,
-						false /* partial */,
-						undefined /* checkpoint */,
-						undefined /* progressStatus */,
-						{ isNonInteractive: true } /* options */,
-						contextCondense,
-					)
-				} else if (truncateResult.truncationId) {
-					// Sliding window truncation occurred (fallback when condensing fails or is disabled)
-					const contextTruncation: ContextTruncation = {
-						truncationId: truncateResult.truncationId,
-						messagesRemoved: truncateResult.messagesRemoved ?? 0,
-						prevContextTokens: truncateResult.prevContextTokens,
-						newContextTokens: truncateResult.newContextTokensAfterTruncation ?? 0,
-					}
-					await this.say(
-						"sliding_window_truncation",
-						undefined /* text */,
-						undefined /* images */,
-						false /* partial */,
-						undefined /* checkpoint */,
-						undefined /* progressStatus */,
-						{ isNonInteractive: true } /* options */,
-						undefined /* contextCondense */,
-						contextTruncation,
-					)
-				}
-			} finally {
-				// Notify webview that context management is complete (sets isCondensing = false)
-				// This removes the in-progress spinner and allows the completed result to show
-				// IMPORTANT: Must always be sent to dismiss the spinner, even on error
-				if (contextManagementWillRun && autoCondenseContext) {
-					await this.providerRef
-						.deref()
-						?.postMessageToWebview({ type: "condenseTaskContextResponse", text: this.taskId })
-				}
-			}
-		}
-
-		// Get the effective API history by filtering out condensed messages
-		// This allows non-destructive condensing where messages are tagged but not deleted,
-		// enabling accurate rewind operations while still sending condensed history to the API.
-		const effectiveHistory = getEffectiveApiHistory(this.apiConversationHistory)
-		const messagesSinceLastSummary = getMessagesSinceLastSummary(effectiveHistory)
-		// For API only: merge consecutive user messages (excludes summary messages per
-		// mergeConsecutiveApiMessages implementation) without mutating stored history.
-		const mergedForApi = mergeConsecutiveApiMessages(messagesSinceLastSummary, { roles: ["user"] })
-		const messagesWithoutImages = maybeRemoveImageBlocks(mergedForApi, this.api)
-		const cleanConversationHistory = this.buildCleanConversationHistory(messagesWithoutImages as ApiMessage[])
-
-		// Check auto-approval limits
-		const approvalResult = await this.autoApprovalHandler.checkAutoApprovalLimits(
-			state,
-			this.combineMessages(this.clineMessages.slice(1)),
-			async (type, data) => this.ask(type, data),
-		)
-
-		if (!approvalResult.shouldProceed) {
-			// User did not approve, task should be aborted
-			throw new Error("Auto-approval limit reached and user did not approve continuation")
-		}
-
-		// Whether we include tools is determined by whether we have any tools to send.
-		const modelInfo = this.api.getModel().info
-
-		// Build complete tools array: native tools + dynamic MCP tools
-		// When includeAllToolsWithRestrictions is true, returns all tools but provides
-		// allowedFunctionNames for providers (like Gemini) that need to see all tool
-		// definitions in history while restricting callable tools for the current mode.
-		// Only Gemini currently supports this - other providers filter tools normally.
-		// eslint-disable-next-line no-useless-assignment
-		let allTools: OpenAI.Chat.ChatCompletionTool[] = []
-		let allowedFunctionNames: string[] | undefined
-
-		// Gemini requires all tool definitions to be present for history compatibility,
-		// but uses allowedFunctionNames to restrict which tools can be called.
-		// Other providers (Anthropic, OpenAI, etc.) don't support this feature yet,
-		// so they continue to receive only the filtered tools for the current mode.
-		const supportsAllowedFunctionNames = apiConfiguration?.apiProvider === "gemini"
-
-		{
-			const provider = this.providerRef.deref()
-			if (!provider) {
-				throw new Error("Provider reference lost during tool building")
-			}
-
-			const toolsResult = await buildNativeToolsArrayWithRestrictions({
-				provider,
-				cwd: this.cwd,
-				mode,
-				customModes: state?.customModes,
-				experiments: state?.experiments,
-				apiConfiguration,
-				disabledTools: state?.disabledTools,
-				modelInfo,
-				skillsEnabled: state?.skillsEnabled,
-				includeAllToolsWithRestrictions: supportsAllowedFunctionNames,
-			})
-			allTools = toolsResult.tools
-			allowedFunctionNames = toolsResult.allowedFunctionNames
-		}
-
-		const shouldIncludeTools = allTools.length > 0
-
-		const metadata: ApiHandlerCreateMessageMetadata = {
-			mode: mode,
-			taskId: this.taskId,
-			suppressPreviousResponseId: this.skipPrevResponseIdOnce,
-			// Include tools whenever they are present.
-			...(shouldIncludeTools
-				? {
-					tools: allTools,
-					tool_choice: "auto",
-					parallelToolCalls: true,
-					// When mode restricts tools, provide allowedFunctionNames so providers
-					// like Gemini can see all tools in history but only call allowed ones
-					...(allowedFunctionNames ? { allowedFunctionNames } : {}),
-				}
-				: {}),
-		}
-
-		// Create an AbortController to allow cancelling the request mid-stream
-		this.currentRequestAbortController = new AbortController()
-		const abortSignal = this.currentRequestAbortController.signal
-		// Reset the flag after using it
-		this.skipPrevResponseIdOnce = false
-
-		// The provider accepts reasoning items alongside standard messages; cast to the expected parameter type.
-		const stream = this.api.createMessage(
-			systemPrompt,
-			cleanConversationHistory as unknown as Anthropic.Messages.MessageParam[],
-			metadata,
-		)
-		const iterator = stream[Symbol.asyncIterator]()
-
-		// Set up abort handling - when the signal is aborted, clean up the controller reference
-		abortSignal.addEventListener("abort", () => {
-			console.log(`[Task#${this.taskId}.${this.instanceId}] AbortSignal triggered for current request`)
-			this.currentRequestAbortController = undefined
-		})
-
-		try {
-			// Awaiting first chunk to see if it will throw an error.
-			this.isWaitingForFirstChunk = true
-
-			// Race between the first chunk and the abort signal
-			const firstChunkPromise = iterator.next()
-			const abortPromise = new Promise<never>((_, reject) => {
-				if (abortSignal.aborted) {
-					reject(new Error("Request cancelled by user"))
-				} else {
-					abortSignal.addEventListener("abort", () => {
-						reject(new Error("Request cancelled by user"))
-					})
-				}
-			})
-
-			const firstChunk = await Promise.race([firstChunkPromise, abortPromise])
-			yield firstChunk.value
-			this.isWaitingForFirstChunk = false
-		} catch (error) {
-			this.isWaitingForFirstChunk = false
-			this.currentRequestAbortController = undefined
-			const isContextWindowExceededError = checkContextWindowExceededError(error)
-
-			// If it's a context window error and we haven't exceeded max retries for this error type
-			if (isContextWindowExceededError && retryAttempt < MAX_CONTEXT_WINDOW_RETRIES) {
-				console.warn(
-					`[Task#${this.taskId}] Context window exceeded for model ${this.api.getModel().id}. ` +
-					`Retry attempt ${retryAttempt + 1}/${MAX_CONTEXT_WINDOW_RETRIES}. ` +
-					`Attempting automatic truncation...`,
-				)
-				await this.handleContextWindowExceededError()
-				// Retry the request after handling the context window error
-				yield* this.attemptApiRequest(retryAttempt + 1)
-				return
-			}
-
-			// note that this api_req_failed ask is unique in that we only present this option if the api hasn't streamed any content yet (ie it fails on the first chunk due), as it would allow them to hit a retry button. However if the api failed mid-stream, it could be in any arbitrary state where some tools may have executed, so that error is handled differently and requires cancelling the task entirely.
-			if (autoApprovalEnabled) {
-				// Apply shared exponential backoff and countdown UX
-				await this.backoffAndAnnounce(retryAttempt, error)
-
-				// CRITICAL: Check if task was aborted during the backoff countdown
-				// This prevents infinite loops when users cancel during auto-retry
-				// Without this check, the recursive call below would continue even after abort
-				if (this.abort) {
-					throw new Error(
-						`[Task#attemptApiRequest] task ${this.taskId}.${this.instanceId} aborted during retry`,
-						{ cause: error }
-					)
-				}
-
-				// Delegate generator output from the recursive call with
-				// incremented retry count.
-				yield* this.attemptApiRequest(retryAttempt + 1)
-
-				return
-			} else {
-				const { response } = await this.ask(
-					"api_req_failed",
-					(error instanceof Error ? error.message : undefined) ?? JSON.stringify(serializeError(error), null, 2),
-				)
-
-				if (response !== "yesButtonClicked") {
-					// This will never happen since if noButtonClicked, we will
-					// clear current task, aborting this instance.
-					throw new Error("API request failed", { cause: error })
-				}
-
-				await this.say("api_req_retried")
-
-				// Delegate generator output from the recursive call.
-				yield* this.attemptApiRequest()
-				return
-			}
-		}
-
-		// No error, so we can continue to yield all remaining chunks.
-		// (Needs to be placed outside of try/catch since it we want caller to
-		// handle errors not with api_req_failed as that is reserved for first
-		// chunk failures only.)
-		// This delegates to another generator or iterable object. In this case,
-		// it's saying "yield all remaining values from this iterator". This
-		// effectively passes along all subsequent chunks from the original
-		// stream.
-		yield* iterator
+		yield* this._apiService.attemptApiRequest(retryAttempt, options)
 	}
 
-	// Shared exponential backoff for retries (first-chunk and mid-stream)
 	private async backoffAndAnnounce(retryAttempt: number, error: any): Promise<void> {
-		try {
-			const state = await this.providerRef.deref()?.getState()
-			const baseDelay = state?.requestDelaySeconds || 5
-
-			let exponentialDelay = Math.min(
-				Math.ceil(baseDelay * Math.pow(2, retryAttempt)),
-				MAX_EXPONENTIAL_BACKOFF_SECONDS,
-			)
-
-			// Respect provider rate limit window
-			let rateLimitDelay = 0
-			const rateLimit = (state?.apiConfiguration ?? this.apiConfiguration)?.rateLimitSeconds || 0
-			if (Task.lastGlobalApiRequestTime && rateLimit > 0) {
-				const elapsed = performance.now() - Task.lastGlobalApiRequestTime
-				rateLimitDelay = Math.ceil(Math.min(rateLimit, Math.max(0, rateLimit * 1000 - elapsed) / 1000))
-			}
-
-			// Prefer RetryInfo on 429 if present
-			if (error?.status === 429) {
-				const retryInfo = error?.errorDetails?.find(
-					(d: any) => d["@type"] === "type.googleapis.com/google.rpc.RetryInfo",
-				)
-				const match = retryInfo?.retryDelay?.match?.(/^(\d+)s$/)
-				if (match) {
-					exponentialDelay = Number(match[1]) + 1
-				}
-			}
-
-			const finalDelay = Math.max(exponentialDelay, rateLimitDelay)
-			if (finalDelay <= 0) {
-				return
-			}
-
-			// Build header text; fall back to error message if none provided
-			let headerText
-			if (error.status) {
-				// Include both status code (for ChatRow parsing) and detailed message (for error details)
-				// Format: "<status>\n<message>" allows ChatRow to extract status via parseInt(text.substring(0,3))
-				// while preserving the full error message in errorDetails for debugging
-				const errorMessage = error?.message || "Unknown error"
-				headerText = `${error.status}\n${errorMessage}`
-			} else if (error?.message) {
-				headerText = error.message
-			} else {
-				headerText = "Unknown error"
-			}
-
-			headerText = headerText ? `${headerText}\n` : ""
-
-			// Show countdown timer with exponential backoff
-			for (let i = finalDelay; i > 0; i--) {
-				// Check abort flag during countdown to allow early exit
-				if (this.abort) {
-					throw new Error(`[Task#${this.taskId}] Aborted during retry countdown`)
-				}
-
-				await this.say("api_req_retry_delayed", `${headerText}<retry_timer>${i}</retry_timer>`, undefined, true)
-				await delay(1000)
-			}
-
-			await this.say("api_req_retry_delayed", headerText, undefined, false)
-		} catch (err) {
-			console.error("Exponential backoff failed:", err)
-		}
+		return this._apiService.backoffAndAnnounce(retryAttempt, error)
 	}
 
 	// Checkpoints
@@ -4550,152 +4000,6 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		return checkpointSave(this, force, suppressMessage)
 	}
 
-	private buildCleanConversationHistory(
-		messages: ApiMessage[],
-	): Array<
-		Anthropic.Messages.MessageParam | { type: "reasoning"; encrypted_content: string; id?: string; summary?: any[] }
-	> {
-		type ReasoningItemForRequest = {
-			type: "reasoning"
-			encrypted_content: string
-			id?: string
-			summary?: any[]
-		}
-
-		const cleanConversationHistory: (Anthropic.Messages.MessageParam | ReasoningItemForRequest)[] = []
-
-		for (const msg of messages) {
-			// Skip system prompt messages (they're only for debugging, sent separately as systemPrompt parameter)
-			if (msg.isSystemPrompt) {
-				continue
-			}
-			// Standalone reasoning: send encrypted, skip plain text
-			if (msg.type === "reasoning") {
-				if (msg.encrypted_content) {
-					cleanConversationHistory.push({
-						type: "reasoning",
-						summary: msg.summary,
-						encrypted_content: msg.encrypted_content!,
-						...(msg.id ? { id: msg.id } : {}),
-					})
-				}
-				continue
-			}
-
-			// Preferred path: assistant message with embedded reasoning as first content block
-			if (msg.role === "assistant") {
-				const rawContent = msg.content
-
-				const contentArray: Anthropic.Messages.ContentBlockParam[] = Array.isArray(rawContent)
-					? (rawContent as Anthropic.Messages.ContentBlockParam[])
-					: rawContent !== undefined
-						? ([
-							{ type: "text", text: rawContent } satisfies Anthropic.Messages.TextBlockParam,
-						] as Anthropic.Messages.ContentBlockParam[])
-						: []
-
-				const [first, ...rest] = contentArray
-
-				// Check if this message has reasoning_details (OpenRouter format for Gemini 3, etc.)
-				const msgWithDetails = msg
-				if (msgWithDetails.reasoning_details && Array.isArray(msgWithDetails.reasoning_details)) {
-					// Build the assistant message with reasoning_details
-					let assistantContent: Anthropic.Messages.MessageParam["content"]
-
-					if (contentArray.length === 0) {
-						assistantContent = ""
-					} else if (contentArray.length === 1 && contentArray[0] && contentArray[0].type === "text") {
-						assistantContent = (contentArray[0] as Anthropic.Messages.TextBlockParam).text
-					} else {
-						assistantContent = contentArray
-					}
-
-					// Create message with reasoning_details property
-					cleanConversationHistory.push({
-						role: "assistant",
-						content: assistantContent,
-						reasoning_details: msgWithDetails.reasoning_details,
-					} as any)
-
-					continue
-				}
-
-				// Embedded reasoning: encrypted (send) or plain text (skip)
-				const hasEncryptedReasoning =
-					first && (first as any).type === "reasoning" && typeof (first as any).encrypted_content === "string"
-				const hasPlainTextReasoning =
-					first && (first as any).type === "reasoning" && typeof (first as any).text === "string"
-
-				if (hasEncryptedReasoning) {
-					const reasoningBlock = first as any
-
-					// Send as separate reasoning item (OpenAI Native)
-					cleanConversationHistory.push({
-						type: "reasoning",
-						summary: reasoningBlock.summary ?? [],
-						encrypted_content: reasoningBlock.encrypted_content,
-						...(reasoningBlock.id ? { id: reasoningBlock.id } : {}),
-					})
-
-					// Send assistant message without reasoning
-					let assistantContent: Anthropic.Messages.MessageParam["content"]
-
-					if (rest.length === 0) {
-						assistantContent = ""
-					} else if (rest.length === 1 && rest[0] && rest[0].type === "text") {
-						assistantContent = (rest[0] as Anthropic.Messages.TextBlockParam).text
-					} else {
-						assistantContent = rest
-					}
-
-					cleanConversationHistory.push({
-						role: "assistant",
-						content: assistantContent,
-					} satisfies Anthropic.Messages.MessageParam)
-
-					continue
-				} else if (hasPlainTextReasoning) {
-					// Check if the model's preserveReasoning flag is set
-					// If true, include the reasoning block in API requests
-					// If false/undefined, strip it out (stored for history only, not sent back to API)
-					const shouldPreserveForApi = this.api.getModel().info.preserveReasoning === true
-					let assistantContent: Anthropic.Messages.MessageParam["content"]
-
-					if (shouldPreserveForApi) {
-						// Include reasoning block in the content sent to API
-						assistantContent = contentArray
-					} else {
-						// Strip reasoning out - stored for history only, not sent back to API
-						if (rest.length === 0) {
-							assistantContent = ""
-						} else if (rest.length === 1 && rest[0] && rest[0].type === "text") {
-							assistantContent = (rest[0] as Anthropic.Messages.TextBlockParam).text
-						} else {
-							assistantContent = rest
-						}
-					}
-
-					cleanConversationHistory.push({
-						role: "assistant",
-						content: assistantContent,
-					} satisfies Anthropic.Messages.MessageParam)
-
-					continue
-				}
-			}
-
-			// Default path for regular messages (no embedded reasoning)
-			// Only process user and assistant messages (system prompts are filtered out above)
-			if (msg.role === "user" || msg.role === "assistant") {
-				cleanConversationHistory.push({
-					role: msg.role,
-					content: msg.content as Anthropic.Messages.ContentBlockParam[] | string,
-				})
-			}
-		}
-
-		return cleanConversationHistory
-	}
 	public async checkpointRestore(options: CheckpointRestoreOptions) {
 		return checkpointRestore(this, options)
 	}

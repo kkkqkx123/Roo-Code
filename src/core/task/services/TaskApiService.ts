@@ -51,10 +51,12 @@ export class TaskApiService {
 		private toolService: TaskToolService,
 		private interactionService: TaskInteractionService,
 		private metricsService: TaskMetricsService,
+		apiConfiguration: ProviderSettings,
+		api: ApiHandler,
 	) {
 		// 初始化API配置和处理器
-		this.apiConfiguration = task.apiConfiguration
-		this.api = task.api
+		this.apiConfiguration = apiConfiguration
+		this.api = api
 	}
 
 	/**
@@ -654,7 +656,7 @@ export class TaskApiService {
 	/**
 	 * 指数退避重试
 	 */
-	private async backoffAndAnnounce(retryAttempt: number, error: any): Promise<void> {
+	public async backoffAndAnnounce(retryAttempt: number, error: any): Promise<void> {
 		try {
 			const state = await this.task.providerRef.deref()?.getState()
 			const baseDelay = state?.requestDelaySeconds || 5
@@ -861,7 +863,7 @@ export class TaskApiService {
 	/**
 	 * 获取当前配置文件ID
 	 */
-	private getCurrentProfileId(state: any): string {
+	public getCurrentProfileId(state: any): string {
 		return (
 			state?.listApiConfigMeta?.find((profile: any) => profile.name === state?.currentApiConfigName)?.id ??
 			"default"
