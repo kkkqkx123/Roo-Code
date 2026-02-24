@@ -3,7 +3,7 @@
 import os from "os"
 import * as path from "path"
 
-import { arePathsEqual, getReadablePath, getWorkspacePath, getPathRelation, canChangeDirectory, parseCdCommand } from "../path"
+import { arePathsEqual, getReadablePath, getWorkspacePath, getPathRelation, canChangeDirectory, parseCdCommand, removeCdFromCommand } from "../path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mock modules
@@ -383,6 +383,61 @@ describe("Path Utilities", () => {
 		it("should handle multiple separators", () => {
 			const expected = process.platform === "win32" ? "E:\\Users\\test\\project\\src" : "/Users/test/project/src"
 			expect(parseCdCommand("cd src; ls | grep test", cwd)).toBe(expected)
+		})
+	})
+
+	describe("removeCdFromCommand", () => {
+		it("should remove simple cd command with &&", () => {
+			expect(removeCdFromCommand("cd src && npx vitest run utils/__tests__/streaming-token-counter.spec.ts")).toBe(
+				"npx vitest run utils/__tests__/streaming-token-counter.spec.ts",
+			)
+		})
+
+		it("should remove cd command with semicolon", () => {
+			expect(removeCdFromCommand("cd src; ls -la")).toBe("ls -la")
+		})
+
+		it("should remove cd command with pipe", () => {
+			expect(removeCdFromCommand("cd src | grep test")).toBe("grep test")
+		})
+
+		it("should remove cd command with ||", () => {
+			expect(removeCdFromCommand("cd src || echo error")).toBe("echo error")
+		})
+
+		it("should remove cd with quoted path and separator", () => {
+			expect(removeCdFromCommand('cd "my folder" && ls')).toBe("ls")
+		})
+
+		it("should remove cd with single quoted path", () => {
+			expect(removeCdFromCommand("cd 'my folder' && ls")).toBe("ls")
+		})
+
+		it("should return original command if no cd found", () => {
+			expect(removeCdFromCommand("npx vitest run utils/__tests__/streaming-token-counter.spec.ts")).toBe(
+				"npx vitest run utils/__tests__/streaming-token-counter.spec.ts",
+			)
+		})
+
+		it("should return empty string for cd-only command", () => {
+			expect(removeCdFromCommand("cd src")).toBe("")
+		})
+
+		it("should handle leading whitespace", () => {
+			expect(removeCdFromCommand("  cd src && npm run test")).toBe("npm run test")
+		})
+
+		it("should preserve remaining command formatting", () => {
+			expect(removeCdFromCommand("cd src && npm run test -- --coverage")).toBe("npm run test -- --coverage")
+		})
+
+		it("should handle case-insensitive cd", () => {
+			expect(removeCdFromCommand("CD src && echo test")).toBe("echo test")
+			expect(removeCdFromCommand("Cd src && echo test")).toBe("echo test")
+		})
+
+		it("should handle multiple ampersands with spaces", () => {
+			expect(removeCdFromCommand("cd src && npm run test && npm run lint")).toBe("npm run test && npm run lint")
 		})
 	})
 })

@@ -86,6 +86,7 @@ import { getWorkspacePath } from "../../utils/path"
 import { sanitizeToolUseId } from "../../utils/tool-id"
 import { getTaskDirectoryPath } from "../../utils/storage"
 import { StreamingTokenCounter } from "../../utils/tiktoken"
+import { DeadLoopDetector } from "../../utils/deadLoopDetector"
 
 // prompts
 import { formatResponse } from "../prompts/responses"
@@ -2768,6 +2769,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				const tokenCounter = new StreamingTokenCounter()
 				let hasApiUsageData = false
 
+				// Initialize dead loop detector for reasoning message
+				const deadLoopDetector = new DeadLoopDetector()
+
 				try {
 					const iterator = stream[Symbol.asyncIterator]()
 
@@ -2819,6 +2823,15 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 										/([.!?])\*\*([^*\n]+)\*\*/g,
 										"$1\n\n**$2**",
 									)
+								}
+								// Detect dead loop in reasoning message
+								const detectionResult = deadLoopDetector.detect(reasoningMessage)
+								if (detectionResult.detected) {
+									console.error(
+										`[Task#${this.taskId}] Dead loop detected in reasoning: ${detectionResult.details}`,
+									)
+									await abortStream("streaming_failed", `检测到死循环：${detectionResult.details}`)
+									break
 								}
 								await this.say("reasoning", formattedReasoning, undefined, true)
 								break

@@ -19,7 +19,7 @@ import { Package } from "../../shared/package"
 import { t } from "../../i18n"
 import { getTaskDirectoryPath } from "../../utils/storage"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
-import { arePathsEqual, parseCdCommand } from "../../utils/path"
+import { arePathsEqual, parseCdCommand, removeCdFromCommand } from "../../utils/path"
 
 class ShellIntegrationError extends Error { }
 
@@ -296,6 +296,13 @@ export async function executeCommandInTerminal(
 	// Parse command to extract cd target if present
 	const cdTarget = parseCdCommand(command, workingDir)
 	const targetWorkingDir = cdTarget || workingDir
+	
+	// If cd command was parsed successfully, remove it from the command
+	// so we don't execute the cd part twice (once for terminal setup, once in the command)
+	let commandToExecute = command
+	if (cdTarget) {
+		commandToExecute = removeCdFromCommand(command)
+	}
 
 	let terminal: RooTerminal
 	let useFallback = false
@@ -308,6 +315,8 @@ export async function executeCommandInTerminal(
 		console.warn(`[ExecuteCommandTool] Failed to create terminal with cd target "${targetWorkingDir}", falling back to "${workingDir}":`, error)
 		terminal = await TerminalRegistry.getOrCreateTerminal(workingDir, task.taskId, terminalProvider)
 		useFallback = true
+		// When falling back, use the original command (which includes the cd part)
+		commandToExecute = command
 	}
 
 	if (terminal instanceof Terminal) {
@@ -326,7 +335,7 @@ export async function executeCommandInTerminal(
 	if (useFallback) {
 		// When using fallback (cd target path didn't exist), execute the original command as-is
 		// The original command already contains the cd instruction
-		process = terminal.runCommand(command, callbacks)
+		process = terminal.runCommand(commandToExecute, callbacks)
 	} else if (!arePathsEqual(terminalCwd, workingDir)) {
 		// Terminal is in a different directory, need to cd first
 		terminal.incrementDirectoryChangeCount()
@@ -342,17 +351,17 @@ export async function executeCommandInTerminal(
 			}
 
 			// Use the new terminal
-			process = newTerminal.runCommand(command, callbacks)
+			process = newTerminal.runCommand(commandToExecute, callbacks)
 		} else {
 			// Prepend cd command to change directory
 			// Use proper quoting to handle paths with spaces
 			const escapedWorkingDir = workingDir.replace(/"/g, '\\"')
-			const actualCommand = `cd "${escapedWorkingDir}" && ${command}`
+			const actualCommand = `cd "${escapedWorkingDir}" && ${commandToExecute}`
 			process = terminal.runCommand(actualCommand, callbacks)
 		}
 	} else {
 		// No directory change needed, execute command directly
-		process = terminal.runCommand(command, callbacks)
+		process = terminal.runCommand(commandToExecute, callbacks)
 	}
 
 	task.terminalProcess = process

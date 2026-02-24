@@ -5,24 +5,8 @@ import { type Language, isLanguage } from "@coder/types"
  */
 
 export const LANGUAGES: Record<Language, string> = {
-	ca: "Català",
-	de: "Deutsch",
 	en: "English",
-	es: "Español",
-	fr: "Français",
-	hi: "हिन्दी",
-	id: "Bahasa Indonesia",
-	it: "Italiano",
-	ja: "日本語",
-	ko: "한국어",
-	nl: "Nederlands",
-	pl: "Polski",
-	"pt-BR": "Português",
-	ru: "Русский",
-	tr: "Türkçe",
-	vi: "Tiếng Việt",
 	"zh-CN": "简体中文",
-	"zh-TW": "繁體中文",
 }
 
 /**

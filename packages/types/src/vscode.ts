@@ -28,19 +28,14 @@ export type TerminalActionPromptType = `TERMINAL_${TerminalActionName}`
 
 export const commandIds = [
 	"activationCompleted",
-
 	"plusButtonClicked",
 	"historyButtonClicked",
 	"popoutButtonClicked",
 	"settingsButtonClicked",
-
 	"openInNewTab",
-
 	"newTask",
-
 	"setCustomStoragePath",
 	"importSettings",
-
 	"focusInput",
 	"acceptInput",
 	"focusPanel",
@@ -54,24 +49,8 @@ export type CommandId = (typeof commandIds)[number]
  */
 
 export const languages = [
-	"ca",
-	"de",
 	"en",
-	"es",
-	"fr",
-	"hi",
-	"id",
-	"it",
-	"ja",
-	"ko",
-	"nl",
-	"pl",
-	"pt-BR",
-	"ru",
-	"tr",
-	"vi",
 	"zh-CN",
-	"zh-TW",
 ] as const
 
 export const languagesSchema = z.enum(languages)

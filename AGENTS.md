@@ -8,7 +8,7 @@ Use pnpm and Turbo for monorepo task orchestration:
 - **Type check**: `pnpm check-types` (TypeScript strict mode)
 - **Format**: `pnpm format` (Prettier with tabs, 4 spaces, print width 120)
 - **Test all**: `pnpm test` (Vitest run mode)
-- **Test single file**: `npx vitest run path/to/__tests__/File.spec.ts` (from workspace root)
+- **Test single file**: `cd <package>; npx vitest run path/to/__tests__/File.spec.ts`
 
 ## Architecture and Structure
 

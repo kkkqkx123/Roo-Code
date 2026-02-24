@@ -182,12 +182,12 @@ export function canChangeDirectory(currentPath: string, targetPath: string): boo
 }
 
 /**
- * Parses a command to extract the target directory if it starts with 'cd'
- * @param command The command to parse
- * @param currentCwd The current working directory
- * @returns The target directory if cd command is found, otherwise undefined
+ * Internal: Parse cd command and find separator position
+ * @returns Object containing the unquoted path, separator index and length, or undefined if not a cd command
  */
-export function parseCdCommand(command: string, currentCwd: string): string | undefined {
+function parseCdCommandInternal(
+	command: string,
+): { unquotedPath: string; separatorIndex: number; separatorLength: number } | undefined {
 	// Trim leading whitespace
 	const trimmedCommand = command.trim()
 
@@ -201,8 +201,8 @@ export function parseCdCommand(command: string, currentCwd: string): string | un
 
 	// Parse the path, stopping at command separators
 	// Need to handle quoted paths correctly
-	const separators = [";", "|", "&"]
-	let pathEnd = afterCd.length
+	let separatorIndex = -1
+	let separatorLength = 0
 	let inQuotes = false
 	let quoteChar = ""
 
@@ -222,12 +222,28 @@ export function parseCdCommand(command: string, currentCwd: string): string | un
 		}
 
 		// If not in quotes, check for separators
-		if (!inQuotes && separators.includes(char)) {
-			pathEnd = i
-			break
+		if (!inQuotes) {
+			// Check for two-character separators first (&&, ||)
+			if (i + 1 < afterCd.length) {
+				const twoCharSep = afterCd.slice(i, i + 2)
+				if (twoCharSep === "&&" || twoCharSep === "||") {
+					separatorIndex = i
+					separatorLength = 2
+					break
+				}
+			}
+
+			// Check for single-character separators (;, |, &)
+			const char = afterCd.charAt(i)
+			if (char === ";" || char === "|" || char === "&") {
+				separatorIndex = i
+				separatorLength = 1
+				break
+			}
 		}
 	}
 
+	const pathEnd = separatorIndex !== -1 ? separatorIndex : afterCd.length
 	const targetPath = afterCd.slice(0, pathEnd).trim()
 
 	// Remove quotes if present (single or double quotes)
@@ -235,6 +251,23 @@ export function parseCdCommand(command: string, currentCwd: string): string | un
 	if ((targetPath.startsWith('"') && targetPath.endsWith('"')) || (targetPath.startsWith("'") && targetPath.endsWith("'"))) {
 		unquotedPath = targetPath.slice(1, -1)
 	}
+
+	return { unquotedPath, separatorIndex, separatorLength }
+}
+
+/**
+ * Parses a command to extract the target directory if it starts with 'cd'
+ * @param command The command to parse
+ * @param currentCwd The current working directory
+ * @returns The target directory if cd command is found, otherwise undefined
+ */
+export function parseCdCommand(command: string, currentCwd: string): string | undefined {
+	const parseResult = parseCdCommandInternal(command)
+	if (!parseResult) {
+		return undefined
+	}
+
+	const { unquotedPath } = parseResult
 
 	// Handle special cases
 	if (unquotedPath === "~") {
@@ -253,4 +286,29 @@ export function parseCdCommand(command: string, currentCwd: string): string | un
 	}
 
 	return unquotedPath
+}
+
+/**
+ * Removes the cd command from the beginning of a command string if present
+ * @param command The command string that may start with cd
+ * @returns The command with cd part removed, or the original command if no cd is found
+ */
+export function removeCdFromCommand(command: string): string {
+	const parseResult = parseCdCommandInternal(command)
+	if (!parseResult) {
+		return command
+	}
+
+	const { separatorIndex, separatorLength } = parseResult
+	const trimmedCommand = command.trim()
+	const afterCd = trimmedCommand.slice(3).trim()
+
+	if (separatorIndex !== -1) {
+		// Found a separator, remove the cd part and the separator, then the rest of the command
+		const restOfCommand = afterCd.slice(separatorIndex + separatorLength).trim()
+		return restOfCommand
+	}
+
+	// No separator found, entire command is just the cd part
+	return ""
 }
