@@ -246,7 +246,7 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 					files,
 					didHitLimit,
 					cline.rooIgnoreController,
-					false, // Always filter ignored files
+					cline.rooProtectedController,
 				)
 
 				details += result

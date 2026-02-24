@@ -44,7 +44,6 @@ export class ListFilesTool extends BaseTool<"list_files"> {
 				files,
 				didHitLimit,
 				task.rooIgnoreController,
-				false, // Always filter ignored files
 				task.rooProtectedController,
 			)
 
@@ -63,7 +62,7 @@ export class ListFilesTool extends BaseTool<"list_files"> {
 
 			pushToolResult(result)
 		} catch (error) {
-			await handleError("listing files", error)
+			await handleError("listing files", error as Error)
 		}
 	}
 

@@ -176,7 +176,7 @@ describe("getEnvironmentDetails", () => {
 			["file1.ts", "file2.ts"],
 			false,
 			mockCline.rooIgnoreController,
-			false,
+			mockCline.rooProtectedController,
 		)
 	})
 
