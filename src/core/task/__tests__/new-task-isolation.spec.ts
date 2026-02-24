@@ -10,6 +10,7 @@
  */
 
 import type { Anthropic } from "@anthropic-ai/sdk"
+import { describe, it, expect } from "vitest"
 
 describe("new_task Tool Isolation Enforcement", () => {
 	/**

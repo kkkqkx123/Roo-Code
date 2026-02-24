@@ -1,4 +1,5 @@
 import type { ModeConfig } from "@coder/types"
+import { describe, it, expect } from "vitest"
 
 describe("Native Tools Filtering by Mode", () => {
 	describe("attemptApiRequest native tool filtering", () => {

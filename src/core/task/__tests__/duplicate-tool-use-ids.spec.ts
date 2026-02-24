@@ -13,6 +13,7 @@
 
 import { sanitizeToolUseId } from "../../../utils/tool-id"
 import type { ToolUse, McpToolUse } from "../../../shared/tools"
+import { describe, it, expect } from "vitest"
 
 describe("Duplicate tool_use ID Prevention", () => {
 	describe("Pre-flight deduplication logic", () => {

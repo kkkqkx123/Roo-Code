@@ -4,6 +4,7 @@ import {
 	ToolResultIdMismatchError,
 	MissingToolResultError,
 } from "../validateToolResultIds"
+import { describe, beforeEach, vi, it, expect } from "vitest"
 
 describe("validateAndFixToolResultIds", () => {
 	beforeEach(() => {

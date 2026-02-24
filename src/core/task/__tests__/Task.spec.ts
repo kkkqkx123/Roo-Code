@@ -22,6 +22,7 @@ vi.mock("delay", () => ({
 }))
 
 import delay from "delay"
+import { vi, describe, beforeEach, it, expect, afterEach } from "vitest"
 
 vi.mock("uuid", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("uuid")>()

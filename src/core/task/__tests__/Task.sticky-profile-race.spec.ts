@@ -5,6 +5,7 @@ import * as vscode from "vscode"
 import type { ProviderSettings } from "@coder/types"
 import { Task } from "../Task"
 import { ClineProvider } from "../../webview/ClineProvider"
+import { vi, describe, it, expect } from "vitest"
 
 vi.mock("vscode", () => {
 	const mockDisposable = { dispose: vi.fn() }

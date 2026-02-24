@@ -3,6 +3,7 @@ import { CoderEventName, ProviderSettings, TokenUsage, ToolUsage } from "@coder/
 import { Task } from "../Task"
 import { ClineProvider } from "../../webview/ClineProvider"
 import { hasToolUsageChanged, hasTokenUsageChanged } from "../../../shared/getApiMetrics"
+import { vi, describe, beforeEach, afterEach, it, expect } from "vitest"
 
 // Mock dependencies
 vi.mock("../../webview/ClineProvider")
@@ -102,7 +103,7 @@ describe("Task token usage throttling", () => {
 		}
 	})
 
-	test("should emit TaskTokenUsageUpdated immediately on first change", async () => {
+	it("should emit TaskTokenUsageUpdated immediately on first change", async () => {
 		const emitSpy = vi.spyOn(task, "emit")
 
 		// Add a message to trigger saveClineMessages
@@ -122,7 +123,7 @@ describe("Task token usage throttling", () => {
 		)
 	})
 
-	test("should throttle subsequent emissions within 2 seconds", async () => {
+	it("should throttle subsequent emissions within 2 seconds", async () => {
 		const { taskMetadata } = await import("../../task-persistence")
 		let callCount = 0
 
@@ -197,7 +198,7 @@ describe("Task token usage throttling", () => {
 		expect(thirdEmitCount).toBeGreaterThan(secondEmitCount)
 	})
 
-	test("should include toolUsage in emission payload", async () => {
+	it("should include toolUsage in emission payload", async () => {
 		const emitSpy = vi.spyOn(task, "emit")
 
 		// Set some tool usage
@@ -223,7 +224,7 @@ describe("Task token usage throttling", () => {
 		)
 	})
 
-	test("should force final emission on task abort", async () => {
+	it("should force final emission on task abort", async () => {
 		const emitSpy = vi.spyOn(task, "emit")
 
 		// Set some tool usage
@@ -259,7 +260,7 @@ describe("Task token usage throttling", () => {
 		expect(tokenUsageUpdateIndex).toBeLessThan(taskAbortedIndex)
 	})
 
-	test("should update tokenUsageSnapshot when throttled emission occurs", async () => {
+	it("should update tokenUsageSnapshot when throttled emission occurs", async () => {
 		const { taskMetadata } = await import("../../task-persistence")
 		let callCount = 0
 
@@ -325,7 +326,7 @@ describe("Task token usage throttling", () => {
 		expect((task as any).tokenUsageSnapshot.totalTokensIn).toBeGreaterThan(initialSnapshot.totalTokensIn)
 	})
 
-	test("should not emit if token usage has not changed even after throttle period", async () => {
+	it("should not emit if token usage has not changed even after throttle period", async () => {
 		const { taskMetadata } = await import("../../task-persistence")
 
 		// Mock taskMetadata to return same token usage
@@ -382,7 +383,7 @@ describe("Task token usage throttling", () => {
 		expect(secondEmitCount).toBe(firstEmitCount)
 	})
 
-	test("should emit when tool usage changes even if token usage is the same", async () => {
+	it("should emit when tool usage changes even if token usage is the same", async () => {
 		const { taskMetadata } = await import("../../task-persistence")
 
 		// Mock taskMetadata to return same token usage
@@ -446,7 +447,7 @@ describe("Task token usage throttling", () => {
 		expect(secondEmitCount).toBeGreaterThan(firstEmitCount)
 	})
 
-	test("should update toolUsageSnapshot when emission occurs", async () => {
+	it("should update toolUsageSnapshot when emission occurs", async () => {
 		// Add initial message
 		await (task as any).addToClineMessages({
 			ts: Date.now(),
@@ -484,7 +485,7 @@ describe("Task token usage throttling", () => {
 		expect(newSnapshot.write_to_file).toEqual({ attempts: 2, failures: 1 })
 	})
 
-	test("emitFinalTokenUsageUpdate should emit on tool usage change alone", async () => {
+	it("emitFinalTokenUsageUpdate should emit on tool usage change alone", async () => {
 		const emitSpy = vi.spyOn(task, "emit")
 
 			// Set initial tool usage and simulate previous emission
@@ -510,22 +511,22 @@ describe("Task token usage throttling", () => {
 })
 
 describe("hasToolUsageChanged", () => {
-	test("should return true when snapshot is undefined and current has data", () => {
+	it("should return true when snapshot is undefined and current has data", () => {
 		const current: ToolUsage = {
 			read_file: { attempts: 1, failures: 0 },
 		}
 		expect(hasToolUsageChanged(current, undefined)).toBe(true)
 	})
 
-	test("should return false when both are empty", () => {
+	it("should return false when both are empty", () => {
 		expect(hasToolUsageChanged({}, {})).toBe(false)
 	})
 
-	test("should return false when snapshot is undefined and current is empty", () => {
+	it("should return false when snapshot is undefined and current is empty", () => {
 		expect(hasToolUsageChanged({}, undefined)).toBe(false)
 	})
 
-	test("should return true when a new tool is added", () => {
+	it("should return true when a new tool is added", () => {
 		const current: ToolUsage = {
 			read_file: { attempts: 1, failures: 0 },
 			write_to_file: { attempts: 1, failures: 0 },
@@ -536,7 +537,7 @@ describe("hasToolUsageChanged", () => {
 		expect(hasToolUsageChanged(current, snapshot)).toBe(true)
 	})
 
-	test("should return true when attempts change", () => {
+	it("should return true when attempts change", () => {
 		const current: ToolUsage = {
 			read_file: { attempts: 2, failures: 0 },
 		}
@@ -546,7 +547,7 @@ describe("hasToolUsageChanged", () => {
 		expect(hasToolUsageChanged(current, snapshot)).toBe(true)
 	})
 
-	test("should return true when failures change", () => {
+	it("should return true when failures change", () => {
 		const current: ToolUsage = {
 			read_file: { attempts: 1, failures: 1 },
 		}
@@ -556,7 +557,7 @@ describe("hasToolUsageChanged", () => {
 		expect(hasToolUsageChanged(current, snapshot)).toBe(true)
 	})
 
-	test("should return false when nothing changed", () => {
+	it("should return false when nothing changed", () => {
 		const current: ToolUsage = {
 			read_file: { attempts: 3, failures: 1 },
 			write_to_file: { attempts: 2, failures: 0 },
@@ -570,7 +571,7 @@ describe("hasToolUsageChanged", () => {
 })
 
 describe("hasTokenUsageChanged", () => {
-	test("should return true when snapshot is undefined", () => {
+	it("should return true when snapshot is undefined", () => {
 		const current: TokenUsage = {
 			totalTokensIn: 100,
 			totalTokensOut: 50,
@@ -580,7 +581,7 @@ describe("hasTokenUsageChanged", () => {
 		expect(hasTokenUsageChanged(current, undefined)).toBe(true)
 	})
 
-	test("should return true when totalTokensIn changes", () => {
+	it("should return true when totalTokensIn changes", () => {
 		const current: TokenUsage = {
 			totalTokensIn: 200,
 			totalTokensOut: 50,
@@ -596,7 +597,7 @@ describe("hasTokenUsageChanged", () => {
 		expect(hasTokenUsageChanged(current, snapshot)).toBe(true)
 	})
 
-	test("should return false when nothing changed", () => {
+	it("should return false when nothing changed", () => {
 		const current: TokenUsage = {
 			totalTokensIn: 100,
 			totalTokensOut: 50,

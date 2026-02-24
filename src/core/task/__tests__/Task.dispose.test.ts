@@ -2,6 +2,7 @@ import { ProviderSettings } from "@coder/types"
 
 import { Task } from "../Task"
 import { ClineProvider } from "../../webview/ClineProvider"
+import { vi, describe, beforeEach, afterEach, it, expect } from "vitest"
 
 // Mock dependencies
 vi.mock("../../webview/ClineProvider")
@@ -70,7 +71,7 @@ describe("Task dispose method", () => {
 		}
 	})
 
-	test("should remove all event listeners when dispose is called", () => {
+	it("should remove all event listeners when dispose is called", () => {
 		// Add some event listeners using type assertion to bypass strict typing for testing
 		const listener1 = vi.fn(() => { })
 		const listener2 = vi.fn(() => { })
@@ -101,7 +102,7 @@ describe("Task dispose method", () => {
 		expect(task.listenerCount("TaskIdle")).toBe(0)
 	})
 
-	test("should handle errors when removing event listeners", () => {
+	it("should handle errors when removing event listeners", () => {
 		// Mock removeAllListeners to throw an error
 		const originalRemoveAllListeners = task.removeAllListeners
 		task.removeAllListeners = vi.fn(() => {
@@ -122,7 +123,7 @@ describe("Task dispose method", () => {
 		consoleErrorSpy.mockRestore()
 	})
 
-	test("should clean up all resources in correct order", () => {
+	it("should clean up all resources in correct order", () => {
 		const removeAllListenersSpy = vi.spyOn(task, "removeAllListeners")
 		const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => { })
 
@@ -141,7 +142,7 @@ describe("Task dispose method", () => {
 		consoleLogSpy.mockRestore()
 	})
 
-	test("should prevent memory leaks by removing listeners before other cleanup", () => {
+	it("should prevent memory leaks by removing listeners before other cleanup", () => {
 		// Add multiple listeners of different types using type assertion for testing
 		const listeners = {
 			TaskStarted: vi.fn(() => { }),

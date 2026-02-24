@@ -9,6 +9,7 @@ import type { GlobalState, ProviderSettings } from "@coder/types"
 import { Task } from "../Task"
 import { ClineProvider } from "../../webview/ClineProvider"
 import { ContextProxy } from "../../config/ContextProxy"
+import { vi, describe, beforeEach, it, expect } from "vitest"
 
 // ─── Hoisted mocks ───────────────────────────────────────────────────────────
 
