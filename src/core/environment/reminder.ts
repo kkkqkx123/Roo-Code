@@ -13,7 +13,7 @@ export function formatReminderSection(todoList?: TodoItem[]): string {
 		completed: "Completed",
 	}
 	const lines: string[] = [
-		"====",
+		"---",
 		"",
 		"REMINDERS",
 		"",

@@ -2624,6 +2624,15 @@ export class ClineProvider
 		const rootTask = task.rootTask
 		const parentTask = task.parentTask
 
+		// Ensure UI messages are saved to disk before cancellation to prevent context loss
+		// This is critical because resumeTaskFromHistory relies on persisted messages
+		try {
+			await task.saveClineMessages()
+			this.log(`[cancelTask] UI messages saved to disk before cancellation`)
+		} catch (error) {
+			this.log(`[cancelTask] Warning: Failed to save UI messages before cancellation: ${error instanceof Error ? error.message : String(error)}`)
+		}
+
 		// Mark this as a user-initiated cancellation so provider-only rehydration can occur
 		task.abortReason = "user_cancelled"
 

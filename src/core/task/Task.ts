@@ -1108,7 +1108,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		try {
 			// Get the current system prompt for debugging purposes
 			const systemPrompt = await this.getSystemPrompt()
-			
+
 			// Create a system prompt message for debugging
 			const systemPromptMessage: ApiMessage = {
 				role: "system",
@@ -1116,10 +1116,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				ts: Date.now(),
 				isSystemPrompt: true,
 			}
-			
+
 			// Prepend system prompt to history for debugging
 			const messagesWithSystemPrompt = [systemPromptMessage, ...structuredClone(this.apiConversationHistory)]
-			
+
 			await saveApiMessages({
 				messages: messagesWithSystemPrompt,
 				taskId: this.taskId,
@@ -1184,7 +1184,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.emit(CoderEventName.Message, { action: "updated", message })
 	}
 
-	private async saveClineMessages(): Promise<boolean> {
+	public async saveClineMessages(): Promise<boolean> {
 		try {
 			await saveTaskMessages({
 				messages: structuredClone(this.clineMessages),
