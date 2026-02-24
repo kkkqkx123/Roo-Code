@@ -11,7 +11,6 @@
 		"lint": "turbo lint --log-order grouped --output-logs new-only",
 		"check-types": "turbo check-types --log-order grouped --output-logs new-only",
 		"test": "node scripts/test.mjs",
-		"format": "turbo format --log-order grouped --output-logs new-only",
 		"build": "turbo build --log-order grouped --output-logs new-only",
 		"bundle": "turbo bundle --log-order grouped --output-logs new-only",
 		"bundle:nightly": "turbo bundle:nightly --log-order grouped --output-logs new-only",

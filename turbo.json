@@ -10,7 +10,6 @@
 		"test": {
 			"cache": false
 		},
-		"format": {},
 		"clean": {
 			"cache": false
 		},
