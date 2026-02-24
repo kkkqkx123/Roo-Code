@@ -76,7 +76,6 @@ interface LocalCodeIndexSettings {
 	// Secret settings (start empty, will be loaded separately)
 	codeIndexOpenAiKey?: string
 	codeIndexQdrantApiKey?: string
-	codebaseIndexOpenAiCompatibleBaseUrl?: string
 	codebaseIndexOpenAiCompatibleApiKey?: string
 	codebaseIndexGeminiApiKey?: string
 
@@ -107,7 +106,7 @@ const createValidationSchema = (provider: EmbedderProvider, t: any) => {
 
 		case "openai-compatible":
 			return baseSchema.extend({
-				codebaseIndexOpenAiCompatibleBaseUrl: z
+				codebaseIndexEmbedderBaseUrl: z
 					.string()
 					.min(1, t("settings:codeIndex.validation.baseUrlRequired"))
 					.url(t("settings:codeIndex.validation.invalidBaseUrl")),
@@ -144,6 +143,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 	const [isAdvancedSettingsOpen, setIsAdvancedSettingsOpen] = useState(false)
 	const [isSetupSettingsOpen, setIsSetupSettingsOpen] = useState(false)
 	const [isVectorStorageOpen, setIsVectorStorageOpen] = useState(false)
+	const [isIndexingBehaviorOpen, setIsIndexingBehaviorOpen] = useState(false)
 
 	const [indexingStatus, setIndexingStatus] = useState<IndexingStatus>(externalIndexingStatus)
 
@@ -177,7 +177,6 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 		},
 		codeIndexOpenAiKey: "",
 		codeIndexQdrantApiKey: "",
-		codebaseIndexOpenAiCompatibleBaseUrl: "",
 		codebaseIndexOpenAiCompatibleApiKey: "",
 		codebaseIndexGeminiApiKey: "",
 		manualIndexingOnly: false,
@@ -278,24 +277,23 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 			} else if (event.data.type === "codeIndexSettingsSaved") {
 				if (event.data.success) {
 					setSaveStatus("saved")
-					// Update initial settings to match current settings after successful save
-					// This ensures hasUnsavedChanges becomes false
-					const savedSettings = { ...currentSettingsRef.current }
-					setInitialSettings(savedSettings)
-					// Also update current settings to maintain consistency
-					setCurrentSettings(savedSettings)
+					// Note: We don't update settings here to avoid race conditions
+					// The updated state will be received via the 'state' message from postStateToWebview()
 					// Request secret status to ensure we have the latest state
-					// This is important to maintain placeholder display after save
-
 					vscode.postMessage({ type: "requestCodeIndexSecretStatus" })
-
-					setSaveStatus("idle")
+					
+					// Clear save status after a short delay
+					setTimeout(() => {
+						setSaveStatus("idle")
+					}, 1000)
 				} else {
 					setSaveStatus("error")
 					setSaveError(event.data.error || t("settings:codeIndex.saveError"))
 					// Clear error message after 5 seconds
-					setSaveStatus("idle")
-					setSaveError(null)
+					setTimeout(() => {
+						setSaveStatus("idle")
+						setSaveError(null)
+					}, 5000)
 				}
 			}
 		}
@@ -495,21 +493,8 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 			}
 
 			// Include all other fields, including empty strings (which clear secrets)
-			// For model dimension, ensure it's a proper number or undefined
-			if (key === "codebaseIndexEmbedderModelDimension") {
-				// Debug logging to track dimension value
-				console.log("[CodeIndexPopover] Saving dimension field:", {
-					key,
-					value,
-					valueType: typeof value,
-					isNaN: isNaN(value),
-					condition: value && !isNaN(value),
-					result: value && !isNaN(value) ? Number(value) : undefined,
-				})
-				settingsToSave[key] = value && !isNaN(value) ? Number(value) : undefined
-			} else {
-				settingsToSave[key] = value
-			}
+			// Backend will handle validation and type conversion
+			settingsToSave[key] = value
 		}
 
 		// Debug logging to see final settings being sent
@@ -752,10 +737,10 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 													{t("settings:codeIndex.openAiCompatibleBaseUrlLabel")}
 												</label>
 												<VSCodeTextField
-													value={currentSettings.codebaseIndexOpenAiCompatibleBaseUrl || ""}
+													value={currentSettings.codebaseIndexEmbedderBaseUrl || ""}
 													onInput={(e: any) =>
 														updateSetting(
-															"codebaseIndexOpenAiCompatibleBaseUrl",
+															"codebaseIndexEmbedderBaseUrl",
 															e.target.value,
 														)
 													}
@@ -764,12 +749,12 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 													)}
 													className={cn("w-full", {
 														"border-red-500":
-															formErrors.codebaseIndexOpenAiCompatibleBaseUrl,
+															formErrors.codebaseIndexEmbedderBaseUrl,
 													})}
 												/>
-												{formErrors.codebaseIndexOpenAiCompatibleBaseUrl && (
+												{formErrors.codebaseIndexEmbedderBaseUrl && (
 													<p className="text-xs text-vscode-errorForeground mt-1 mb-0">
-														{formErrors.codebaseIndexOpenAiCompatibleBaseUrl}
+														{formErrors.codebaseIndexEmbedderBaseUrl}
 													</p>
 												)}
 											</div>
@@ -979,55 +964,12 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 								<span
 									className={`codicon codicon-${isAdvancedSettingsOpen ? "chevron-down" : "chevron-right"} mr-1`}></span>
 								<span className="text-base font-semibold">
-									{t("settings:codeIndex.advancedConfigLabel")}
+									{t("settings:codeIndex.searchConfigLabel")}
 								</span>
 							</button>
 
 							{isAdvancedSettingsOpen && (
 								<div className="mt-4 space-y-4">
-									{/* Indexing Behavior Settings */}
-									<div className="space-y-3">
-										<div className="flex items-start gap-2">
-											<Checkbox
-												id="manualIndexingOnly"
-												checked={currentSettings.manualIndexingOnly ?? false}
-												onCheckedChange={(checked) =>
-													updateSetting("manualIndexingOnly", checked)
-												}
-											/>
-											<div className="grid gap-1.5">
-												<label
-													htmlFor="manualIndexingOnly"
-													className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-													{t("settings:codeIndex.manualIndexingOnlyLabel")}
-												</label>
-												<p className="text-xs text-vscode-descriptionForeground">
-													{t("settings:codeIndex.manualIndexingOnlyDescription")}
-												</p>
-											</div>
-										</div>
-
-										<div className="flex items-start gap-2">
-											<Checkbox
-												id="autoUpdateIndex"
-												checked={currentSettings.autoUpdateIndex ?? true}
-												onCheckedChange={(checked) =>
-													updateSetting("autoUpdateIndex", checked)
-												}
-											/>
-											<div className="grid gap-1.5">
-												<label
-													htmlFor="autoUpdateIndex"
-													className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-													{t("settings:codeIndex.autoUpdateIndexLabel")}
-												</label>
-												<p className="text-xs text-vscode-descriptionForeground">
-													{t("settings:codeIndex.autoUpdateIndexDescription")}
-												</p>
-											</div>
-										</div>
-									</div>
-
 									{/* Search Score Threshold Slider */}
 									<div className="space-y-2">
 										<div className="flex items-center gap-2">
@@ -1274,6 +1216,63 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 							)}
 						</div>
 
+						{/* Indexing Behavior Settings */}
+						<div className="mt-4">
+							<button
+								onClick={() => setIsIndexingBehaviorOpen(!isIndexingBehaviorOpen)}
+								className="flex items-center text-xs text-vscode-foreground hover:text-vscode-textLink-foreground focus:outline-none"
+								aria-expanded={isIndexingBehaviorOpen}>
+								<span
+									className={`codicon codicon-${isIndexingBehaviorOpen ? "chevron-down" : "chevron-right"} mr-1`}></span>
+								<span className="text-base font-semibold">
+									{t("settings:codeIndex.indexingBehaviorLabel")}
+								</span>
+							</button>
+
+							{isIndexingBehaviorOpen && (
+								<div className="mt-4 space-y-3">
+									<div className="flex items-start gap-2">
+										<Checkbox
+											id="manualIndexingOnly"
+											checked={currentSettings.manualIndexingOnly ?? false}
+											onCheckedChange={(checked) =>
+												updateSetting("manualIndexingOnly", checked)
+											}
+										/>
+										<div className="grid gap-1.5">
+											<label
+												htmlFor="manualIndexingOnly"
+												className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+												{t("settings:codeIndex.manualIndexingOnlyLabel")}
+											</label>
+											<p className="text-xs text-vscode-descriptionForeground">
+												{t("settings:codeIndex.manualIndexingOnlyDescription")}
+											</p>
+										</div>
+									</div>
+
+									<div className="flex items-start gap-2">
+										<Checkbox
+											id="autoUpdateIndex"
+											checked={currentSettings.autoUpdateIndex ?? true}
+											onCheckedChange={(checked) =>
+												updateSetting("autoUpdateIndex", checked)
+											}
+										/>
+										<div className="grid gap-1.5">
+											<label
+												htmlFor="autoUpdateIndex"
+												className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+												{t("settings:codeIndex.autoUpdateIndexLabel")}
+											</label>
+											<p className="text-xs text-vscode-descriptionForeground">
+												{t("settings:codeIndex.autoUpdateIndexDescription")}
+											</p>
+										</div>
+									</div>
+								</div>
+							)}
+						</div>
 
 						{/* Action Buttons */}
 						<div className="flex items-center justify-between gap-2 pt-6">

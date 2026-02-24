@@ -52,7 +52,6 @@ export class CodeIndexConfigManager {
 			codebaseIndexEmbedderModelId: "",
 			codebaseIndexSearchMinScore: undefined,
 			codebaseIndexSearchMaxResults: undefined,
-			codebaseIndexOpenAiCompatibleModelDimension: undefined,
 			vectorStorageMode: "auto",
 			vectorStoragePreset: "medium",
 			vectorStorageThresholds: undefined,
@@ -78,9 +77,8 @@ export class CodeIndexConfigManager {
 
 		const openAiKey = this.contextProxy?.getSecret("codeIndexOpenAiKey") ?? ""
 		const qdrantApiKey = this.contextProxy?.getSecret("codeIndexQdrantApiKey") ?? ""
-		// Fix: Read OpenAI Compatible settings from the correct location within codebaseIndexConfig
-		// Note: The frontend uses codebaseIndexOpenAiCompatibleBaseUrl, not codebaseIndexEmbedderBaseUrl
-		const openAiCompatibleBaseUrl = codebaseIndexConfig.codebaseIndexOpenAiCompatibleBaseUrl ?? codebaseIndexConfig.codebaseIndexEmbedderBaseUrl ?? ""
+		// Use the generic baseUrl field for all providers
+		const openAiCompatibleBaseUrl = codebaseIndexConfig.codebaseIndexEmbedderBaseUrl ?? ""
 		const openAiCompatibleApiKey = this.contextProxy?.getSecret("codebaseIndexOpenAiCompatibleApiKey") ?? ""
 		const geminiApiKey = this.contextProxy?.getSecret("codebaseIndexGeminiApiKey") ?? ""
 
@@ -89,8 +87,7 @@ export class CodeIndexConfigManager {
 		console.log("  qdrantApiKey (codeIndexQdrantApiKey):", qdrantApiKey ? "****" + qdrantApiKey.slice(-4) : "empty")
 		console.log("  openAiCompatibleApiKey (codebaseIndexOpenAiCompatibleApiKey):", openAiCompatibleApiKey ? "****" + openAiCompatibleApiKey.slice(-4) : "empty")
 		console.log("  geminiApiKey (codebaseIndexGeminiApiKey):", geminiApiKey ? "****" + geminiApiKey.slice(-4) : "empty")
-		console.log("  openAiCompatibleBaseUrl from codebaseIndexOpenAiCompatibleBaseUrl:", codebaseIndexConfig.codebaseIndexOpenAiCompatibleBaseUrl)
-		console.log("  openAiCompatibleBaseUrl from codebaseIndexEmbedderBaseUrl:", codebaseIndexConfig.codebaseIndexEmbedderBaseUrl)
+		console.log("  openAiCompatibleBaseUrl (codebaseIndexEmbedderBaseUrl):", openAiCompatibleBaseUrl)
 
 		// Update instance variables with configuration
 		this.codebaseIndexEnabled = codebaseIndexEnabled ?? false
@@ -100,19 +97,37 @@ export class CodeIndexConfigManager {
 		this.searchMaxResults = codebaseIndexSearchMaxResults
 
 		// Validate and set model dimension
-		const rawDimension = codebaseIndexConfig.codebaseIndexOpenAiCompatibleModelDimension
+		// Use the generic dimension field (used by all providers)
+		const rawDimension = codebaseIndexConfig.codebaseIndexEmbedderModelDimension
+		
+		console.log("[ConfigManager] Processing model dimension:", {
+			rawValue: rawDimension,
+			valueType: typeof rawDimension,
+			isUndefined: rawDimension === undefined,
+			isNull: rawDimension === null,
+		})
+		
 		if (rawDimension !== undefined && rawDimension !== null) {
 			const dimension = Number(rawDimension)
+			console.log("[ConfigManager] Dimension conversion:", {
+				original: rawDimension,
+				converted: dimension,
+				isNaN: isNaN(dimension),
+				isPositive: dimension > 0,
+			})
+			
 			if (!isNaN(dimension) && dimension > 0) {
 				this.modelDimension = dimension
+				console.log(`[ConfigManager] Model dimension set to: ${dimension}`)
 			} else {
 				console.warn(
-					`Invalid codebaseIndexOpenAiCompatibleModelDimension value: ${rawDimension}. Must be a positive number.`,
+					`[ConfigManager] Invalid model dimension value: ${rawDimension}. Must be a positive number.`,
 				)
 				this.modelDimension = undefined
 			}
 		} else {
 			this.modelDimension = undefined
+			console.log(`[ConfigManager] Model dimension not set (will use model default)`)
 		}
 
 		this.openAiOptions = { openAiNativeApiKey: openAiKey }

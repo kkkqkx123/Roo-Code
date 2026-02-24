@@ -2772,6 +2772,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				let hasApiUsageData = false
 
 				// Initialize dead loop detector for reasoning message
+				// Dead loop detection uses strict thresholds, so we terminate immediately upon detection
 				const deadLoopDetector = new DeadLoopDetector()
 
 				try {
@@ -2827,12 +2828,24 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 									)
 								}
 								// Detect dead loop in reasoning message
+								// Dead loop detection uses strict thresholds (4+ repetitions for short sequences,
+								// 6+ elements for paragraph/list patterns), so we terminate immediately upon detection
 								const detectionResult = deadLoopDetector.detect(reasoningMessage)
 								if (detectionResult.detected) {
 									console.error(
 										`[Task#${this.taskId}] Dead loop detected in reasoning: ${detectionResult.details}`,
 									)
-									await abortStream("streaming_failed", `检测到死循环：${detectionResult.details}`)
+
+									// Show user-facing error message
+									const deadLoopErrorMessage = `检测到死循环：${detectionResult.details}。任务已终止，请尝试重新描述任务或调整提示词。`
+
+									await this.say("error", deadLoopErrorMessage)
+									await abortStream("streaming_failed", deadLoopErrorMessage)
+
+									// Set abort flag and terminate the entire task
+									this.abort = true
+									this.abortReason = "streaming_failed"
+									await this.abortTask()
 									break
 								}
 								await this.say("reasoning", formattedReasoning, undefined, true)

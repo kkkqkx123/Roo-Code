@@ -177,7 +177,8 @@
 			"modelDimensionMinValue": "模型维度必须大于 0"
 		},
 		"optional": "可选",
-		"advancedConfigLabel": "高级配置",
+		"searchConfigLabel": "搜索配置",
+		"indexingBehaviorLabel": "索引行为",
 		"searchMinScoreLabel": "搜索分数阈值",
 		"searchMinScoreDescription": "搜索结果所需的最低相似度分数（0.0-1.0）。较低的值返回更多结果，但可能不太相关。较高的值返回较少但更相关的结果。",
 		"searchMinScoreResetTooltip": "恢复默认值 (0.4)",

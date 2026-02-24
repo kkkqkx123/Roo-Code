@@ -718,8 +718,13 @@ export class ClineProvider
 				Terminal.setTerminalZshP10k(terminalZshP10k)
 				Terminal.setPowershellCounter(terminalPowershellCounter)
 				Terminal.setTerminalZdotdir(terminalZdotdir)
-				setTtsEnabled(ttsEnabled ?? false)
-				setTtsSpeed(ttsSpeed ?? 1)
+				console.log("[TTS] ClineProvider: Initializing TTS, ttsEnabled: " + (ttsEnabled ?? false) + ", ttsSpeed: " + (ttsSpeed ?? 1))
+				try {
+					setTtsEnabled(ttsEnabled ?? false)
+					setTtsSpeed(ttsSpeed ?? 1)
+				} catch (error: any) {
+					console.error("[TTS] ClineProvider: Error initializing TTS settings: " + error.message)
+				}
 			},
 		)
 
@@ -2061,7 +2066,6 @@ export class ClineProvider
 				codebaseIndexEmbedderBaseUrl: codebaseIndexConfig?.codebaseIndexEmbedderBaseUrl ?? "",
 				codebaseIndexEmbedderModelId: codebaseIndexConfig?.codebaseIndexEmbedderModelId ?? "",
 				codebaseIndexEmbedderModelDimension: codebaseIndexConfig?.codebaseIndexEmbedderModelDimension ?? 1536,
-				codebaseIndexOpenAiCompatibleBaseUrl: codebaseIndexConfig?.codebaseIndexOpenAiCompatibleBaseUrl,
 				codebaseIndexSearchMaxResults: codebaseIndexConfig?.codebaseIndexSearchMaxResults,
 				codebaseIndexSearchMinScore: codebaseIndexConfig?.codebaseIndexSearchMinScore,
 				// Vector storage configuration
@@ -2199,8 +2203,6 @@ export class ClineProvider
 				codebaseIndexEmbedderModelId: stateValues.codebaseIndexConfig?.codebaseIndexEmbedderModelId ?? "",
 				codebaseIndexEmbedderModelDimension:
 					stateValues.codebaseIndexConfig?.codebaseIndexEmbedderModelDimension,
-				codebaseIndexOpenAiCompatibleBaseUrl:
-					stateValues.codebaseIndexConfig?.codebaseIndexOpenAiCompatibleBaseUrl,
 				codebaseIndexSearchMaxResults: stateValues.codebaseIndexConfig?.codebaseIndexSearchMaxResults,
 				codebaseIndexSearchMinScore: stateValues.codebaseIndexConfig?.codebaseIndexSearchMinScore,
 				// Vector storage configuration

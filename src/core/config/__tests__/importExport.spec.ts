@@ -1296,8 +1296,6 @@ describe("importExport", () => {
 						codebaseIndexEmbedderProvider: "openai-compatible" as const,
 						codebaseIndexEmbedderModelId: "text-embedding-3-small",
 						codebaseIndexEmbedderBaseUrl: "https://openai-compatible.example.com/v1",
-						// OpenAI Compatible settings are now stored directly in codebaseIndexConfig
-						codebaseIndexOpenAiCompatibleBaseUrl: "https://openai-compatible.example.com/v1",
 						codebaseIndexEmbedderModelDimension: 1536,
 					},
 				}
@@ -1313,14 +1311,10 @@ describe("importExport", () => {
 
 				const exportedData = (safeWriteJson as Mock).mock.calls[0]![1]
 				// Settings are now exported as-is from codebaseIndexConfig
-				expect(exportedData.globalSettings.codebaseIndexConfig.codebaseIndexOpenAiCompatibleBaseUrl).toBe(
+				expect(exportedData.globalSettings.codebaseIndexConfig.codebaseIndexEmbedderBaseUrl).toBe(
 					"https://openai-compatible.example.com/v1",
 				)
 				expect(exportedData.globalSettings.codebaseIndexConfig.codebaseIndexEmbedderModelDimension).toBe(1536)
-				// The generic embedder base URL is still there
-				expect(exportedData.globalSettings.codebaseIndexConfig.codebaseIndexEmbedderBaseUrl).toBe(
-					"http://localhost:11434",
-				)
 			})
 
 			it("should handle missing provider-specific settings gracefully", async () => {
@@ -1469,9 +1463,6 @@ describe("importExport", () => {
 							"openai-compatible-provider": {
 								apiProvider: "openai" as ProviderName,
 								id: "openai-compatible-id",
-								// Provider-specific settings remain in provider profile
-								codebaseIndexOpenAiCompatibleBaseUrl: "https://old-url.example.com/v1",
-								codebaseIndexOpenAiCompatibleModelDimension: 512,
 							},
 						},
 						modeApiConfigs: {},
@@ -1484,8 +1475,6 @@ describe("importExport", () => {
 							codebaseIndexEmbedderModelId: "text-embedding-3-small",
 							codebaseIndexEmbedderBaseUrl: "https://imported-url.example.com/v1",
 							codebaseIndexEmbedderModelDimension: 1536,
-							// OpenAI Compatible settings are now stored directly here
-							codebaseIndexOpenAiCompatibleBaseUrl: "https://imported-url.example.com/v1",
 						},
 					},
 				})
@@ -1519,7 +1508,7 @@ describe("importExport", () => {
 				expect(mockContextProxy.setValues).toHaveBeenCalledWith(
 					expect.objectContaining({
 						codebaseIndexConfig: expect.objectContaining({
-							codebaseIndexOpenAiCompatibleBaseUrl: "https://imported-url.example.com/v1",
+							codebaseIndexEmbedderBaseUrl: "https://imported-url.example.com/v1",
 							codebaseIndexEmbedderModelDimension: 1536,
 						}),
 					}),
@@ -1529,9 +1518,9 @@ describe("importExport", () => {
 				const importedProviderProfiles = mockProviderSettingsManager.import.mock.calls[0]![0]
 				const importedProvider = importedProviderProfiles.apiConfigs["openai-compatible-provider"]!
 
-				// Provider still has its own settings (not modified by import)
-				expect(importedProvider.codebaseIndexOpenAiCompatibleBaseUrl).toBe("https://old-url.example.com/v1")
-				expect(importedProvider.codebaseIndexOpenAiCompatibleModelDimension).toBe(512)
+				// Provider settings should not have codebase index settings
+				expect(importedProvider.codebaseIndexOpenAiCompatibleBaseUrl).toBeUndefined()
+				expect(importedProvider.codebaseIndexOpenAiCompatibleModelDimension).toBeUndefined()
 			})
 
 			it("should handle missing OpenAI Compatible settings gracefully during import", async () => {
@@ -1635,6 +1624,7 @@ describe("importExport", () => {
 				const importedProviderProfiles = mockProviderSettingsManager.import.mock.calls[0]![0]
 				const importedProvider = importedProviderProfiles.apiConfigs["anthropic-provider"]!
 
+				// Provider settings should not have codebase index settings
 				expect(importedProvider.codebaseIndexOpenAiCompatibleBaseUrl).toBeUndefined()
 				expect(importedProvider.codebaseIndexOpenAiCompatibleModelDimension).toBeUndefined()
 			})
@@ -1839,11 +1829,8 @@ describe("importExport", () => {
 
 			// Mock getGlobalState to return undefined for model dimension
 			mockContextProxy.getGlobalState = vi.fn().mockImplementation((key: string) => {
-				if (key === "codebaseIndexOpenAiCompatibleBaseUrl") {
+				if (key === "codebaseIndexEmbedderBaseUrl") {
 					return "https://api.example.com/v1"
-				}
-				if (key === "codebaseIndexOpenAiCompatibleModelDimension") {
-					return undefined
 				}
 				return undefined
 			})
@@ -1880,8 +1867,6 @@ describe("importExport", () => {
 						"provider-a": {
 							apiProvider: "openai" as ProviderName,
 							id: "provider-a-id",
-							codebaseIndexOpenAiCompatibleBaseUrl: "https://api-a.example.com/v1",
-							codebaseIndexOpenAiCompatibleModelDimension: 1536,
 						},
 						"provider-b": {
 							apiProvider: "anthropic" as ProviderName,
@@ -1940,11 +1925,9 @@ describe("importExport", () => {
 			const providerA = importedProviderProfiles.apiConfigs["provider-a"]!
 			const providerB = importedProviderProfiles.apiConfigs["provider-b"]!
 
-			// This should pass but might fail due to the bug
-			expect(providerA.codebaseIndexOpenAiCompatibleModelDimension).toBe(1536)
-			expect(providerA.codebaseIndexOpenAiCompatibleBaseUrl).toBe("https://api-a.example.com/v1")
-
-			// Provider B should not have OpenAI Compatible settings
+			// Providers should not have codebase index settings in their profiles
+			expect(providerA.codebaseIndexOpenAiCompatibleModelDimension).toBeUndefined()
+			expect(providerA.codebaseIndexOpenAiCompatibleBaseUrl).toBeUndefined()
 			expect(providerB.codebaseIndexOpenAiCompatibleModelDimension).toBeUndefined()
 			expect(providerB.codebaseIndexOpenAiCompatibleBaseUrl).toBeUndefined()
 		})
@@ -1976,9 +1959,6 @@ describe("importExport", () => {
 						codebaseIndexEmbedderModelId: "text-embedding-3-small",
 						codebaseIndexEmbedderBaseUrl: "https://new-url.example.com/v1",
 						codebaseIndexEmbedderModelDimension: 1536,
-						// OpenAI Compatible settings are stored here
-						codebaseIndexOpenAiCompatibleBaseUrl: "https://new-url.example.com/v1",
-						codebaseIndexOpenAiCompatibleModelDimension: 1536,
 					},
 				},
 			}
@@ -2016,10 +1996,10 @@ describe("importExport", () => {
 
 			// Verify OpenAI Compatible settings are imported to global settings
 			const importedGlobalSettings = mockContextProxy.setValues.mock.calls[0]![0]
-			expect(importedGlobalSettings.codebaseIndexConfig?.codebaseIndexOpenAiCompatibleBaseUrl).toBe(
+			expect(importedGlobalSettings.codebaseIndexConfig?.codebaseIndexEmbedderBaseUrl).toBe(
 				"https://new-url.example.com/v1",
 			)
-			expect(importedGlobalSettings.codebaseIndexConfig?.codebaseIndexOpenAiCompatibleModelDimension).toBe(1536)
+			expect(importedGlobalSettings.codebaseIndexConfig?.codebaseIndexEmbedderModelDimension).toBe(1536)
 
 			// Verify provider profiles do NOT have OpenAI Compatible settings
 			const importedProviderProfiles = mockProviderSettingsManager.import.mock.calls[0]![0]
@@ -2061,9 +2041,6 @@ describe("importExport", () => {
 						codebaseIndexEmbedderModelId: "text-embedding-3-small",
 						codebaseIndexEmbedderBaseUrl: "https://updated.example.com/v1",
 						codebaseIndexEmbedderModelDimension: 1536,
-						// OpenAI Compatible settings are stored here
-						codebaseIndexOpenAiCompatibleBaseUrl: "https://updated.example.com/v1",
-						codebaseIndexOpenAiCompatibleModelDimension: 1536,
 					},
 				},
 			}
@@ -2102,10 +2079,10 @@ describe("importExport", () => {
 
 			// Verify OpenAI Compatible settings are imported to global settings
 			const importedGlobalSettings = mockContextProxy.setValues.mock.calls[0]![0]
-			expect(importedGlobalSettings.codebaseIndexConfig?.codebaseIndexOpenAiCompatibleBaseUrl).toBe(
+			expect(importedGlobalSettings.codebaseIndexConfig?.codebaseIndexEmbedderBaseUrl).toBe(
 				"https://updated.example.com/v1",
 			)
-			expect(importedGlobalSettings.codebaseIndexConfig?.codebaseIndexOpenAiCompatibleModelDimension).toBe(1536)
+			expect(importedGlobalSettings.codebaseIndexConfig?.codebaseIndexEmbedderModelDimension).toBe(1536)
 
 			// Verify NO provider profiles have OpenAI Compatible settings
 			const importedProviderProfiles = mockProviderSettingsManager.import.mock.calls[0]![0]
@@ -2127,9 +2104,8 @@ describe("importExport", () => {
 				fsPath: "/mock/path/coder-settings.json",
 			})
 
-			// Set up provider profiles - note that the OpenAI Compatible provider does NOT have
-			// the codebaseIndexOpenAiCompatibleBaseUrl and codebaseIndexOpenAiCompatibleModelDimension
-			// fields in the provider profile itself
+			// Set up provider profiles - note that providers do NOT have
+			// codebase index settings in their profiles
 			const mockProviderProfiles = {
 				currentApiConfigName: "openrouter-provider", // Current provider is OpenRouter
 				apiConfigs: {
@@ -2151,9 +2127,6 @@ describe("importExport", () => {
 					codebaseIndexEmbedderModelId: "text-embedding-3-small",
 					codebaseIndexEmbedderBaseUrl: "https://custom-api.example.com/v1",
 					codebaseIndexEmbedderModelDimension: 1536,
-					// OpenAI Compatible settings are now included directly
-					codebaseIndexOpenAiCompatibleBaseUrl: "https://custom-api.example.com/v1",
-					codebaseIndexOpenAiCompatibleModelDimension: 1536,
 				},
 			}
 
@@ -2170,10 +2143,10 @@ describe("importExport", () => {
 			const exportedData = (safeWriteJson as Mock).mock.calls[0]![1]
 
 			// With the fix, these values are now properly exported
-			expect(exportedData.globalSettings.codebaseIndexConfig.codebaseIndexOpenAiCompatibleModelDimension).toBe(
+			expect(exportedData.globalSettings.codebaseIndexConfig.codebaseIndexEmbedderModelDimension).toBe(
 				1536,
 			)
-			expect(exportedData.globalSettings.codebaseIndexConfig.codebaseIndexOpenAiCompatibleBaseUrl).toBe(
+			expect(exportedData.globalSettings.codebaseIndexConfig.codebaseIndexEmbedderBaseUrl).toBe(
 				"https://custom-api.example.com/v1",
 			)
 		})

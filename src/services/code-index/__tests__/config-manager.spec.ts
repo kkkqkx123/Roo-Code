@@ -185,7 +185,7 @@ describe("CodeIndexConfigManager", () => {
 				codebaseIndexEmbedderProvider: "openai-compatible",
 				codebaseIndexEmbedderBaseUrl: "https://api.example.com/v1",
 				codebaseIndexEmbedderModelId: "custom-model",
-				codebaseIndexOpenAiCompatibleModelDimension: 1024,
+				codebaseIndexEmbedderModelDimension: 1024,
 			}
 			mockContextProxy.getGlobalState.mockImplementation((key: string) => {
 				if (key === "codebaseIndexConfig") return mockGlobalState
@@ -258,7 +258,7 @@ describe("CodeIndexConfigManager", () => {
 				codebaseIndexEmbedderProvider: "openai-compatible",
 				codebaseIndexEmbedderBaseUrl: "https://api.example.com/v1",
 				codebaseIndexEmbedderModelId: "custom-model",
-				codebaseIndexOpenAiCompatibleModelDimension: "invalid-dimension", // Invalid type
+				codebaseIndexEmbedderModelDimension: "invalid-dimension", // Invalid type
 			}
 			mockContextProxy.getGlobalState.mockImplementation((key: string) => {
 				if (key === "codebaseIndexConfig") return mockGlobalState
@@ -559,7 +559,7 @@ describe("CodeIndexConfigManager", () => {
 							codebaseIndexEmbedderProvider: "openai-compatible",
 							codebaseIndexEmbedderModelId: "custom-model",
 							codebaseIndexEmbedderBaseUrl: "https://api.example.com/v1",
-							codebaseIndexOpenAiCompatibleModelDimension: 1024,
+							codebaseIndexEmbedderModelDimension: 1024,
 						}
 					}
 					return undefined
@@ -663,7 +663,7 @@ describe("CodeIndexConfigManager", () => {
 							codebaseIndexEmbedderProvider: "openai-compatible",
 							codebaseIndexEmbedderModelId: "custom-model",
 							codebaseIndexEmbedderBaseUrl: "https://api.example.com/v1",
-							codebaseIndexOpenAiCompatibleModelDimension: 1024,
+							codebaseIndexEmbedderModelDimension: 1024,
 						}
 					}
 					return undefined
@@ -683,7 +683,7 @@ describe("CodeIndexConfigManager", () => {
 							codebaseIndexEmbedderProvider: "openai-compatible",
 							codebaseIndexEmbedderModelId: "custom-model",
 							codebaseIndexEmbedderBaseUrl: "https://api.example.com/v1",
-							codebaseIndexOpenAiCompatibleModelDimension: 1024,
+							codebaseIndexEmbedderModelDimension: 1024,
 						}
 					}
 					return undefined
@@ -1575,7 +1575,7 @@ describe("CodeIndexConfigManager", () => {
 					codebaseIndexEnabled: true,
 					codebaseIndexEmbedderProvider: "openai-compatible",
 					codebaseIndexEmbedderModelId: "custom-model",
-					codebaseIndexOpenAiCompatibleModelDimension: 2048, // Custom dimension should be used
+					codebaseIndexEmbedderModelDimension: 2048, // Custom dimension should be used
 					codebaseIndexQdrantUrl: "http://localhost:6333",
 				})
 				mockContextProxy.getSecret.mockImplementation((key: string) => {
@@ -1648,7 +1648,7 @@ describe("CodeIndexConfigManager", () => {
 					codebaseIndexEnabled: true,
 					codebaseIndexEmbedderProvider: "openai-compatible",
 					codebaseIndexEmbedderModelId: "custom-model",
-					codebaseIndexOpenAiCompatibleModelDimension: 0, // Invalid dimension
+					codebaseIndexEmbedderModelDimension: 0, // Invalid dimension
 					codebaseIndexQdrantUrl: "http://localhost:6333",
 				})
 				mockContextProxy.getSecret.mockImplementation((key: string) => {

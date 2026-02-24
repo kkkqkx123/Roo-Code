@@ -122,6 +122,7 @@
 			"invalidKeyInvalidChars": "API 密钥包含无效字符.",
 			"apiRequestFailed": "API 请求失败 ({{status}})"
 		},
+		"dead_loop_detected": "检测到死循环：{{details}}",
 		"manual_url_empty": "请输入有效的回调 URL",
 		"manual_url_no_query": "无效的回调 URL：缺少查询参数",
 		"manual_url_missing_params": "无效的回调 URL：缺少必需参数（code 和 state）",

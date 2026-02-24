@@ -1143,25 +1143,59 @@ export const webviewMessageHandler = async (
 			const ttsEnabled = message.bool ?? true
 			await updateGlobalState("ttsEnabled", ttsEnabled)
 			setTtsEnabled(ttsEnabled)
+			console.log("[TTS] Handler: ttsEnabled message received, set to: " + ttsEnabled)
 			await provider.postStateToWebview()
 			break
 		case "ttsSpeed":
 			const ttsSpeed = message.value ?? 1.0
 			await updateGlobalState("ttsSpeed", ttsSpeed)
 			setTtsSpeed(ttsSpeed)
+			console.log("[TTS] Handler: ttsSpeed message received, set to: " + ttsSpeed)
 			await provider.postStateToWebview()
 			break
 		case "playTts":
-			if (message.text) {
-				playTts(message.text, {
-					onStart: () => provider.postMessageToWebview({ type: "ttsStart", text: message.text }),
-					onStop: () => provider.postMessageToWebview({ type: "ttsStop", text: message.text }),
+			try {
+				const textLength = message.text?.length ?? 0
+				const textPreview = message.text?.substring(0, 50) ?? ""
+				console.log("[TTS] Handler: playTts message received, text length: " + textLength)
+				console.log("[TTS] Handler: playTts text preview: " + textPreview)
+
+				if (!message.text || message.text.trim() === "") {
+					console.warn("[TTS] Handler: playTts called with empty or whitespace-only text")
+					break
+				}
+
+				await playTts(message.text, {
+					onStart: () => {
+						console.log("[TTS] Handler: ttsStart callback called")
+						try {
+							provider.postMessageToWebview({ type: "ttsStart", text: message.text })
+						} catch (postError: any) {
+							console.error("[TTS] Handler: Failed to post ttsStart message: " + postError.message)
+						}
+					},
+					onStop: () => {
+						console.log("[TTS] Handler: ttsStop callback called")
+						try {
+							provider.postMessageToWebview({ type: "ttsStop", text: message.text })
+						} catch (postError: any) {
+							console.error("[TTS] Handler: Failed to post ttsStop message: " + postError.message)
+						}
+					},
 				})
+			} catch (error: any) {
+				console.error("[TTS] Handler: Unexpected error in playTts handler: " + error.message)
+				console.error("[TTS] Handler: Stack trace: " + error.stack)
 			}
 
 			break
 		case "stopTts":
-			stopTts()
+			console.log("[TTS] Handler: stopTts message received")
+			try {
+				stopTts()
+			} catch (error: any) {
+				console.error("[TTS] Handler: Error executing stopTts: " + error.message)
+			}
 			break
 
 		case "updateVSCodeSetting": {
@@ -1914,10 +1948,15 @@ export const webviewMessageHandler = async (
 			const settings = message.codeIndexSettings as any
 
 			try {
+				provider.log("[saveCodeIndexSettingsAtomic] Starting to save code index settings")
+				
 				// Check if embedder provider has changed
 				const currentConfig = getGlobalState("codebaseIndexConfig") || {}
 				const embedderProviderChanged =
 					currentConfig.codebaseIndexEmbedderProvider !== settings.codebaseIndexEmbedderProvider
+
+				provider.log(`[saveCodeIndexSettingsAtomic] Embedder provider changed: ${embedderProviderChanged}`)
+				provider.log(`[saveCodeIndexSettingsAtomic] Current provider: ${currentConfig.codebaseIndexEmbedderProvider}, New provider: ${settings.codebaseIndexEmbedderProvider}`)
 
 				// Save global state settings atomically
 				const globalStateConfig = {
@@ -1927,22 +1966,29 @@ export const webviewMessageHandler = async (
 					codebaseIndexEmbedderProvider: settings.codebaseIndexEmbedderProvider,
 					codebaseIndexEmbedderBaseUrl: settings.codebaseIndexEmbedderBaseUrl,
 					codebaseIndexEmbedderModelId: settings.codebaseIndexEmbedderModelId,
-					codebaseIndexEmbedderModelDimension: settings.codebaseIndexEmbedderModelDimension, // Generic dimension
-					codebaseIndexOpenAiCompatibleBaseUrl: settings.codebaseIndexOpenAiCompatibleBaseUrl,
+					codebaseIndexEmbedderModelDimension: settings.codebaseIndexEmbedderModelDimension,
 					codebaseIndexSearchMaxResults: settings.codebaseIndexSearchMaxResults,
 					codebaseIndexSearchMinScore: settings.codebaseIndexSearchMinScore,
+					// Indexing behavior settings
+					manualIndexingOnly: settings.manualIndexingOnly,
+					autoUpdateIndex: settings.autoUpdateIndex,
 					// Vector storage configuration
 					vectorStorageMode: settings.vectorStorageMode,
 					vectorStoragePreset: settings.vectorStoragePreset,
 					vectorStorageThresholds: settings.vectorStorageThresholds,
 				}
 
+				provider.log(`[saveCodeIndexSettingsAtomic] Global state config prepared, enabled: ${settings.codebaseIndexEnabled}`)
+
 				// Save global state first
 				await updateGlobalState("codebaseIndexConfig", globalStateConfig)
+				provider.log("[saveCodeIndexSettingsAtomic] Global state saved successfully")
 
 				// Save secrets directly using context proxy
+				let secretsSaved = 0
 				if (settings.codeIndexOpenAiKey !== undefined) {
 					await provider.contextProxy.storeSecret("codeIndexOpenAiKey", settings.codeIndexOpenAiKey)
+					secretsSaved++
 				}
 				if (settings.codeIndexQdrantApiKey !== undefined) {
 					await provider.contextProxy.storeSecret("codeIndexQdrantApiKey", settings.codeIndexQdrantApiKey)
@@ -1959,16 +2005,20 @@ export const webviewMessageHandler = async (
 						settings.codebaseIndexGeminiApiKey,
 					)
 				}
+				provider.log(`[saveCodeIndexSettingsAtomic] Secrets saved: ${secretsSaved} secrets updated`)
 
-				// Send success response first - settings are saved regardless of validation
+				// Send success response - settings are saved regardless of validation
+				// Note: We don't include settings in the response to avoid state sync issues
+				// The frontend will receive updated state via postStateToWebview()
 				await provider.postMessageToWebview({
 					type: "codeIndexSettingsSaved",
 					success: true,
-					settings: globalStateConfig,
 				})
+				provider.log("[saveCodeIndexSettingsAtomic] Success response sent to webview")
 
 				// Update webview state
 				await provider.postStateToWebview()
+				provider.log("[saveCodeIndexSettingsAtomic] Webview state updated")
 
 				// Then handle validation and initialization for the current workspace
 				const currentCodeIndexManager = provider.getCurrentWorkspaceCodeIndexManager()
