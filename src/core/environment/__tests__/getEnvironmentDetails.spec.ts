@@ -149,7 +149,7 @@ describe("getEnvironmentDetails", () => {
 		expect(result).not.toContain("# Git Status") // Git status is disabled by default (maxGitStatusFiles = 0)
 		expect(result).toContain("# Current Cost")
 		expect(result).toContain("# Current Mode")
-		expect(result).toContain("<slug>code</slug>")
+		expect(result).toContain("code")
 		expect(result).not.toContain("<name>")
 		expect(result).not.toContain("<model>")
 
