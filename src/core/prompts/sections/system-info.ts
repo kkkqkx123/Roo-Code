@@ -15,7 +15,7 @@ export function getSystemInfoSection(cwd: string): string {
 		osInfo = `${platform} ${release}`
 	}
 
-	let details = `====
+	let details = `---
 
 SYSTEM INFORMATION
 

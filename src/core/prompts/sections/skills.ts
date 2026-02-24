@@ -45,7 +45,7 @@ export async function getSkillsSection(
 		})
 		.join("\n")
 
-	return `====
+	return `---
 
 AVAILABLE SKILLS
 

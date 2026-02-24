@@ -1,5 +1,5 @@
 export function markdownFormattingSection(): string {
-	return `====
+	return `---
 
 MARKDOWN RULES
 

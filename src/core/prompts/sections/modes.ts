@@ -12,7 +12,7 @@ export async function getModesSection(context: vscode.ExtensionContext): Promise
 	// Get all modes with their overrides from extension state
 	const allModes = await getAllModesWithPrompts(context)
 
-	const modesContent = `====
+	const modesContent = `---
 
 MODES
 

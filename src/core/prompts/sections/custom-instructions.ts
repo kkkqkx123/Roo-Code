@@ -495,7 +495,7 @@ export async function addCustomInstructions(
 
 	return joinedSections
 		? `
-====
+---
 
 USER'S CUSTOM INSTRUCTIONS
 
