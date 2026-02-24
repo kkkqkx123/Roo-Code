@@ -22,12 +22,6 @@ export abstract class BaseTerminal implements RooTerminal {
 	public process?: RooTerminalProcess
 	public completedProcesses: RooTerminalProcess[] = []
 
-	/**
-	 * Tracks how many times this terminal has been reused with a directory change.
-	 * Used to prevent excessive reuse that could lead to terminal state confusion.
-	 */
-	public directoryChangeCount: number = 0
-
 	constructor(provider: RooTerminalProvider, id: number, cwd: string) {
 		this.provider = provider
 		this.id = id
@@ -35,7 +29,6 @@ export abstract class BaseTerminal implements RooTerminal {
 		this.busy = false
 		this.running = false
 		this.streamClosed = false
-		this.directoryChangeCount = 0
 	}
 
 	public getCurrentWorkingDirectory(): string {
@@ -158,22 +151,6 @@ export abstract class BaseTerminal implements RooTerminal {
 
 		this.cleanCompletedProcessQueue()
 		return output
-	}
-
-	/**
-		* Increments the directory change counter
-		*/
-	public incrementDirectoryChangeCount(): void {
-		this.directoryChangeCount++
-	}
-
-	/**
-		* Checks if this terminal should be reused for a directory change
-		* @returns true if the terminal can be reused, false if it has been reused too many times
-		*/
-	public shouldReuseForDirectoryChange(): boolean {
-		// Limit to 5 directory changes to prevent terminal state confusion
-		return this.directoryChangeCount < 5
 	}
 
 	public static defaultShellIntegrationTimeout = 5_000

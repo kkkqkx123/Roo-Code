@@ -19,7 +19,7 @@ import { Package } from "../../shared/package"
 import { t } from "../../i18n"
 import { getTaskDirectoryPath } from "../../utils/storage"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
-import { arePathsEqual, parseCdCommand, removeCdFromCommand } from "../../utils/path"
+import { parseCdCommand, removeCdFromCommand } from "../../utils/path"
 
 class ShellIntegrationError extends Error { }
 
@@ -328,39 +328,19 @@ export async function executeCommandInTerminal(
 		workingDir = terminal.getCurrentWorkingDirectory()
 	}
 
-	// Check if we need to change directory before executing the command
-	const terminalCwd = terminal.getCurrentWorkingDirectory()
+	// Execute command in terminal
+	// Note: No need to prepend cd command - cd is handled by:
+	// 1. parseCdCommand() extracts target directory for terminal selection
+	// 2. removeCdFromCommand() removes cd from command to avoid double execution
+	// 3. If fallback is used, original command (with cd) is executed as-is
 	let process: RooTerminalProcess
 
 	if (useFallback) {
 		// When using fallback (cd target path didn't exist), execute the original command as-is
 		// The original command already contains the cd instruction
 		process = terminal.runCommand(commandToExecute, callbacks)
-	} else if (!arePathsEqual(terminalCwd, workingDir)) {
-		// Terminal is in a different directory, need to cd first
-		terminal.incrementDirectoryChangeCount()
-
-		// Check if terminal has been reused too many times
-		if (!terminal.shouldReuseForDirectoryChange()) {
-			// Create a new terminal instead of reusing this one
-			const newTerminal = await TerminalRegistry.createTerminal(workingDir, terminalProvider)
-			newTerminal.taskId = task.taskId
-
-			if (newTerminal instanceof Terminal) {
-				newTerminal.terminal.show(true)
-			}
-
-			// Use the new terminal
-			process = newTerminal.runCommand(commandToExecute, callbacks)
-		} else {
-			// Prepend cd command to change directory
-			// Use proper quoting to handle paths with spaces
-			const escapedWorkingDir = workingDir.replace(/"/g, '\\"')
-			const actualCommand = `cd "${escapedWorkingDir}" && ${commandToExecute}`
-			process = terminal.runCommand(actualCommand, callbacks)
-		}
 	} else {
-		// No directory change needed, execute command directly
+		// Execute command directly (cd already handled by terminal selection)
 		process = terminal.runCommand(commandToExecute, callbacks)
 	}
 

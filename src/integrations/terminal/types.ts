@@ -9,7 +9,6 @@ export interface RooTerminal {
 	running: boolean
 	taskId?: string
 	process?: RooTerminalProcess
-	directoryChangeCount: number
 	getCurrentWorkingDirectory(): string
 	isClosed: () => boolean
 	runCommand: (command: string, callbacks: RooTerminalCallbacks) => RooTerminalProcessResultPromise
@@ -19,8 +18,6 @@ export interface RooTerminal {
 	getUnretrievedOutput(): string
 	getLastCommand(): string
 	cleanCompletedProcessQueue(): void
-	incrementDirectoryChangeCount(): void
-	shouldReuseForDirectoryChange(): boolean
 }
 
 export interface RooTerminalCallbacks {

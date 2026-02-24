@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 
-import { arePathsEqual, canChangeDirectory } from "../../utils/path"
+import { arePathsEqual } from "../../utils/path"
 
 import { RooTerminal, RooTerminalProvider } from "./types"
 import { TerminalProcess } from "./TerminalProcess"
@@ -145,6 +145,10 @@ export class TerminalRegistry {
 	 * Gets an existing terminal or creates a new one for the given working
 	 * directory.
 	 *
+	 * Note: Terminal reuse is based on the initial working directory (initialCwd)
+	 * only. Directory changes via cd commands are handled by parsing cd from
+	 * commands and creating/finding terminals for the target directory.
+	 *
 	 * @param cwd The working directory path
 	 * @param taskId Optional task ID to associate with the terminal
 	 * @returns A Terminal instance
@@ -158,8 +162,7 @@ export class TerminalRegistry {
 		let terminal: RooTerminal | undefined
 		const targetCwd = vscode.Uri.file(cwd).fsPath
 
-		// First priority: Find a terminal already assigned to this task with
-		// matching directory (exact match).
+		// First priority: Find a terminal already assigned to this task with matching initialCwd.
 		if (taskId) {
 			terminal = terminals.find((t) => {
 				if (t.busy || t.taskId !== taskId || t.provider !== provider) {
@@ -176,25 +179,7 @@ export class TerminalRegistry {
 			})
 		}
 
-		// Second priority: Find a terminal already assigned to this task that
-		// can change to the target directory (parent/child relationship).
-		if (!terminal && taskId) {
-			terminal = terminals.find((t) => {
-				if (t.busy || t.taskId !== taskId || t.provider !== provider) {
-					return false
-				}
-
-				const terminalCwd = t.getCurrentWorkingDirectory()
-
-				if (!terminalCwd) {
-					return false
-				}
-
-				return canChangeDirectory(terminalCwd, targetCwd)
-			})
-		}
-
-		// Third priority: Find any available terminal with matching directory (exact match).
+		// Second priority: Find any available terminal with matching initialCwd.
 		if (!terminal) {
 			terminal = terminals.find((t) => {
 				if (t.busy || t.provider !== provider) {
@@ -208,23 +193,6 @@ export class TerminalRegistry {
 				}
 
 				return arePathsEqual(targetCwd, terminalCwd)
-			})
-		}
-
-		// Fourth priority: Find any available terminal that can change to the target directory.
-		if (!terminal) {
-			terminal = terminals.find((t) => {
-				if (t.busy || t.provider !== provider) {
-					return false
-				}
-
-				const terminalCwd = t.getCurrentWorkingDirectory()
-
-				if (!terminalCwd) {
-					return false
-				}
-
-				return canChangeDirectory(terminalCwd, targetCwd)
 			})
 		}
 

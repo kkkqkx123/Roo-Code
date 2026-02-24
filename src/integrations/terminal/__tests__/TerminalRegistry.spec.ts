@@ -121,7 +121,7 @@ describe("TerminalRegistry", () => {
 		})
 	})
 
-	describe("getOrCreateTerminal with directory change support", () => {
+	describe("getOrCreateTerminal with exact directory match only", () => {
 		let terminal1: Terminal
 		let terminal2: Terminal
 
@@ -143,7 +143,7 @@ describe("TerminalRegistry", () => {
 			expect(terminal.id).toBe(terminal1.id)
 		})
 
-		it("should reuse terminal when current directory is parent of target", async () => {
+		it("should not reuse terminal for parent directory (different initialCwd)", async () => {
 			terminal1.taskId = "task-1"
 			terminal1.busy = false
 			// Mock the current working directory to be parent
@@ -151,10 +151,12 @@ describe("TerminalRegistry", () => {
 
 			const terminal = await TerminalRegistry.getOrCreateTerminal("/test/project", "task-1", "vscode")
 
-			expect(terminal.id).toBe(terminal1.id)
+			// Should create new terminal since initialCwd doesn't match
+			expect(terminal.id).not.toBe(terminal1.id)
+			expect(terminal.id).toBeGreaterThan(terminal1.id)
 		})
 
-		it("should reuse terminal when current directory is child of target", async () => {
+		it("should not reuse terminal for child directory (different initialCwd)", async () => {
 			terminal1.taskId = "task-1"
 			terminal1.busy = false
 			// Mock the current working directory to be child
@@ -162,7 +164,9 @@ describe("TerminalRegistry", () => {
 
 			const terminal = await TerminalRegistry.getOrCreateTerminal("/test/project", "task-1", "vscode")
 
-			expect(terminal.id).toBe(terminal1.id)
+			// Should create new terminal since initialCwd doesn't match
+			expect(terminal.id).not.toBe(terminal1.id)
+			expect(terminal.id).toBeGreaterThan(terminal1.id)
 		})
 
 		it("should not reuse terminal for unrelated paths", async () => {
@@ -192,18 +196,18 @@ describe("TerminalRegistry", () => {
 			expect(terminal.id).toBe(terminal1.id)
 		})
 
-		it("should prefer exact match over directory change", async () => {
+		it("should reuse terminal with exact initialCwd match", async () => {
 			terminal1.taskId = "task-1"
 			terminal1.busy = false
 			vi.spyOn(terminal1, "getCurrentWorkingDirectory").mockReturnValue("/test/project")
 
 			terminal2.taskId = "task-1"
 			terminal2.busy = false
-			vi.spyOn(terminal2, "getCurrentWorkingDirectory").mockReturnValue("/test")
+			vi.spyOn(terminal2, "getCurrentWorkingDirectory").mockReturnValue("/test/other")
 
 			const terminal = await TerminalRegistry.getOrCreateTerminal("/test/project", "task-1", "vscode")
 
-			// Should prefer exact match
+			// Should prefer exact initialCwd match
 			expect(terminal.id).toBe(terminal1.id)
 		})
 	})

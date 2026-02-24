@@ -128,37 +128,37 @@ describe("TerminalRegistry Integration Tests", () => {
 		})
 	})
 
-	describe("Terminal Reuse with Directory Change Support", () => {
-		it("should reuse terminal when current directory is parent of target", async () => {
+	describe("Terminal Reuse with Exact Directory Match Only", () => {
+		it("should not reuse terminal for parent directory (different initialCwd)", async () => {
 			// Create terminal in parent directory
 			const terminal1 = TerminalRegistry.createTerminal("/test/workspace", "vscode")
 			terminal1.taskId = "task-1"
 
-			// Mock the terminal's current working directory
 			vi.spyOn(terminal1, "getCurrentWorkingDirectory").mockReturnValue("/test/workspace")
 
-			// Request terminal for child directory
+			// Request terminal for child directory - should create new terminal
+			// since initialCwd doesn't match
 			const terminal2 = await TerminalRegistry.getOrCreateTerminal("/test/workspace/src", "task-1", "vscode")
 
-			// Should reuse the same terminal (can cd into child)
-			expect(terminal1.id).toBe(terminal2.id)
-			expect(vscode.window.createTerminal).toHaveBeenCalledTimes(1)
+			// Should create new terminal (initialCwd must match exactly)
+			expect(terminal1.id).not.toBe(terminal2.id)
+			expect(vscode.window.createTerminal).toHaveBeenCalledTimes(2)
 		})
 
-		it("should reuse terminal when current directory is child of target", async () => {
+		it("should not reuse terminal for child directory (different initialCwd)", async () => {
 			// Create terminal in child directory
 			const terminal1 = TerminalRegistry.createTerminal("/test/workspace/src", "vscode")
 			terminal1.taskId = "task-1"
 
-			// Mock the terminal's current working directory
 			vi.spyOn(terminal1, "getCurrentWorkingDirectory").mockReturnValue("/test/workspace/src")
 
-			// Request terminal for parent directory
+			// Request terminal for parent directory - should create new terminal
+			// since initialCwd doesn't match
 			const terminal2 = await TerminalRegistry.getOrCreateTerminal("/test/workspace", "task-1", "vscode")
 
-			// Should reuse the same terminal (can cd to parent)
-			expect(terminal1.id).toBe(terminal2.id)
-			expect(vscode.window.createTerminal).toHaveBeenCalledTimes(1)
+			// Should create new terminal (initialCwd must match exactly)
+			expect(terminal1.id).not.toBe(terminal2.id)
+			expect(vscode.window.createTerminal).toHaveBeenCalledTimes(2)
 		})
 
 		it("should not reuse terminal for unrelated paths", async () => {
@@ -166,7 +166,6 @@ describe("TerminalRegistry Integration Tests", () => {
 			const terminal1 = TerminalRegistry.createTerminal("/test/workspace", "vscode")
 			terminal1.taskId = "task-1"
 
-			// Mock the terminal's current working directory
 			vi.spyOn(terminal1, "getCurrentWorkingDirectory").mockReturnValue("/test/workspace")
 
 			// Request terminal for completely different directory
@@ -214,40 +213,6 @@ describe("TerminalRegistry Integration Tests", () => {
 			// Should return exact match terminal
 			expect(terminal.id).toBe(exactTerminal.id)
 			expect(terminal.id).not.toBe(parentTerminal.id)
-		})
-	})
-
-	describe("Directory Change Counting", () => {
-		it("should track directory changes", () => {
-			const terminal = TerminalRegistry.createTerminal("/test/workspace", "vscode")
-
-			expect(terminal.directoryChangeCount).toBe(0)
-
-			terminal.incrementDirectoryChangeCount()
-			expect(terminal.directoryChangeCount).toBe(1)
-
-			terminal.incrementDirectoryChangeCount()
-			expect(terminal.directoryChangeCount).toBe(2)
-		})
-
-		it("should allow reuse when directory change count is below threshold", () => {
-			const terminal = TerminalRegistry.createTerminal("/test/workspace", "vscode")
-
-			for (let i = 0; i < 4; i++) {
-				terminal.incrementDirectoryChangeCount()
-			}
-
-			expect(terminal.shouldReuseForDirectoryChange()).toBe(true)
-		})
-
-		it("should not allow reuse when directory change count exceeds threshold", () => {
-			const terminal = TerminalRegistry.createTerminal("/test/workspace", "vscode")
-
-			for (let i = 0; i < 5; i++) {
-				terminal.incrementDirectoryChangeCount()
-			}
-
-			expect(terminal.shouldReuseForDirectoryChange()).toBe(false)
 		})
 	})
 

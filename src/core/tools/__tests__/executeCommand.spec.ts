@@ -65,18 +65,15 @@ describe("executeCommand", () => {
 			provider: "vscode",
 			id: 1,
 			initialCwd: "/test/project",
-			directoryChangeCount: 0,
 			getCurrentWorkingDirectory: vitest.fn().mockReturnValue("/test/project"),
 			runCommand: vitest.fn().mockReturnValue(mockProcess),
 			terminal: {
 				show: vitest.fn(),
 			},
-			incrementDirectoryChangeCount: vitest.fn(),
-			shouldReuseForDirectoryChange: vitest.fn().mockReturnValue(true),
 		}
 
-			// Mock TerminalRegistry.getOrCreateTerminal
-			; (TerminalRegistry.getOrCreateTerminal as any).mockResolvedValue(mockTerminal)
+		// Mock TerminalRegistry.getOrCreateTerminal
+		;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValue(mockTerminal)
 	})
 
 	describe("Working Directory Behavior", () => {
