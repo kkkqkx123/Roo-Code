@@ -85,6 +85,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		soundVolume,
 		messageQueue = [],
 		showWorktreesInHomeScreen,
+		ttsEnabled,
 	} = useExtensionState()
 
 	// Show a WarningRow when the user sends a message with a retired provider.
@@ -1059,26 +1060,34 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		// This ensures the first message is not read, future user messages are
 		// labeled as `user_feedback`.
 		if (lastMessage && messages.length > 1) {
-			if (
-				typeof lastMessage.text === "string" && // has text (must be string for startsWith)
-				(lastMessage.say === "text" || lastMessage.say === "completion_result") && // is a text message
-				!lastMessage.partial && // not a partial message
-				!lastMessage.text.startsWith("{") // not a json object
-			) {
-				let text = lastMessage?.text || ""
-				const mermaidRegex = /```mermaid[\s\S]*?```/g
-				// remove mermaid diagrams from text
-				text = text.replace(mermaidRegex, "")
-				// remove markdown from text
-				text = removeMd(text)
+			// Check if streaming just completed (transition from streaming to non-streaming)
+			// This prevents TTS from triggering during streaming when messages are partial
+			const wasPreviouslyStreaming = wasStreaming === true
+			const isNowComplete = isStreaming === false && wasPreviouslyStreaming
 
-				// ensure message is not a duplicate of last read message
-				if (text !== lastTtsRef.current) {
-					try {
-						playTts(text)
-						lastTtsRef.current = text
-					} catch (error) {
-						console.error("Failed to execute text-to-speech:", error)
+			// Only trigger TTS when streaming completes to avoid partial reads
+			if (isNowComplete && ttsEnabled) {
+				if (
+					typeof lastMessage.text === "string" && // has text (must be string for startsWith)
+					(lastMessage.say === "text" || lastMessage.say === "completion_result") && // is a text message
+					!lastMessage.partial && // not a partial message
+					!lastMessage.text.startsWith("{") // not a json object
+				) {
+					let text = lastMessage?.text || ""
+					const mermaidRegex = /```mermaid[\s\S]*?```/g
+					// remove mermaid diagrams from text
+					text = text.replace(mermaidRegex, "")
+					// remove markdown from text
+					text = removeMd(text)
+
+					// ensure message is not a duplicate of last read message
+					if (text !== lastTtsRef.current) {
+						try {
+							playTts(text)
+							lastTtsRef.current = text
+						} catch (error) {
+							console.error("Failed to execute text-to-speech:", error)
+						}
 					}
 				}
 			}
@@ -1086,7 +1095,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 
 		// Update previous value.
 		setWasStreaming(isStreaming)
-	}, [isStreaming, lastMessage, wasStreaming, messages.length])
+	}, [isStreaming, lastMessage, wasStreaming, messages.length, ttsEnabled])
 
 	const groupedMessages = useMemo(() => {
 		const filtered: ClineMessage[] = visibleMessages

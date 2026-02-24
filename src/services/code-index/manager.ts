@@ -29,6 +29,17 @@ export class CodeIndexManager {
 	// Flag to prevent race conditions during error recovery
 	private _isRecoveringFromError = false
 
+	// Workspace-level enablement state stored in workspaceState
+	private _autoEnableDefault: boolean | undefined = undefined
+
+	/**
+	 * Gets the storage key for workspace-level enablement state.
+	 * Uses the folder URI to ensure per-workspace persistence.
+	 */
+	private _getWorkspaceEnabledKey(): string {
+		return `codeIndexEnabled_${this._folderUri.toString()}`
+	}
+
 	public static getInstance(context: vscode.ExtensionContext, workspacePath?: string): CodeIndexManager | undefined {
 		// Resolve the workspace folder to get both fsPath and the real URI
 		let folder: vscode.WorkspaceFolder | undefined
@@ -138,6 +149,37 @@ export class CodeIndexManager {
 		}
 	}
 
+	/**
+	 * Checks if code indexing is enabled for this workspace.
+	 * Uses workspaceState to persist enablement per workspace folder.
+	 */
+	public get isWorkspaceEnabled(): boolean {
+		const key = this._getWorkspaceEnabledKey()
+		const stored = this.context.workspaceState.get<boolean>(key)
+		if (stored !== undefined) {
+			return stored
+		}
+		// If not explicitly set, use autoEnableDefault (defaults to true if not set)
+		return this._autoEnableDefault ?? true
+	}
+
+	/**
+	 * Sets whether code indexing is enabled for this workspace.
+	 * @param enabled - Whether to enable indexing for this workspace
+	 */
+	public async setWorkspaceEnabled(enabled: boolean): Promise<void> {
+		const key = this._getWorkspaceEnabledKey()
+		await this.context.workspaceState.update(key, enabled)
+	}
+
+	/**
+	 * Sets the default enablement state used when workspace state is not explicitly set.
+	 * @param enabled - The default enablement state
+	 */
+	public async setAutoEnableDefault(enabled: boolean): Promise<void> {
+		this._autoEnableDefault = enabled
+	}
+
 	public get onProgressUpdate() {
 		return this._stateManager.onProgressUpdate
 	}
@@ -221,6 +263,12 @@ export class CodeIndexManager {
 
 		if (!this.isFeatureEnabled) {
 			console.log("[CodeIndexManager] Rejected: Feature not enabled")
+			return
+		}
+
+		// Check if workspace indexing is enabled
+		if (!this.isWorkspaceEnabled) {
+			console.log("[CodeIndexManager] Rejected: Workspace indexing not enabled")
 			return
 		}
 
@@ -328,6 +376,7 @@ export class CodeIndexManager {
 		return {
 			...status,
 			workspacePath: this.workspacePath,
+			workspaceEnabled: this.isWorkspaceEnabled,
 		}
 	}
 
