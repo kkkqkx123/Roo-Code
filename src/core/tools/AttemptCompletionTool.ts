@@ -117,7 +117,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 							// "delegated" would mean this child has its own grandchild pending (shouldn't reach attempt_completion)
 							console.error(
 								`[AttemptCompletionTool] Unexpected child task status "${status}" for task ${task.taskId}. ` +
-								`Expected "active" or "completed". Skipping delegation to prevent data corruption.`,
+									`Expected "active" or "completed". Skipping delegation to prevent data corruption.`,
 							)
 							// Fall through to normal completion ask flow
 						}
@@ -125,7 +125,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 						// If we can't get the history, log error and skip delegation
 						console.error(
 							`[AttemptCompletionTool] Failed to get history for task ${task.taskId}: ${(err as Error)?.message ?? String(err)}. ` +
-							`Skipping delegation.`,
+								`Skipping delegation.`,
 						)
 						// Fall through to normal completion ask flow
 					}
@@ -185,7 +185,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 
 		if (command) {
 			if (lastMessage && lastMessage.ask === "command") {
-				await task.ask("command", command ?? "", block.partial).catch(() => { })
+				await task.ask("command", command ?? "", block.partial).catch(() => {})
 			} else {
 				await task.say("completion_result", result ?? "", undefined, false)
 
@@ -194,7 +194,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 
 				task.emit(CoderEventName.TaskCompleted, task.taskId, task.getTokenUsage(), task.toolUsage)
 
-				await task.ask("command", command ?? "", block.partial).catch(() => { })
+				await task.ask("command", command ?? "", block.partial).catch(() => {})
 			}
 		} else {
 			await task.say("completion_result", result ?? "", undefined, block.partial)

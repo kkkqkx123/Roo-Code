@@ -93,14 +93,16 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 
 						const errorDetails = failPart.details ? JSON.stringify(failPart.details, null, 2) : ""
 
-						formattedError = `<error_details>\n${failPart.error
-							}${errorDetails ? `\n\nDetails:\n${errorDetails}` : ""}\n</error_details>`
+						formattedError = `<error_details>\n${
+							failPart.error
+						}${errorDetails ? `\n\nDetails:\n${errorDetails}` : ""}\n</error_details>`
 					}
 				} else {
 					const errorDetails = diffResult.details ? JSON.stringify(diffResult.details, null, 2) : ""
 
-					formattedError = `Unable to apply diff to file: ${absolutePath}\n\n<error_details>\n${diffResult.error
-						}${errorDetails ? `\n\nDetails:\n${errorDetails}` : ""}\n</error_details>`
+					formattedError = `Unable to apply diff to file: ${absolutePath}\n\n<error_details>\n${
+						diffResult.error
+					}${errorDetails ? `\n\nDetails:\n${errorDetails}` : ""}\n</error_details>`
 				}
 
 				if (currentCount >= 2) {
@@ -288,7 +290,7 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 			return
 		}
 
-		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial, toolProgressStatus).catch(() => { })
+		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial, toolProgressStatus).catch(() => {})
 	}
 }
 

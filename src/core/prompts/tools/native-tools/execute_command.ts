@@ -1,19 +1,13 @@
 import type OpenAI from "openai"
 
-const EXECUTE_COMMAND_DESCRIPTION = `Request to execute a CLI command on the system. Use this when you need to perform system operations or run specific commands to accomplish any step in the user's task. You must tailor your command to the user's system and provide a clear explanation of what the command does. Prefer relative commands and paths that avoid location sensitivity for terminal consistency, e.g: "New-Item ./testdata/example.file", "dir ./examples/model1/data/yaml", or "go test ./cmd/front --config ./cmd/front/config.yml". Always use powershell format. Never use format that only supported by shell, like "head". Never use command that will cause suspend or only work with human, like "more".
+const EXECUTE_COMMAND_DESCRIPTION = `Execute a CLI command on the system. You must provide a clear explanation of what the command does when using this tool. Prefer relative commands and paths that avoid location sensitivity for terminal consistency, e.g: "New-Item ./testdata/example.file", "dir ./examples/model1/data/yaml", or "go test ./cmd/front --config ./cmd/front/config.yml". Always use powershell format. Never use format that only supported by shell, like "head", "grep". Never use command that will cause suspend or only work with human, like "more".
 
 Parameters:
 - command: (required) The CLI command to execute. This should be valid for the current operating system. Ensure the command is properly formatted and does not contain any harmful instructions.
 - cwd: (optional) The working directory to execute the command in
 
 Example: Executing npm run dev
-{ "command": "npm run dev", "cwd": null }
-
-Example: Executing ls in a specific directory if directed
-{ "command": "ls -la", "cwd": "/home/user/projects" }
-
-Example: Using relative paths
-{ "command": "touch ./testdata/example.file", "cwd": null }`
+{ "command": "npm run dev", "cwd": null }`
 
 const COMMAND_PARAMETER_DESCRIPTION = `Shell command to execute`
 

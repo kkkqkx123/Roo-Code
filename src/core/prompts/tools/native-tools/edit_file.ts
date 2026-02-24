@@ -1,7 +1,6 @@
 import type OpenAI from "openai"
 
 const EDIT_FILE_DESCRIPTION = `Use this tool to replace text in an existing file, or create a new file.
-Best for simple string replacements or creating new files with built-in tolerance for minor formatting variations. Automatically creates parent directories when creating new files.
 
 The tool may fall back to deterministic matching strategies when an exact literal match fails (exact → whitespace-tolerant match → token-based match).
 

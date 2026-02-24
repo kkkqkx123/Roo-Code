@@ -167,7 +167,7 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 			}
 
 			// Finalize the existing partial tool ask row so the UI doesn't get stuck in a spinner state.
-			await task.ask("tool", JSON.stringify(sharedMessageProps), false).catch(() => { })
+			await task.ask("tool", JSON.stringify(sharedMessageProps), false).catch(() => {})
 		}
 
 		const recordFailureForPathAndMaybeEscalate = async (relPath: string, formattedError: string): Promise<void> => {
@@ -202,9 +202,9 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 				old_string === ""
 					? "creating new file"
 					: (() => {
-						const preview = old_string.length > 50 ? old_string.substring(0, 50) + "..." : old_string
-						return `replacing: "${preview}"`
-					})()
+							const preview = old_string.length > 50 ? old_string.substring(0, 50) + "..." : old_string
+							return `replacing: "${preview}"`
+						})()
 
 			const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
 
@@ -535,7 +535,7 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 			isOutsideWorkspace,
 		}
 
-		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(() => { })
+		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(() => {})
 	}
 }
 
