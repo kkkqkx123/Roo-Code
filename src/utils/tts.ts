@@ -1,3 +1,5 @@
+// 通过require("say")动态导入
+
 interface Say {
 	speak: (text: string, voice?: string, speed?: number, callback?: (err?: string) => void) => void
 	stop: () => void
@@ -32,7 +34,7 @@ export const playTts = async (message: string, options: PlayTtsOptions = {}) => 
 	try {
 		queue.push({ message, options })
 		await processQueue()
-	} catch (error) {}
+	} catch (error) { }
 }
 
 export const stopTts = () => {

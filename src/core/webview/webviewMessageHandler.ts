@@ -1911,7 +1911,7 @@ export const webviewMessageHandler = async (
 				break
 			}
 
-			const settings = message.codeIndexSettings
+			const settings = message.codeIndexSettings as any
 
 			try {
 				// Check if embedder provider has changed
@@ -2108,8 +2108,10 @@ export const webviewMessageHandler = async (
 		}
 		case "startIndexing": {
 			try {
+				provider.log("[startIndexing] Starting indexing request handler")
 				const manager = provider.getCurrentWorkspaceCodeIndexManager()
 				if (!manager) {
+					provider.log("[startIndexing] Rejected: No manager instance")
 					provider.postMessageToWebview({
 						type: "indexingStatusUpdate",
 						values: {
@@ -2124,23 +2126,88 @@ export const webviewMessageHandler = async (
 					return
 				}
 
-				// "Start Indexing" implicitly enables the workspace
-				await manager.setWorkspaceEnabled(true)
+				provider.log("[startIndexing] Manager instance obtained")
 
 				// Initialize first to load configuration and set up services
 				// This is necessary because isFeatureEnabled and isFeatureConfigured
 				// depend on _configManager which is created during initialize()
-				await manager.initialize(provider.contextProxy)
+				const initResult = await manager.initialize(provider.contextProxy)
+				provider.log(
+					`[startIndexing] Manager initialized, requiresRestart: ${initResult.requiresRestart}`,
+				)
 
-				// After initialization, check if feature is enabled and configured
-				if (manager.isFeatureEnabled && manager.isFeatureConfigured) {
-					const currentState = manager.state
-					if (currentState === "Standby" || currentState === "Error") {
-						manager.startIndexing()
+				// Log detailed configuration status
+				const isFeatureEnabled = manager.isFeatureEnabled
+				const isFeatureConfigured = manager.isFeatureConfigured
+				provider.log(
+					`[startIndexing] isFeatureEnabled: ${isFeatureEnabled}, isFeatureConfigured: ${isFeatureConfigured}`,
+				)
+
+				if (!isFeatureConfigured) {
+					provider.log("[startIndexing] Configuration is incomplete. Checking config details...")
+					// Try to get config manager reference to log details
+					const configManager = (manager as any)._configManager
+					if (configManager) {
+						provider.log(`[startIndexing]   embedderProvider: ${(configManager as any).embedderProvider}`)
+						provider.log(`[startIndexing]   qdrantUrl: ${(configManager as any).qdrantUrl || "undefined"}`)
+						provider.log(`[startIndexing]   openAiKey: !!${(configManager as any).openAiOptions?.openAiNativeApiKey}`)
+						provider.log(`[startIndexing]   openAiCompatibleBaseUrl: !!${(configManager as any).openAiCompatibleOptions?.baseUrl}`)
+						provider.log(`[startIndexing]   geminiApiKey: !!${(configManager as any).geminiOptions?.apiKey}`)
 					}
 				}
+
+				// After initialization, check if feature is enabled and configured
+				if (isFeatureEnabled && isFeatureConfigured) {
+					// Only access manager.state if feature is properly configured
+					// (accessing state when not initialized will throw an error)
+					try {
+						const currentState = manager.state
+						provider.log(`[startIndexing] Current state: ${currentState}`)
+						if (currentState === "Standby" || currentState === "Error" || currentState === "Indexed") {
+							provider.log("[startIndexing] Calling manager.startIndexing()")
+							manager.startIndexing()
+						} else {
+							provider.log(
+								`[startIndexing] Skipped: Invalid state ${currentState}, expected Standby/Error/Indexed`,
+							)
+						}
+					} catch (error) {
+						provider.log(
+							`[startIndexing] Error accessing state: ${error instanceof Error ? error.message : String(error)}`,
+						)
+						provider.postMessageToWebview({
+							type: "indexingStatusUpdate",
+							values: {
+								systemStatus: "Error",
+								message: error instanceof Error ? error.message : "Failed to access indexing state",
+								processedItems: 0,
+								totalItems: 0,
+								currentItemUnit: "items",
+							},
+						})
+					}
+				} else {
+					provider.log(
+						`[startIndexing] Skipped: Feature not properly configured (enabled: ${isFeatureEnabled}, configured: ${isFeatureConfigured})`,
+					)
+					// Post status update to webview to inform user
+					provider.postMessageToWebview({
+						type: "indexingStatusUpdate",
+						values: {
+							systemStatus: "Standby",
+							message: isFeatureEnabled
+								? "Missing configuration. Please configure API keys."
+								: "Code indexing feature is disabled.",
+							processedItems: 0,
+							totalItems: 0,
+							currentItemUnit: "items",
+						},
+					})
+				}
 			} catch (error) {
-				provider.log(`Error starting indexing: ${error instanceof Error ? error.message : String(error)}`)
+				provider.log(
+					`[startIndexing] Error: ${error instanceof Error ? error.message : String(error)}`,
+				)
 			}
 			break
 		}
@@ -2158,65 +2225,6 @@ export const webviewMessageHandler = async (
 				})
 			} catch (error) {
 				provider.log(`Error stopping indexing: ${error instanceof Error ? error.message : String(error)}`)
-			}
-			break
-		}
-		case "toggleWorkspaceIndexing": {
-			try {
-				const manager = provider.getCurrentWorkspaceCodeIndexManager()
-				if (!manager) {
-					provider.log("Cannot toggle workspace indexing: No workspace folder open")
-					return
-				}
-				const enabled = message.bool ?? false
-				await manager.setWorkspaceEnabled(enabled)
-				if (enabled && manager.isFeatureEnabled && manager.isFeatureConfigured) {
-					await manager.initialize(provider.contextProxy)
-					manager.startIndexing()
-				} else if (!enabled) {
-					manager.stopIndexing()
-				}
-				provider.postMessageToWebview({
-					type: "indexingStatusUpdate",
-					values: manager.getCurrentStatus(),
-				})
-			} catch (error) {
-				provider.log(
-					`Error toggling workspace indexing: ${error instanceof Error ? error.message : String(error)}`,
-				)
-			}
-			break
-		}
-		case "setAutoEnableDefault": {
-			try {
-				const manager = provider.getCurrentWorkspaceCodeIndexManager()
-				if (!manager) {
-					provider.log("Cannot set auto-enable default: No workspace folder open")
-					return
-				}
-				// Capture prior state for every manager before persisting the global change
-				const allManagers = CodeIndexManager.getAllInstances()
-				const priorStates = new Map(allManagers.map((m) => [m, m.isWorkspaceEnabled]))
-				await manager.setAutoEnableDefault(message.bool ?? true)
-				// Apply stop/start to every affected manager
-				for (const m of allManagers) {
-					const wasEnabled = priorStates.get(m)!
-					const isNowEnabled = m.isWorkspaceEnabled
-					if (wasEnabled && !isNowEnabled) {
-						m.stopIndexing()
-					} else if (!wasEnabled && isNowEnabled && m.isFeatureEnabled && m.isFeatureConfigured) {
-						await m.initialize(provider.contextProxy)
-						m.startIndexing()
-					}
-				}
-				provider.postMessageToWebview({
-					type: "indexingStatusUpdate",
-					values: manager.getCurrentStatus(),
-				})
-			} catch (error) {
-				provider.log(
-					`Error setting auto-enable default: ${error instanceof Error ? error.message : String(error)}`,
-				)
 			}
 			break
 		}

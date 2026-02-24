@@ -35,6 +35,13 @@ export class CodeIndexOrchestrator {
 			throw new Error("Cannot start watcher: Service not configured.")
 		}
 
+		// Check if auto-update index is enabled
+		if (!this.configManager.isAutoUpdateIndex) {
+			console.log("[CodeIndexOrchestrator] Auto-update index is disabled, skipping file watcher initialization")
+			this.stateManager.setSystemState("Indexed", "Index built. File watcher disabled by configuration.")
+			return
+		}
+
 		this.stateManager.setSystemState("Indexing", "Initializing file watcher...")
 
 		try {
@@ -92,18 +99,22 @@ export class CodeIndexOrchestrator {
 	 * @param isRetryAfterError Whether this is a retry after an error state (default: false)
 	 */
 	public async startIndexing(isRetryAfterError: boolean = false): Promise<void> {
+		console.log("[CodeIndexOrchestrator] startIndexing called, isRetryAfterError:", isRetryAfterError)
+		
 		// Check if workspace is available first
 		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
 			this.stateManager.setSystemState("Error", t("embeddings:orchestrator.indexingRequiresWorkspace"))
 			console.warn("[CodeIndexOrchestrator] Start rejected: No workspace folder open.")
 			return
 		}
+		console.log("[CodeIndexOrchestrator] Workspace check passed")
 
 		if (!this.configManager.isFeatureConfigured) {
 			this.stateManager.setSystemState("Standby", "Missing configuration. Save your settings to start indexing.")
 			console.warn("[CodeIndexOrchestrator] Start rejected: Missing configuration.")
 			return
 		}
+		console.log("[CodeIndexOrchestrator] Configuration check passed")
 
 		if (
 			this._isProcessing ||
@@ -116,11 +127,13 @@ export class CodeIndexOrchestrator {
 			)
 			return
 		}
+		console.log("[CodeIndexOrchestrator] State check passed, current state:", this.stateManager.state)
 
 		this._isProcessing = true
 		this._abortController = new AbortController()
 		const signal = this._abortController.signal
 		this.stateManager.setSystemState("Indexing", "Initializing services...")
+		console.log("[CodeIndexOrchestrator] Processing started, state set to Indexing")
 
 		// Track whether we successfully connected to Qdrant and started indexing
 		// This helps us decide whether to preserve cache on error

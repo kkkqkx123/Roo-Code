@@ -576,6 +576,15 @@ export interface WebviewMessage {
 		codebaseIndexOpenAiCompatibleBaseUrl?: string
 		codebaseIndexSearchMaxResults?: number
 		codebaseIndexSearchMinScore?: number
+		// Vector storage configuration
+		vectorStorageMode?: "auto" | "tiny" | "small" | "medium" | "large"
+		vectorStoragePreset?: "tiny" | "small" | "medium" | "large"
+		vectorStorageThresholds?: {
+			tiny?: number
+			small?: number
+			medium?: number
+			large?: number
+		}
 
 		// Secret settings
 		codeIndexOpenAiKey?: string

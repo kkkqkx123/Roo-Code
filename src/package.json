@@ -39,7 +39,8 @@
 		"coder"
 	],
 	"activationEvents": [
-		"onStartupFinished"
+		"onStartupFinished",
+		"onWebviewPanel:coder-roo.TabPanelProvider"
 	],
 	"main": "./dist/extension.cjs",
 	"contributes": {

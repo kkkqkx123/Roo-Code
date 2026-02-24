@@ -96,39 +96,21 @@ export class CodeIndexManager {
 	// --- Public API ---
 
 	/**
-	 * Returns the workspaceState key for per-folder indexing enablement,
-	 * keyed by the real workspace folder URI so local/remote schemes cannot collide.
+	 * Check if manual indexing only mode is enabled.
+	 * When true, indexing only starts when user explicitly clicks "Start Indexing".
+	 * When false, indexing starts automatically when extension activates.
 	 */
-	private _workspaceEnabledKey(): string {
-		return "codeIndexWorkspaceEnabled:" + this._folderUri.toString(true)
+	public get isManualIndexingOnly(): boolean {
+		return this._configManager?.isManualIndexingOnly ?? false
 	}
 
-	public get isWorkspaceEnabled(): boolean {
-		const explicit = this.context.workspaceState.get<boolean | undefined>(this._workspaceEnabledKey(), undefined)
-		if (explicit !== undefined) return explicit
-		return this.autoEnableDefault
-	}
-
-	public async setWorkspaceEnabled(enabled: boolean): Promise<void> {
-		await this.context.workspaceState.update(this._workspaceEnabledKey(), enabled)
-	}
-
-	public get autoEnableDefault(): boolean {
-		return this.context.globalState.get("codeIndexAutoEnableDefault", true)
-	}
-
-	public async setAutoEnableDefault(enabled: boolean): Promise<void> {
-		await this.context.globalState.update("codeIndexAutoEnableDefault", enabled)
-	}
-
-	public get onProgressUpdate() {
-		return this._stateManager.onProgressUpdate
-	}
-
-	private assertInitialized() {
-		if (!this._configManager || !this._orchestrator || !this._searchService || !this._cacheManager) {
-			throw new Error("CodeIndexManager not initialized. Call initialize() first.")
-		}
+	/**
+	 * Check if auto-update index is enabled.
+	 * When true, index is automatically updated based on file changes via file watching.
+	 * When false, index is only built at startup and not updated via file watching.
+	 */
+	public get isAutoUpdateIndex(): boolean {
+		return this._configManager?.isAutoUpdateIndex ?? true
 	}
 
 	public get state(): IndexingState {
@@ -153,6 +135,16 @@ export class CodeIndexManager {
 			return true
 		} catch (error) {
 			return false
+		}
+	}
+
+	public get onProgressUpdate() {
+		return this._stateManager.onProgressUpdate
+	}
+
+	private assertInitialized() {
+		if (!this._configManager || !this._orchestrator || !this._searchService || !this._cacheManager) {
+			throw new Error("CodeIndexManager not initialized. Call initialize() first.")
 		}
 	}
 
@@ -184,29 +176,28 @@ export class CodeIndexManager {
 			return { requiresRestart }
 		}
 
-		// 4. Check workspace-level enablement (before creating expensive services)
-		if (!this.isWorkspaceEnabled) {
-			this._stateManager.setSystemState("Standby", "Indexing not enabled for this workspace")
-			return { requiresRestart }
-		}
-
-		// 5. CacheManager Initialization
+		// 4. CacheManager Initialization
 		if (!this._cacheManager) {
 			this._cacheManager = new CacheManager(this.context, this.workspacePath)
 			await this._cacheManager.initialize()
 		}
 
-		// 6. Determine if Core Services Need Recreation
+		// 5. Determine if Core Services Need Recreation
 		const needsServiceRecreation = !this._serviceFactory || requiresRestart
 
 		if (needsServiceRecreation) {
 			await this._recreateServices()
 		}
 
-		// 7. Handle Indexing Start/Restart
+		// 6. Handle Indexing Start/Restart
+		// Only start indexing automatically if:
+		// - manualIndexingOnly is false (auto-start enabled)
+		// - OR we're recovering from an error
+		const shouldStartAutomatically = !this.isManualIndexingOnly || requiresRestart
 		const shouldStartOrRestartIndexing =
-			requiresRestart ||
-			(needsServiceRecreation && (!this._orchestrator || this._orchestrator.state !== "Indexing"))
+			shouldStartAutomatically &&
+			(requiresRestart ||
+				(needsServiceRecreation && (!this._orchestrator || this._orchestrator.state !== "Indexing")))
 
 		if (shouldStartOrRestartIndexing) {
 			this._orchestrator?.startIndexing()
@@ -223,7 +214,13 @@ export class CodeIndexManager {
 	 * The indexing will continue asynchronously and progress will be reported through events.
 	 */
 	public async startIndexing(): Promise<void> {
-		if (!this.isFeatureEnabled || !this.isWorkspaceEnabled) {
+		console.log("[CodeIndexManager] startIndexing called")
+		console.log(
+			`[CodeIndexManager] isFeatureEnabled: ${this.isFeatureEnabled}`,
+		)
+
+		if (!this.isFeatureEnabled) {
+			console.log("[CodeIndexManager] Rejected: Feature not enabled")
 			return
 		}
 
@@ -232,10 +229,13 @@ export class CodeIndexManager {
 		const isRetryAfterError = currentStatus.systemStatus === "Error"
 
 		if (isRetryAfterError) {
-			console.log("[CodeIndexManager] Starting indexing after error state, will attempt to reuse existing collection if available")
+			console.log(
+				"[CodeIndexManager] Starting indexing after error state, will attempt to reuse existing collection if available",
+			)
 		}
 
 		this.assertInitialized()
+		console.log("[CodeIndexManager] Calling orchestrator.startIndexing")
 		await this._orchestrator!.startIndexing(isRetryAfterError)
 	}
 
@@ -328,8 +328,6 @@ export class CodeIndexManager {
 		return {
 			...status,
 			workspacePath: this.workspacePath,
-			workspaceEnabled: this.isWorkspaceEnabled,
-			autoEnableDefault: this.autoEnableDefault,
 		}
 	}
 

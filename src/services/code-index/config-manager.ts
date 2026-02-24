@@ -23,6 +23,8 @@ export class CodeIndexConfigManager {
 	private searchMinScore?: number
 	private searchMaxResults?: number
 	private _vectorStorageConfig: VectorStorageConfig = DEFAULT_VECTOR_STORAGE_CONFIG
+	// Store the full config object for accessing new fields
+	private codebaseIndexConfig?: any
 
 	constructor(private readonly contextProxy: ContextProxy) {
 		// Initialize with current configuration to avoid false restart triggers
@@ -56,6 +58,11 @@ export class CodeIndexConfigManager {
 			vectorStorageThresholds: undefined,
 		}
 
+		// Store the full config object for accessing new fields
+		this.codebaseIndexConfig = codebaseIndexConfig
+
+		console.log("[CodeIndexConfigManager] Raw configuration from globalState:", JSON.stringify(codebaseIndexConfig, null, 2))
+
 		const {
 			codebaseIndexEnabled,
 			codebaseIndexQdrantUrl,
@@ -72,9 +79,18 @@ export class CodeIndexConfigManager {
 		const openAiKey = this.contextProxy?.getSecret("codeIndexOpenAiKey") ?? ""
 		const qdrantApiKey = this.contextProxy?.getSecret("codeIndexQdrantApiKey") ?? ""
 		// Fix: Read OpenAI Compatible settings from the correct location within codebaseIndexConfig
-		const openAiCompatibleBaseUrl = codebaseIndexConfig.codebaseIndexEmbedderBaseUrl ?? ""
+		// Note: The frontend uses codebaseIndexOpenAiCompatibleBaseUrl, not codebaseIndexEmbedderBaseUrl
+		const openAiCompatibleBaseUrl = codebaseIndexConfig.codebaseIndexOpenAiCompatibleBaseUrl ?? codebaseIndexConfig.codebaseIndexEmbedderBaseUrl ?? ""
 		const openAiCompatibleApiKey = this.contextProxy?.getSecret("codebaseIndexOpenAiCompatibleApiKey") ?? ""
 		const geminiApiKey = this.contextProxy?.getSecret("codebaseIndexGeminiApiKey") ?? ""
+
+		console.log("[CodeIndexConfigManager] Secrets loaded:")
+		console.log("  openAiKey (codeIndexOpenAiKey):", openAiKey ? "****" + openAiKey.slice(-4) : "empty")
+		console.log("  qdrantApiKey (codeIndexQdrantApiKey):", qdrantApiKey ? "****" + qdrantApiKey.slice(-4) : "empty")
+		console.log("  openAiCompatibleApiKey (codebaseIndexOpenAiCompatibleApiKey):", openAiCompatibleApiKey ? "****" + openAiCompatibleApiKey.slice(-4) : "empty")
+		console.log("  geminiApiKey (codebaseIndexGeminiApiKey):", geminiApiKey ? "****" + geminiApiKey.slice(-4) : "empty")
+		console.log("  openAiCompatibleBaseUrl from codebaseIndexOpenAiCompatibleBaseUrl:", codebaseIndexConfig.codebaseIndexOpenAiCompatibleBaseUrl)
+		console.log("  openAiCompatibleBaseUrl from codebaseIndexEmbedderBaseUrl:", codebaseIndexConfig.codebaseIndexEmbedderBaseUrl)
 
 		// Update instance variables with configuration
 		this.codebaseIndexEnabled = codebaseIndexEnabled ?? false
@@ -189,6 +205,23 @@ export class CodeIndexConfigManager {
 
 		// Load new configuration from storage and update instance variables
 		this._loadAndSetConfiguration()
+
+		// DEBUG: Log detailed configuration information
+		console.log("[CodeIndexConfigManager] Configuration loaded:")
+		console.log("  codebaseIndexEnabled:", this.codebaseIndexEnabled)
+		console.log("  embedderProvider:", this.embedderProvider)
+		console.log("  modelId:", this.modelId)
+		console.log("  qdrantUrl:", this.qdrantUrl ? "****" + this.qdrantUrl.slice(-4) : "undefined")
+		console.log("  qdrantApiKey:", this.qdrantApiKey ? "****" + this.qdrantApiKey.slice(-4) : "undefined")
+		console.log("  openAiOptions.openAiNativeApiKey:", this.openAiOptions?.openAiNativeApiKey ? "****" + this.openAiOptions.openAiNativeApiKey.slice(-4) : "undefined")
+		console.log("  openAiCompatibleOptions:", this.openAiCompatibleOptions ? {
+			baseUrl: this.openAiCompatibleOptions.baseUrl,
+			apiKey: this.openAiCompatibleOptions.apiKey ? "****" + this.openAiCompatibleOptions.apiKey.slice(-4) : "undefined"
+		} : "undefined")
+		console.log("  geminiOptions:", this.geminiOptions ? {
+			apiKey: this.geminiOptions.apiKey ? "****" + this.geminiOptions.apiKey.slice(-4) : "undefined"
+		} : "undefined")
+		console.log("  isConfigured():", this.isConfigured())
 
 		const requiresRestart = this.doesConfigChangeRequireRestart(previousConfigSnapshot)
 
@@ -397,6 +430,24 @@ export class CodeIndexConfigManager {
 	 */
 	public get isFeatureConfigured(): boolean {
 		return this.isConfigured()
+	}
+
+	/**
+	 * Gets whether manual indexing only mode is enabled.
+	 * When true, indexing only starts when user explicitly clicks "Start Indexing".
+	 * When false (default), indexing starts automatically when extension activates.
+	 */
+	public get isManualIndexingOnly(): boolean {
+		return this.codebaseIndexConfig?.manualIndexingOnly ?? false
+	}
+
+	/**
+	 * Gets whether auto-update index is enabled.
+	 * When true (default), index is automatically updated based on file changes via file watching.
+	 * When false, index is only built at startup and not updated via file watching.
+	 */
+	public get isAutoUpdateIndex(): boolean {
+		return this.codebaseIndexConfig?.autoUpdateIndex ?? true
 	}
 
 	/**

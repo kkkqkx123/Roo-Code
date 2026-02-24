@@ -89,7 +89,8 @@ export async function presentAssistantMessage(cline: Task) {
 		// This provides 80-90% reduction in cloning overhead (5-100ms saved per block).
 		block = { ...cline.assistantMessageContent[cline.currentStreamingContentIndex] }
 	} catch (error) {
-		console.error(`ERROR cloning block:`, error)
+		const errorMessage = error instanceof Error ? error.message : String(error)
+		console.error(`ERROR cloning block:`, errorMessage)
 		console.error(
 			`Block content:`,
 			JSON.stringify(cline.assistantMessageContent[cline.currentStreamingContentIndex], null, 2),
@@ -600,7 +601,8 @@ export async function presentAssistantMessage(cline: Task) {
 					// 2. NOT set didAlreadyUseTool = true (the tool was never executed, just failed validation)
 					// This prevents the stream from being interrupted with "Response interrupted by tool use result"
 					// which would cause the extension to appear to hang
-					const errorContent = formatResponse.toolError(error.message)
+					const errorMessage = error instanceof Error ? error.message : String(error)
+					const errorContent = formatResponse.toolError(errorMessage)
 					// Push tool_result directly without setting didAlreadyUseTool
 					cline.pushToolResultToUserContent({
 						type: "tool_result",
@@ -838,7 +840,8 @@ export async function presentAssistantMessage(cline: Task) {
 								try {
 									customToolArgs = customTool.parameters.parse(block.nativeArgs || block.params || {})
 								} catch (parseParamsError) {
-									const message = `Custom tool "${block.name}" argument validation failed: ${parseParamsError.message}`
+									const errorMsg = parseParamsError instanceof Error ? parseParamsError.message : String(parseParamsError)
+									const message = `Custom tool "${block.name}" argument validation failed: ${errorMsg}`
 									console.error(message)
 									cline.consecutiveMistakeCount++
 									await cline.say("error", message)
@@ -957,6 +960,7 @@ async function checkpointSaveAndMark(task: Task) {
 		await task.checkpointSave(true)
 		task.currentStreamingDidCheckpoint = true
 	} catch (error) {
-		console.error(`[Task#presentAssistantMessage] Error saving checkpoint: ${error.message}`, error)
+		const errorMessage = error instanceof Error ? error.message : String(error)
+		console.error(`[Task#presentAssistantMessage] Error saving checkpoint: ${errorMessage}`, error)
 	}
 }

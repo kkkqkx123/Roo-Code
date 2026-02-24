@@ -40,6 +40,7 @@ import {
 	Slider,
 	StandardTooltip,
 	Button,
+	Checkbox,
 } from "@src/components/ui"
 import { useEscapeKey } from "@src/hooks/useEscapeKey"
 
@@ -78,6 +79,10 @@ interface LocalCodeIndexSettings {
 	codebaseIndexOpenAiCompatibleBaseUrl?: string
 	codebaseIndexOpenAiCompatibleApiKey?: string
 	codebaseIndexGeminiApiKey?: string
+
+	// Indexing behavior configuration
+	manualIndexingOnly?: boolean
+	autoUpdateIndex?: boolean
 }
 
 // Validation schema for codebase index settings
@@ -174,6 +179,8 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 		codebaseIndexOpenAiCompatibleBaseUrl: "",
 		codebaseIndexOpenAiCompatibleApiKey: "",
 		codebaseIndexGeminiApiKey: "",
+		manualIndexingOnly: false,
+		autoUpdateIndex: true,
 	})
 
 	// Initial settings state - stores the settings when popover opens
@@ -215,6 +222,8 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 				codebaseIndexOpenAiCompatibleBaseUrl: codebaseIndexConfig.codebaseIndexOpenAiCompatibleBaseUrl || "",
 				codebaseIndexOpenAiCompatibleApiKey: "",
 				codebaseIndexGeminiApiKey: "",
+				manualIndexingOnly: codebaseIndexConfig.manualIndexingOnly ?? false,
+				autoUpdateIndex: codebaseIndexConfig.autoUpdateIndex ?? true,
 			}
 			setInitialSettings(settings)
 			setCurrentSettings(settings)
@@ -953,6 +962,49 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 
 							{isAdvancedSettingsOpen && (
 								<div className="mt-4 space-y-4">
+									{/* Indexing Behavior Settings */}
+									<div className="space-y-3">
+										<div className="flex items-start gap-2">
+											<Checkbox
+												id="manualIndexingOnly"
+												checked={currentSettings.manualIndexingOnly ?? false}
+												onCheckedChange={(checked) =>
+													updateSetting("manualIndexingOnly", checked)
+												}
+											/>
+											<div className="grid gap-1.5">
+												<label
+													htmlFor="manualIndexingOnly"
+													className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+													{t("settings:codeIndex.manualIndexingOnlyLabel")}
+												</label>
+												<p className="text-xs text-vscode-descriptionForeground">
+													{t("settings:codeIndex.manualIndexingOnlyDescription")}
+												</p>
+											</div>
+										</div>
+
+										<div className="flex items-start gap-2">
+											<Checkbox
+												id="autoUpdateIndex"
+												checked={currentSettings.autoUpdateIndex ?? true}
+												onCheckedChange={(checked) =>
+													updateSetting("autoUpdateIndex", checked)
+												}
+											/>
+											<div className="grid gap-1.5">
+												<label
+													htmlFor="autoUpdateIndex"
+													className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+													{t("settings:codeIndex.autoUpdateIndexLabel")}
+												</label>
+												<p className="text-xs text-vscode-descriptionForeground">
+													{t("settings:codeIndex.autoUpdateIndexDescription")}
+												</p>
+											</div>
+										</div>
+									</div>
+
 									{/* Search Score Threshold Slider */}
 									<div className="space-y-2">
 										<div className="flex items-center gap-2">
@@ -1090,9 +1142,6 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 												<SelectItem value="large">
 													{t("settings:codeIndex.vectorStoragePresetLarge")}
 												</SelectItem>
-												<SelectItem value="custom">
-													{t("settings:codeIndex.vectorStorageModeCustom")}
-												</SelectItem>
 											</SelectContent>
 										</Select>
 										<p className="text-xs text-vscode-descriptionForeground">
@@ -1204,54 +1253,51 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 
 						{/* Auto-enable default */}
 						{currentSettings.codebaseIndexEnabled && (
-							<div className="flex items-center gap-2 pt-4 pb-1">
-								<input
-									type="checkbox"
-									id="auto-enable-default-toggle"
-									checked={indexingStatus.autoEnableDefault ?? true}
-									onChange={(e) =>
-										vscode.postMessage({
-											type: "setAutoEnableDefault",
-											bool: e.target.checked,
-										})
-									}
-									className="accent-vscode-focusBorder"
-								/>
-								<label
-									htmlFor="auto-enable-default-toggle"
-									className="text-xs text-vscode-foreground cursor-pointer">
-									{t("settings:codeIndex.autoEnableDefaultLabel")}
-								</label>
-							</div>
-						)}
+							<div className="space-y-2 pt-4 pb-2">
+								<div className="flex items-start gap-2">
+									<input
+										type="checkbox"
+										id="manual-indexing-only-toggle"
+										checked={currentSettings.manualIndexingOnly ?? false}
+										onChange={(e) =>
+											updateSetting("manualIndexingOnly", e.target.checked)
+										}
+										className="accent-vscode-focusBorder mt-1"
+									/>
+									<div className="flex-1">
+										<label
+											htmlFor="manual-indexing-only-toggle"
+											className="text-xs text-vscode-foreground cursor-pointer font-medium">
+											{t("settings:codeIndex.manualIndexingOnlyLabel")}
+										</label>
+										<p className="text-xs text-vscode-descriptionForeground mt-0.5">
+											{t("settings:codeIndex.manualIndexingOnlyDescription")}
+										</p>
+									</div>
+								</div>
 
-						{/* Workspace Toggle */}
-						{currentSettings.codebaseIndexEnabled && (
-							<div className="flex items-center gap-2 pt-1 pb-2">
-								<input
-									type="checkbox"
-									id="workspace-indexing-toggle"
-									checked={indexingStatus.workspaceEnabled ?? false}
-									onChange={(e) =>
-										vscode.postMessage({
-											type: "toggleWorkspaceIndexing",
-											bool: e.target.checked,
-										})
-									}
-									className="accent-vscode-focusBorder"
-								/>
-								<label
-									htmlFor="workspace-indexing-toggle"
-									className="text-xs text-vscode-foreground cursor-pointer">
-									{t("settings:codeIndex.workspaceToggleLabel")}
-								</label>
+								<div className="flex items-start gap-2">
+									<input
+										type="checkbox"
+										id="auto-update-index-toggle"
+										checked={currentSettings.autoUpdateIndex ?? true}
+										onChange={(e) =>
+											updateSetting("autoUpdateIndex", e.target.checked)
+										}
+										className="accent-vscode-focusBorder mt-1"
+									/>
+									<div className="flex-1">
+										<label
+											htmlFor="auto-update-index-toggle"
+											className="text-xs text-vscode-foreground cursor-pointer font-medium">
+											{t("settings:codeIndex.autoUpdateIndexLabel")}
+										</label>
+										<p className="text-xs text-vscode-descriptionForeground mt-0.5">
+											{t("settings:codeIndex.autoUpdateIndexDescription")}
+										</p>
+									</div>
+								</div>
 							</div>
-						)}
-
-						{currentSettings.codebaseIndexEnabled && !indexingStatus.workspaceEnabled && (
-							<p className="text-xs text-vscode-descriptionForeground pb-2">
-								{t("settings:codeIndex.workspaceDisabledMessage")}
-							</p>
 						)}
 
 						{/* Action Buttons */}

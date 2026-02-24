@@ -180,39 +180,7 @@ describe("VectorStorageConfigManager", () => {
 		})
 	})
 
-	describe("getCollectionConfig - custom mode", () => {
-		it("should return custom config when mode is custom", async () => {
-			const customConfig = {
-				vectors: {
-					on_disk: true as const,
-				},
-				hnsw: {
-					m: 32,
-					ef_construct: 256,
-				},
-			}
 
-			const config: VectorStorageConfig = {
-				mode: "custom",
-				customConfig,
-			}
-			configManager = new VectorStorageConfigManager(config, mockClient, testCollectionName)
-
-			const result = await configManager.getCollectionConfig()
-			expect(result).toEqual(customConfig)
-		})
-
-		it("should return default custom config when mode is custom but no config provided", async () => {
-			const config: VectorStorageConfig = {
-				mode: "custom",
-			}
-			configManager = new VectorStorageConfigManager(config, mockClient, testCollectionName)
-
-			const result = await configManager.getCollectionConfig()
-			expect(result).toBeDefined()
-			expect(result.vectors.on_disk).toBe(true)
-		})
-	})
 
 	describe("updateConfig", () => {
 		it("should update the configuration", () => {

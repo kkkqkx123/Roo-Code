@@ -22,9 +22,8 @@ export const CODEBASE_INDEX_DEFAULTS = {
  * Vector storage mode
  * auto: Automatically select preset based on codebase size
  * tiny/small/medium/large: Use specific preset directly
- * custom: Use custom configuration
  */
-export type VectorStorageMode = "auto" | "tiny" | "small" | "medium" | "large" | "custom"
+export type VectorStorageMode = "auto" | "tiny" | "small" | "medium" | "large"
 
 /**
  * Vector storage preset types (kept for backward compatibility)
@@ -32,7 +31,7 @@ export type VectorStorageMode = "auto" | "tiny" | "small" | "medium" | "large" |
  */
 export type VectorStoragePreset = "tiny" | "small" | "medium" | "large"
 
-export const vectorStorageModeSchema = z.enum(["auto", "tiny", "small", "medium", "large", "custom"])
+export const vectorStorageModeSchema = z.enum(["auto", "tiny", "small", "medium", "large"])
 
 export const vectorStoragePresetSchema = z.enum(["tiny", "small", "medium", "large"])
 
@@ -56,6 +55,13 @@ export const codebaseIndexConfigSchema = z.object({
 	// OpenAI Compatible specific fields
 	codebaseIndexOpenAiCompatibleBaseUrl: z.string().optional(),
 	codebaseIndexOpenAiCompatibleModelDimension: z.number().optional(),
+	// Indexing behavior configuration
+	// manualIndexingOnly: If true, indexing only starts when user clicks "Start Indexing"
+	// If false, indexing starts automatically when extension activates
+	manualIndexingOnly: z.boolean().optional(),
+	// autoUpdateIndex: If true, index is automatically updated based on file changes
+	// If false, index is only built at startup and not updated via file watching
+	autoUpdateIndex: z.boolean().optional(),
 	// Vector storage configuration
 	vectorStorageMode: vectorStorageModeSchema.optional(),
 	vectorStoragePreset: vectorStoragePresetSchema.optional(),
