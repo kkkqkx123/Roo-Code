@@ -1,5 +1,6 @@
 // npx vitest utils/__tests__/tiktoken.spec.ts
 
+import { describe, it, expect } from "vitest"
 import { tiktoken } from "../tiktoken"
 import { Anthropic } from "@anthropic-ai/sdk"
 
@@ -13,9 +14,8 @@ describe("tiktoken", () => {
 		const content: Anthropic.Messages.ContentBlockParam[] = [{ type: "text", text: "Hello world" }]
 
 		const result = await tiktoken(content)
-		// We can't predict the exact token count without mocking,
-		// but we can verify it's a positive number
-		expect(result).toEqual(3)
+		// "Hello world" tokenizes to 2 tokens with o200k_base encoder
+		expect(result).toEqual(2)
 	})
 
 	it("should handle empty text content", async () => {
@@ -58,31 +58,35 @@ describe("tiktoken", () => {
 		]
 
 		const result = await tiktoken(content)
-		// For images, we expect a token count based on the square root of the data length
-		// plus the fudge factor
-		const expectedMinTokens = Math.ceil(Math.sqrt(base64Data.length))
-		expect(result).toBeGreaterThanOrEqual(expectedMinTokens)
-	})
-
-	it("should use conservative estimate for image content without data", async () => {
-		// Using 'as any' to bypass TypeScript's type checking for this test case
-		// since we're specifically testing the fallback behavior
-		const content = [
-			{
-				type: "image",
-				source: {
-					type: "base64",
-					media_type: "image/png",
-					// data is intentionally missing to test fallback
+			// For images, we estimate based on Anthropic's Vision Token model:
+			// estimatedTokens = Math.ceil(estimatedPixels / 750) + 200
+			// For a tiny 1x1 PNG (66 bytes base64 ≈ 50 bytes ≈ 100 pixels):
+			// Math.ceil(100 / 750) + 200 = 1 + 200 = 201 tokens
+			// No fudge factor applied - exact count returned
+			expect(result).toBeGreaterThan(0)
+			// The result is approximately 201 tokens (200 baseline + small image)
+			expect(result).toBeGreaterThanOrEqual(200)
+		})
+	
+		it("should use conservative estimate for image content without data", async () => {
+			// Using 'as any' to bypass TypeScript's type checking for this test case
+			// since we're specifically testing the fallback behavior
+			const content = [
+				{
+					type: "image",
+					source: {
+						type: "base64",
+						media_type: "image/png",
+						// data is intentionally missing to test fallback
+					},
 				},
-			},
-		] as any as Anthropic.Messages.ContentBlockParam[]
-
-		const result = await tiktoken(content)
-		// Conservative estimate is 300 tokens, plus the fudge factor
-		const expectedMinTokens = 300
-		expect(result).toBeGreaterThanOrEqual(expectedMinTokens)
-	})
+			] as any as Anthropic.Messages.ContentBlockParam[]
+	
+			const result = await tiktoken(content)
+			// Conservative estimate for typical image is 170 tokens (VGA resolution equivalent)
+			// No fudge factor applied - exact count returned
+			expect(result).toBeGreaterThanOrEqual(170)
+		})
 
 	it("should correctly count tokens for mixed content", async () => {
 		const base64Data =
@@ -105,8 +109,8 @@ describe("tiktoken", () => {
 		expect(result).toBeGreaterThan(0)
 	})
 
-	it("should apply a fudge factor to the token count", async () => {
-		// We can test the fudge factor by comparing the token count with a rough estimate
+	it("should return consistent token counts across multiple calls", async () => {
+		// Test that the encoder returns consistent results
 		const content: Anthropic.Messages.ContentBlockParam[] = [{ type: "text", text: "Test" }]
 
 		const result = await tiktoken(content)
@@ -294,3 +298,4 @@ describe("tiktoken", () => {
 		})
 	})
 })
+

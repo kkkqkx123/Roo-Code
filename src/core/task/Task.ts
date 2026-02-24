@@ -2866,7 +2866,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 										NativeToolCallParser.startStreamingToolCall(event.id, event.name as ToolName)
 
 										// Track tool call tokens for fallback usage estimation
-										tokenCounter.addToolCall(event.name as string, "")
+										// Use event.id to distinguish multiple calls to the same tool
+										tokenCounter.addToolCall(event.id, event.name as string, "")
 
 										// Before adding a new tool, finalize any preceding text block
 										// This prevents the text block from blocking tool presentation
@@ -2913,8 +2914,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 												this.assistantMessageContent[toolUseIndex] = partialToolUse
 
 												// Update tool call tokens for fallback usage estimation
+												// Use event.id to match the tool call that was started
 												if (partialToolUse.name) {
 													tokenCounter.addToolCall(
+														event.id,
 														partialToolUse.name,
 														JSON.stringify(partialToolUse.params || {}),
 													)
