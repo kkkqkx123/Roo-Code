@@ -204,11 +204,11 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 					codebaseIndexConfig.codebaseIndexSearchMinScore ?? CODEBASE_INDEX_DEFAULTS.DEFAULT_SEARCH_MIN_SCORE,
 				vectorStorageMode: (codebaseIndexConfig.vectorStorageMode as VectorStorageMode) ?? "auto",
 				vectorStoragePreset: (codebaseIndexConfig.vectorStoragePreset as VectorStoragePreset) ?? "medium",
-				vectorStorageThresholds: codebaseIndexConfig.vectorStorageThresholds ?? {
-					tiny: 2000,
-					small: 10000,
-					medium: 100000,
-					large: 1000000,
+				vectorStorageThresholds: {
+					tiny: codebaseIndexConfig.vectorStorageThresholds?.tiny ?? 2000,
+					small: codebaseIndexConfig.vectorStorageThresholds?.small ?? 10000,
+					medium: codebaseIndexConfig.vectorStorageThresholds?.medium ?? 100000,
+					large: codebaseIndexConfig.vectorStorageThresholds?.large ?? 1000000,
 				},
 				codeIndexOpenAiKey: "",
 				codeIndexQdrantApiKey: "",

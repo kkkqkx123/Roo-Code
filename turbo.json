@@ -8,9 +8,7 @@
 			]
 		},
 		"test": {
-			"dependsOn": [
-				"@coder/types#build"
-			]
+			"cache": false
 		},
 		"format": {},
 		"clean": {

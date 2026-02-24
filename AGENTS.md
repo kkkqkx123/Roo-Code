@@ -7,7 +7,10 @@ Use pnpm and Turbo for monorepo task orchestration:
 - **Lint**: `pnpm lint` (ESLint with max-warnings=0, no errors permitted)
 - **Type check**: `pnpm check-types` (TypeScript strict mode)
 - **Format**: `pnpm format` (Prettier with tabs, 4 spaces, print width 120)
-- **Test file/path**: `cd src; npx vitest run utils\logging\__tests__`
+- **Test all**: `pnpm test` (Turbo runs all package tests. Avoid using this method)
+- **Test src only**: `cd src && pnpm test` (Fast test in src package)
+- **Test single file**: `pnpm test -- src/utils/__tests__/deadLoopDetector.spec.ts`
+- **Test by pattern**: `pnpm test -- src/utils/__tests__/deadLoopDetector.spec.ts -t "short sequence"`
 
 ## Architecture and Structure
 

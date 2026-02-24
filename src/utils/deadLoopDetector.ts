@@ -1,10 +1,10 @@
 /**
- * LLM流式生成死循环检测器
+ * LLM 流式生成死循环检测器
  *
- * 用于检测reasoningMessage中的三种死循环类型：
- * - 类型1：段落内容重复
- * - 类型2：有序列表重复
- * - 类型3：短序列循环
+ * 用于检测 reasoningMessage 中的三种死循环类型：
+ * - 类型 1：段落内容重复
+ * - 类型 2：有序列表重复
+ * - 类型 3：短序列循环
  */
 
 export interface DeadLoopDetectionResult {
@@ -35,8 +35,8 @@ const DEFAULT_CONFIG: DeadLoopDetectorConfig = {
 	shortSequenceWindowSize: 200,
 	minRepeatUnitLength: 2,
 	maxRepeatUnitLength: 50,
-	minRepeatCount: 4,
-	minPeriodElements: 4,  // 降低从6到4，使检测更敏感
+	minRepeatCount: 4, // 根据设计文档：短序列至少 4 次重复
+	minPeriodElements: 6, // 根据设计文档：周期至少 6 个元素
 	maxPeriodLength: 50,
 }
 
@@ -58,13 +58,13 @@ export class DeadLoopDetector {
 
 	/**
 	 * 检测死循环
-	 * @param reasoningMessage 当前的reasoningMessage文本
+	 * @param reasoningMessage 当前的 reasoningMessage 文本
 	 * @returns 检测结果
 	 */
 	public detect(reasoningMessage: string): DeadLoopDetectionResult {
 		const length = reasoningMessage.length
 
-		// 第1检查点：2000字符 - 短序列循环检测
+		// 第 1 检查点：2000 字符 - 短序列循环检测
 		if (length >= 2000 && !this.checkedCheckpoints.has(2000)) {
 			this.checkedCheckpoints.add(2000)
 			const shortSequenceResult = this.detectShortSequenceLoop(reasoningMessage)
@@ -73,31 +73,33 @@ export class DeadLoopDetector {
 			}
 		}
 
-		// 第2检查点：3000字符 - 段落重复和有序列表重复检测
+		// 第 2 检查点：3000 字符 - 段落重复和有序列表重复检测
 		if (length >= 3000 && !this.checkedCheckpoints.has(3000)) {
 			this.checkedCheckpoints.add(3000)
-			// 检测2000-3000字符范围
-			const paragraphResult = this.detectParagraphRepetition(reasoningMessage, 2000, 3000)
-			if (paragraphResult.detected) {
-				return paragraphResult
-			}
+			// 检测 2000-3000 字符范围
+			// 先检查有序列表，因为有序列表更具体，可以避免被段落检测误报
 			const orderedListResult = this.detectOrderedListRepetition(reasoningMessage, 2000, 3000)
 			if (orderedListResult.detected) {
 				return orderedListResult
 			}
-		}
-
-		// 第3检查点：5000字符 - 尾部二次检查
-		if (length >= 5000 && !this.checkedCheckpoints.has(5000)) {
-			this.checkedCheckpoints.add(5000)
-			// 检测3000-5000字符范围
-			const paragraphResult = this.detectParagraphRepetition(reasoningMessage, 3000, 5000)
+			const paragraphResult = this.detectParagraphRepetition(reasoningMessage, 2000, 3000)
 			if (paragraphResult.detected) {
 				return paragraphResult
 			}
+		}
+
+		// 第 3 检查点：5000 字符 - 尾部二次检查
+		if (length >= 5000 && !this.checkedCheckpoints.has(5000)) {
+			this.checkedCheckpoints.add(5000)
+			// 检测 3000-5000 字符范围
+			// 先检查有序列表，因为有序列表更具体，可以避免被段落检测误报
 			const orderedListResult = this.detectOrderedListRepetition(reasoningMessage, 3000, 5000)
 			if (orderedListResult.detected) {
 				return orderedListResult
+			}
+			const paragraphResult = this.detectParagraphRepetition(reasoningMessage, 3000, 5000)
+			if (paragraphResult.detected) {
+				return paragraphResult
 			}
 		}
 
@@ -116,28 +118,29 @@ export class DeadLoopDetector {
 		}
 
 		const maxPeriodLength = Math.min(this.config.maxPeriodLength, Math.floor(elements.length / 2))
-		const minRequiredMatches = this.config.minPeriodElements
+		const minRequiredElements = this.config.minPeriodElements
 
 		// 遍历可能的周期长度
 		for (let periodLength = 1; periodLength <= maxPeriodLength; periodLength++) {
 			// 从列表末尾开始，检查是否有足够长的周期循环
-			// 我们期望至少看到minRequiredMatches个完整周期
+			// 需要检测到至少 minRequiredElements 个元素形成周期模式
+			// 这意味着需要 minRequiredElements - 1 次成功匹配
 			let matchCount = 0
 			let checkPos = elements.length - 1
 
 			// 从末尾向前检查周期模式
-			while (checkPos >= periodLength && matchCount < minRequiredMatches) {
+			while (checkPos - periodLength >= 0) {
 				if (elements[checkPos] === elements[checkPos - periodLength]) {
 					matchCount++
 					checkPos -= periodLength
 				} else {
-					// 如果匹配中断，检查是否已经检测到足够的周期
+					// 如果匹配中断，停止检查该周期长度
 					break
 				}
 			}
 
-			// 如果连续重复的数量达到阈值，则判定为周期循环
-			if (matchCount >= minRequiredMatches) {
+			// 如果连续匹配的对数达到阈值（minRequiredElements - 1 对匹配 = minRequiredElements 个元素），则判定为周期循环
+			if (matchCount >= minRequiredElements - 1) {
 				return { detected: true, periodLength }
 			}
 		}
@@ -146,35 +149,39 @@ export class DeadLoopDetector {
 	}
 
 	/**
-	 * 短序列循环检测（原类型3）
+	 * 短序列循环检测（原类型 3）
 	 * 使用基于扫描的单遍算法，避免正则表达式的性能问题
-	 * @param reasoningMessage 当前的reasoningMessage文本
+	 * @param reasoningMessage 当前的 reasoningMessage 文本
 	 * @returns 检测结果
 	 */
 	private detectShortSequenceLoop(reasoningMessage: string): DeadLoopDetectionResult {
 		const length = reasoningMessage.length
 
-		// 取最近200字符的文本片段
+		// 取最近 200 字符的文本片段
 		const start = Math.max(0, length - this.config.shortSequenceWindowSize)
 		const textFragment = reasoningMessage.slice(start)
 
 		// 使用基于扫描的算法检测重复模式
 		const fragmentLength = textFragment.length
-		// 只检测短重复单元（最多6字符），避免检测到完整的段落块或短句子
-		const maxShortUnitLength = Math.min(6, this.config.minRepeatUnitLength + 4, Math.floor(fragmentLength / this.config.minRepeatCount))
+		// 只检测短重复单元（最多 6 字符），避免检测到完整的段落块或短句子
+		const maxShortUnitLength = Math.min(
+			6,
+			this.config.minRepeatUnitLength + 4,
+			Math.floor(fragmentLength / this.config.minRepeatCount),
+		)
 
 		// 遍历可能的重复单元长度（从短到长，优先检测短重复）
 		for (let unitLength = this.config.minRepeatUnitLength; unitLength <= maxShortUnitLength; unitLength++) {
 			// 对每个可能的起始位置，检查是否从该位置开始有连续重复
 			for (let startPos = 0; startPos < fragmentLength - unitLength * this.config.minRepeatCount; startPos++) {
 				const unit = textFragment.slice(startPos, startPos + unitLength)
-				
+
 				// 跳过无效的重复单元
 				if (!this.isValidRepeatUnit(unit)) {
 					continue
 				}
 
-				// 从startPos开始，计算连续重复的次数
+				// 从 startPos 开始，计算连续重复的次数
 				let repeatCount = 0
 				let pos = startPos
 				while (pos + unitLength <= fragmentLength && textFragment.slice(pos, pos + unitLength) === unit) {
@@ -211,8 +218,8 @@ export class DeadLoopDetector {
 	}
 
 	/**
-	 * 段落内容重复检测（原类型1）
-	 * @param reasoningMessage 当前的reasoningMessage文本
+	 * 段落内容重复检测（原类型 1）
+	 * @param reasoningMessage 当前的 reasoningMessage 文本
 	 * @param startRange 检测范围起始位置
 	 * @param endRange 检测范围结束位置
 	 * @returns 检测结果
@@ -229,10 +236,10 @@ export class DeadLoopDetector {
 		const end = Math.min(length, endRange)
 		const textFragment = reasoningMessage.slice(start, end)
 
-		// 步骤1：语义块分割
+		// 步骤 1：语义块分割
 		const blocks = this.splitIntoSemanticBlocks(textFragment)
 
-		// 步骤2：调用通用周期检测
+		// 步骤 2：调用通用周期检测
 		const result = this.detectPeriod(blocks)
 
 		if (result.detected) {
@@ -247,8 +254,8 @@ export class DeadLoopDetector {
 	}
 
 	/**
-	 * 有序列表重复检测（原类型2）
-	 * @param reasoningMessage 当前的reasoningMessage文本
+	 * 有序列表重复检测（原类型 2）
+	 * @param reasoningMessage 当前的 reasoningMessage 文本
 	 * @param startRange 检测范围起始位置
 	 * @param endRange 检测范围结束位置
 	 * @returns 检测结果
@@ -265,14 +272,17 @@ export class DeadLoopDetector {
 		const end = Math.min(length, endRange)
 		const textFragment = reasoningMessage.slice(start, end)
 
-		// 步骤1：按行分割
+		// 步骤 1：按行分割
 		const lines = textFragment.split("\n")
 
-		// 步骤2：行标准化
+		// 步骤 2：行标准化
 		const normalizedLines = lines.map((line) => this.normalizeOrderedListItem(line))
 
-		// 步骤3：调用通用周期检测
-		const result = this.detectPeriod(normalizedLines)
+		// 步骤 3：过滤空行和仅标号的行
+		const validLines = normalizedLines.filter((line) => line.trim().length > 0)
+
+		// 步骤 4：调用通用周期检测（使用相同的参数确保一致性）
+		const result = this.detectPeriod(validLines)
 
 		if (result.detected) {
 			return {
@@ -292,7 +302,7 @@ export class DeadLoopDetector {
 	private splitIntoSemanticBlocks(text: string): string[] {
 		// 分隔符包括：中文句号（。）、英文句号（.）、中文分号（；）、英文分号（;）、
 		// 感叹号（！!）、问号（？?）、换行符（\n）
-		const separators = /[。.;；！!？?\n]+/
+		const separators = /[.。;；！!？?\n]+/
 		const blocks = text.split(separators).filter((block) => block.trim().length > 0)
 		return blocks
 	}
