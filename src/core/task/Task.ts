@@ -130,10 +130,10 @@ import { MessageManager } from "../message-manager"
 import { validateAndFixToolResultIds } from "./validateToolResultIds"
 import { mergeConsecutiveApiMessages } from "./mergeConsecutiveApiMessages"
 
-const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
+export const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
 const DEFAULT_USAGE_COLLECTION_TIMEOUT_MS = 5000 // 5 seconds
-const FORCED_CONTEXT_REDUCTION_PERCENT = 75 // Keep 75% of context (remove 25%) on context window errors
-const MAX_CONTEXT_WINDOW_RETRIES = 3 // Maximum retries for context window errors
+export const FORCED_CONTEXT_REDUCTION_PERCENT = 75 // Keep 75% of context (remove 25%) on context window errors
+export const MAX_CONTEXT_WINDOW_RETRIES = 3 // Maximum retries for context window errors
 
 export interface TaskOptions extends CreateTaskOptions {
 	provider: ClineProvider
@@ -262,7 +262,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	private taskApiConfigReady: Promise<void>
 
 	providerRef: WeakRef<ClineProvider>
-	private readonly globalStoragePath: string
+	protected readonly globalStoragePath: string
 	abort: boolean = false
 	currentRequestAbortController?: AbortController
 	skipPrevResponseIdOnce: boolean = false
@@ -334,7 +334,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// Message Queue Service
 	public readonly messageQueueService: MessageQueueService
-	private messageQueueStateChangedHandler: (() => void) | undefined
+	protected messageQueueStateChangedHandler: (() => void) | undefined
 
 	// Streaming
 	isWaitingForFirstChunk = false
@@ -389,7 +389,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	private _started = false
 	// No streaming parser is required.
 	assistantMessageParser?: undefined
-	private providerProfileChangeListener?: (config: { name: string; provider?: string }) => void
+	protected providerProfileChangeListener?: (config: { name: string; provider?: string }) => void
 
 	// Native tool call streaming state (track which index each tool is at)
 	private streamingToolCallIndices: Map<string, number> = new Map()
