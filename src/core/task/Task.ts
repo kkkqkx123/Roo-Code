@@ -2690,6 +2690,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 								cacheReadTokens,
 							)
 
+					// Note: inputTokens/outputTokens are already accumulated totals from
+					// streaming usage chunks, so we overwrite rather than accumulate here.
 					this.clineMessages[lastApiReqIndex].text = JSON.stringify({
 						...existingData,
 						tokensIn: costResult.totalInputTokens,
@@ -2842,7 +2844,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 								cacheWriteTokens += chunk.cacheWriteTokens ?? 0
 								cacheReadTokens += chunk.cacheReadTokens ?? 0
 								totalCost = chunk.totalCost
-								hasApiUsageData = true
+								// Only consider API usage data as valid if we received non-zero output tokens.
+								// Some APIs may return usage chunk with outputTokens: 0, which should trigger
+								// the tiktoken fallback for accurate token counting.
+								hasApiUsageData = chunk.outputTokens > 0
 								break
 							case "grounding":
 								// Handle grounding sources separately from regular content
@@ -3111,12 +3116,16 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 								tokens.cacheWrite > 0 ||
 								tokens.cacheRead > 0
 							) {
-								// Update the shared variables atomically
+								// Overwrite shared variables with the provided totals.
+								// The caller (main loop or background) is responsible for
+								// accumulating chunks before calling this function.
 								inputTokens = tokens.input
 								outputTokens = tokens.output
 								cacheWriteTokens = tokens.cacheWrite
 								cacheReadTokens = tokens.cacheRead
-								totalCost = tokens.total
+								if (tokens.total !== undefined) {
+									totalCost = tokens.total
+								}
 
 								// Update the API request message with the latest usage data
 								updateApiReqMsg()
@@ -3297,13 +3306,19 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					this.currentRequestAbortController = undefined
 				}
 
-				// Fallback: If API didn't provide usage data, use tiktoken for estimation
-				// This fallback is triggered when the API stream completes without emitting usage chunks
-				if (!hasApiUsageData && tokenCounter.getTotalTokens() > 0) {
+				// Fallback: If API didn't provide valid usage data, use tiktoken for estimation.
+				// This handles cases where:
+				// 1. API doesn't emit usage chunks at all
+				// 2. API emits usage chunk but with outputTokens: 0 (some models/providers)
+				// The fallback is only triggered when tiktoken counting produced > 0 tokens,
+				// ensuring we don't estimate tokens for truly empty responses.
+				const isApiUsageInvalid = !hasApiUsageData || (inputTokens === 0 && outputTokens === 0)
+
+				if (isApiUsageInvalid && tokenCounter.getTotalTokens() > 0) {
 					const tokenBreakdown = tokenCounter.getTokenBreakdown()
 
 					console.log(
-						`[Task#${this.taskId}] API did not provide usage data. Using tiktoken fallback for token estimation.`,
+						`[Task#${this.taskId}] API did not provide valid usage data. Using tiktoken fallback for token estimation.`,
 					)
 					console.log(
 						`[Task#${this.taskId}] Token breakdown - Text: ${tokenBreakdown.text}, Reasoning: ${tokenBreakdown.reasoning}, Tool Calls: ${tokenBreakdown.toolCalls}`,
@@ -3313,11 +3328,15 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					const estimatedOutputTokens = tokenCounter.getTotalTokens()
 
 					if (estimatedOutputTokens > 0) {
-						// Calculate input tokens using tiktoken on the full conversation content
-						// This ensures consistent token counting methodology for both input and output
-						const inputTokensEstimate = await this.api.countTokens(finalUserContent)
+						// Calculate input tokens using tiktoken on the full conversation history
+						// This ensures we count all tokens sent to the API (system prompt + conversation history + current message)
+						const fullConversationContent = this.apiConversationHistory.flatMap(msg =>
+							Array.isArray(msg.content) ? msg.content : []
+						)
+						const inputTokensEstimate = await this.api.countTokens(fullConversationContent)
 
-						// Update token counts with estimated values
+						// Overwrite token counts with tiktoken estimates
+						// (API did not provide valid usage data, so we use our own estimation)
 						inputTokens = inputTokensEstimate
 						outputTokens = estimatedOutputTokens
 

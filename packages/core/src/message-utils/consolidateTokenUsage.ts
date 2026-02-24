@@ -70,13 +70,27 @@ export function consolidateTokenUsage(messages: ClineMessage[]): TokenUsage {
 		}
 	})
 
-	// Calculate context tokens, from the last API request started or condense
-	// context message.
+	// Calculate context tokens.
+	// The context tokens represent the total tokens used in the current context window.
+	// Priority order:
+	// 1. condense_context messages: Contains authoritative token count after context compression
+	// 2. api_req_started messages: Contains tokensIn + tokensOut from the most recent API request
+	//    (tokensIn includes all input tokens: system prompt + conversation history + current message)
 	result.contextTokens = 0
 
 	for (let i = messages.length - 1; i >= 0; i--) {
 		const message = messages[i]
 		if (!message) continue
+
+		if (message.type === "say" && message.say === "condense_context") {
+			// Condense context messages have the authoritative context token count
+			// after context compression/condensation
+			const condenseTokens = message.contextCondense?.newContextTokens ?? 0
+			if (condenseTokens > 0) {
+				result.contextTokens = condenseTokens
+				break
+			}
+		}
 
 		if (message.type === "say" && message.say === "api_req_started" && message.text) {
 			try {
@@ -86,16 +100,15 @@ export function consolidateTokenUsage(messages: ClineMessage[]): TokenUsage {
 				// Since tokensIn now stores TOTAL input tokens (including cache tokens),
 				// we no longer need to add cacheWrites and cacheReads separately.
 				// This applies to both Anthropic and OpenAI protocols.
-				result.contextTokens = (tokensIn || 0) + (tokensOut || 0)
+				const apiTokens = (tokensIn || 0) + (tokensOut || 0)
+				if (apiTokens > 0) {
+					result.contextTokens = apiTokens
+					break
+				}
 			} catch {
 				// Ignore JSON parse errors
 				continue
 			}
-		} else if (message.type === "say" && message.say === "condense_context") {
-			result.contextTokens = message.contextCondense?.newContextTokens ?? 0
-		}
-		if (result.contextTokens) {
-			break
 		}
 	}
 

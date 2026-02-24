@@ -3,6 +3,7 @@
 import type { ClineMessage } from "@coder/types"
 
 import { getApiMetrics } from "../getApiMetrics"
+import { describe, it, expect, vi } from "vitest"
 
 describe("getApiMetrics", () => {
 	// Helper function to create a basic api_req_started message
@@ -257,15 +258,15 @@ describe("getApiMetrics", () => {
 
 			const result = getApiMetrics(messages)
 
-			// Non-number values should be ignored
+			// Non-number values should be treated as 0
 			expect(result.totalTokensIn).toBe(0)
 			expect(result.totalTokensOut).toBe(0)
 			expect(result.totalCacheWrites).toBeUndefined()
 			expect(result.totalCacheReads).toBeUndefined()
 			expect(result.totalCost).toBe(0)
 
-			// The implementation concatenates all token values including cache tokens
-			expect(result.contextTokens).toBe("not-a-numbernot-a-number") // tokensIn + tokensOut (OpenAI default)
+			// contextTokens should be 0 when all token values are non-numbers
+			expect(result.contextTokens).toBe(0)
 		})
 	})
 

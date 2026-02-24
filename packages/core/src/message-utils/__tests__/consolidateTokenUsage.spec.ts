@@ -80,7 +80,7 @@ describe("consolidateTokenUsage", () => {
 			expect(result.contextTokens).toBe(300) // 200 + 100
 		})
 
-		it("should handle condense_context messages for context tokens", () => {
+		it("should prioritize condense_context messages for context tokens", () => {
 			const messages: ClineMessage[] = [
 				createApiReqMessage(1000, { tokensIn: 100, tokensOut: 50 }),
 				{
@@ -95,6 +95,70 @@ describe("consolidateTokenUsage", () => {
 
 			expect(result.contextTokens).toBe(5000)
 			expect(result.totalCost).toBeCloseTo(0.05)
+		})
+
+		it("should use api_req_started when condense_context has zero tokens", () => {
+			const messages: ClineMessage[] = [
+				createApiReqMessage(1000, { tokensIn: 100, tokensOut: 50 }),
+				{
+					ts: 1001,
+					type: "say",
+					say: "condense_context",
+					contextCondense: { newContextTokens: 0, cost: 0.05 },
+				} as ClineMessage,
+			]
+
+			const result = consolidateTokenUsage(messages)
+
+			// Should fall back to api_req_started when condense has 0 tokens
+			expect(result.contextTokens).toBe(150) // 100 + 50
+		})
+
+		it("should skip api_req_started messages with zero tokens", () => {
+			const messages: ClineMessage[] = [
+				createApiReqMessage(1000, { tokensIn: 0, tokensOut: 0 }),
+				createApiReqMessage(1001, { tokensIn: 200, tokensOut: 100 }),
+			]
+
+			const result = consolidateTokenUsage(messages)
+
+			// Should skip the first message with zero tokens
+			expect(result.contextTokens).toBe(300) // 200 + 100
+		})
+
+		it("should return 0 when all messages have zero tokens", () => {
+			const messages: ClineMessage[] = [
+				createApiReqMessage(1000, { tokensIn: 0, tokensOut: 0 }),
+				createApiReqMessage(1001, { tokensIn: 0, tokensOut: 0 }),
+			]
+
+			const result = consolidateTokenUsage(messages)
+
+			expect(result.contextTokens).toBe(0)
+		})
+
+		it("should handle api_req_started messages with partial data (only tokensIn)", () => {
+			const messages: ClineMessage[] = [
+				createApiReqMessage(1000, { tokensIn: 100 }),
+				createApiReqMessage(1001, { tokensIn: 200 }),
+			]
+
+			const result = consolidateTokenUsage(messages)
+
+			// Should use the last message with non-zero tokens
+			expect(result.contextTokens).toBe(200) // 200 + 0
+		})
+
+		it("should handle api_req_started messages with partial data (only tokensOut)", () => {
+			const messages: ClineMessage[] = [
+				createApiReqMessage(1000, { tokensOut: 50 }),
+				createApiReqMessage(1001, { tokensOut: 100 }),
+			]
+
+			const result = consolidateTokenUsage(messages)
+
+			// Should use the last message with non-zero tokens
+			expect(result.contextTokens).toBe(100) // 0 + 100
 		})
 	})
 

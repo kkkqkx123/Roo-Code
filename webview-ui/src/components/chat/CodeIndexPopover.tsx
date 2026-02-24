@@ -143,6 +143,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 	const [open, setOpen] = useState(false)
 	const [isAdvancedSettingsOpen, setIsAdvancedSettingsOpen] = useState(false)
 	const [isSetupSettingsOpen, setIsSetupSettingsOpen] = useState(false)
+	const [isVectorStorageOpen, setIsVectorStorageOpen] = useState(false)
 
 	const [indexingStatus, setIndexingStatus] = useState<IndexingStatus>(externalIndexingStatus)
 
@@ -494,8 +495,30 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 			}
 
 			// Include all other fields, including empty strings (which clear secrets)
-			settingsToSave[key] = value
+			// For model dimension, ensure it's a proper number or undefined
+			if (key === "codebaseIndexEmbedderModelDimension") {
+				// Debug logging to track dimension value
+				console.log("[CodeIndexPopover] Saving dimension field:", {
+					key,
+					value,
+					valueType: typeof value,
+					isNaN: isNaN(value),
+					condition: value && !isNaN(value),
+					result: value && !isNaN(value) ? Number(value) : undefined,
+				})
+				settingsToSave[key] = value && !isNaN(value) ? Number(value) : undefined
+			} else {
+				settingsToSave[key] = value
+			}
 		}
+
+		// Debug logging to see final settings being sent
+		console.log("[CodeIndexPopover] Final settings to save:", {
+			dimension: settingsToSave.codebaseIndexEmbedderModelDimension,
+			dimensionType: typeof settingsToSave.codebaseIndexEmbedderModelDimension,
+			provider: currentSettings.codebaseIndexEmbedderProvider,
+			modelId: currentSettings.codebaseIndexEmbedderModelId,
+		})
 
 		// Always include codebaseIndexEnabled to ensure it's persisted
 		settingsToSave.codebaseIndexEnabled = currentSettings.codebaseIndexEnabled
@@ -1101,17 +1124,17 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 						{/* Vector Storage Configuration Disclosure */}
 						<div className="mt-4">
 							<button
-								onClick={() => setIsAdvancedSettingsOpen(!isAdvancedSettingsOpen)}
+								onClick={() => setIsVectorStorageOpen(!isVectorStorageOpen)}
 								className="flex items-center text-xs text-vscode-foreground hover:text-vscode-textLink-foreground focus:outline-none"
-								aria-expanded={isAdvancedSettingsOpen}>
+								aria-expanded={isVectorStorageOpen}>
 								<span
-									className={`codicon codicon-${isAdvancedSettingsOpen ? "chevron-down" : "chevron-right"} mr-1`}></span>
+									className={`codicon codicon-${isVectorStorageOpen ? "chevron-down" : "chevron-right"} mr-1`}></span>
 								<span className="text-base font-semibold">
 									{t("settings:codeIndex.vectorStorageConfigLabel")}
 								</span>
 							</button>
 
-							{isAdvancedSettingsOpen && (
+							{isVectorStorageOpen && (
 								<div className="mt-4 space-y-4">
 									{/* Vector Storage Mode */}
 									<div className="space-y-2">
@@ -1251,54 +1274,6 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 							)}
 						</div>
 
-						{/* Auto-enable default */}
-						{currentSettings.codebaseIndexEnabled && (
-							<div className="space-y-2 pt-4 pb-2">
-								<div className="flex items-start gap-2">
-									<input
-										type="checkbox"
-										id="manual-indexing-only-toggle"
-										checked={currentSettings.manualIndexingOnly ?? false}
-										onChange={(e) =>
-											updateSetting("manualIndexingOnly", e.target.checked)
-										}
-										className="accent-vscode-focusBorder mt-1"
-									/>
-									<div className="flex-1">
-										<label
-											htmlFor="manual-indexing-only-toggle"
-											className="text-xs text-vscode-foreground cursor-pointer font-medium">
-											{t("settings:codeIndex.manualIndexingOnlyLabel")}
-										</label>
-										<p className="text-xs text-vscode-descriptionForeground mt-0.5">
-											{t("settings:codeIndex.manualIndexingOnlyDescription")}
-										</p>
-									</div>
-								</div>
-
-								<div className="flex items-start gap-2">
-									<input
-										type="checkbox"
-										id="auto-update-index-toggle"
-										checked={currentSettings.autoUpdateIndex ?? true}
-										onChange={(e) =>
-											updateSetting("autoUpdateIndex", e.target.checked)
-										}
-										className="accent-vscode-focusBorder mt-1"
-									/>
-									<div className="flex-1">
-										<label
-											htmlFor="auto-update-index-toggle"
-											className="text-xs text-vscode-foreground cursor-pointer font-medium">
-											{t("settings:codeIndex.autoUpdateIndexLabel")}
-										</label>
-										<p className="text-xs text-vscode-descriptionForeground mt-0.5">
-											{t("settings:codeIndex.autoUpdateIndexDescription")}
-										</p>
-									</div>
-								</div>
-							</div>
-						)}
 
 						{/* Action Buttons */}
 						<div className="flex items-center justify-between gap-2 pt-6">
