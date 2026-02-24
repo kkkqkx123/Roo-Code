@@ -36,7 +36,7 @@ const DEFAULT_CONFIG: DeadLoopDetectorConfig = {
 	minRepeatUnitLength: 2,
 	maxRepeatUnitLength: 50,
 	minRepeatCount: 4,
-	minPeriodElements: 6,
+	minPeriodElements: 4,  // 降低从6到4，使检测更敏感
 	maxPeriodLength: 50,
 }
 
@@ -64,8 +64,6 @@ export class DeadLoopDetector {
 	public detect(reasoningMessage: string): DeadLoopDetectionResult {
 		const length = reasoningMessage.length
 
-		// 按顺序检查每个检查点，只有当达到该检查点且未检查过时才执行检测
-		
 		// 第1检查点：2000字符 - 短序列循环检测
 		if (length >= 2000 && !this.checkedCheckpoints.has(2000)) {
 			this.checkedCheckpoints.add(2000)
@@ -108,6 +106,7 @@ export class DeadLoopDetector {
 
 	/**
 	 * 通用周期检测方法
+	 * 专注于检测尾部的周期循环（死循环特征）
 	 * @param elements 元素列表（可以是块列表或行列表）
 	 * @returns 是否检测到周期循环
 	 */
@@ -117,22 +116,28 @@ export class DeadLoopDetector {
 		}
 
 		const maxPeriodLength = Math.min(this.config.maxPeriodLength, Math.floor(elements.length / 2))
+		const minRequiredMatches = this.config.minPeriodElements
 
 		// 遍历可能的周期长度
 		for (let periodLength = 1; periodLength <= maxPeriodLength; periodLength++) {
-			let consecutiveMatches = 0
+			// 从列表末尾开始，检查是否有足够长的周期循环
+			// 我们期望至少看到minRequiredMatches个完整周期
+			let matchCount = 0
+			let checkPos = elements.length - 1
 
-			// 从列表末尾向前检查
-			for (let i = elements.length - 1; i >= periodLength; i--) {
-				if (elements[i] === elements[i - periodLength]) {
-					consecutiveMatches++
+			// 从末尾向前检查周期模式
+			while (checkPos >= periodLength && matchCount < minRequiredMatches) {
+				if (elements[checkPos] === elements[checkPos - periodLength]) {
+					matchCount++
+					checkPos -= periodLength
 				} else {
+					// 如果匹配中断，检查是否已经检测到足够的周期
 					break
 				}
 			}
 
 			// 如果连续重复的数量达到阈值，则判定为周期循环
-			if (consecutiveMatches >= this.config.minPeriodElements) {
+			if (matchCount >= minRequiredMatches) {
 				return { detected: true, periodLength }
 			}
 		}
@@ -153,51 +158,37 @@ export class DeadLoopDetector {
 		const start = Math.max(0, length - this.config.shortSequenceWindowSize)
 		const textFragment = reasoningMessage.slice(start)
 
-		// 使用基于扫描的单遍算法检测重复模式
-		// 算法：对于每个可能的重复单元长度，检查是否连续重复
+		// 使用基于扫描的算法检测重复模式
 		const fragmentLength = textFragment.length
-		const maxUnitLength = Math.min(this.config.maxRepeatUnitLength, Math.floor(fragmentLength / this.config.minRepeatCount))
+		// 只检测短重复单元（最多6字符），避免检测到完整的段落块或短句子
+		const maxShortUnitLength = Math.min(6, this.config.minRepeatUnitLength + 4, Math.floor(fragmentLength / this.config.minRepeatCount))
 
 		// 遍历可能的重复单元长度（从短到长，优先检测短重复）
-		for (let unitLength = this.config.minRepeatUnitLength; unitLength <= maxUnitLength; unitLength++) {
-			// 检查是否存在连续重复
-			let consecutiveRepeats = 0
-			let repeatUnit: string | null = null
-
-			// 从后向前扫描，检测连续重复
-			for (let i = fragmentLength - unitLength; i >= unitLength; i -= unitLength) {
-				const currentUnit = textFragment.slice(i, i + unitLength)
-				const previousUnit = textFragment.slice(i - unitLength, i)
-
-				if (currentUnit === previousUnit) {
-					if (repeatUnit === null) {
-						repeatUnit = currentUnit
-					}
-					consecutiveRepeats++
-				} else {
-					// 如果重复次数达到阈值，返回结果
-					if (consecutiveRepeats >= this.config.minRepeatCount - 1) {
-						// 验证重复单元是否有效（包含中文或混合内容）
-						if (repeatUnit && this.isValidRepeatUnit(repeatUnit)) {
-							return {
-								detected: true,
-								type: "shortSequenceLoop",
-								details: `检测到短序列循环：重复单元 "${repeatUnit}"`,
-							}
-						}
-					}
-					// 重置计数器
-					consecutiveRepeats = 0
-					repeatUnit = null
+		for (let unitLength = this.config.minRepeatUnitLength; unitLength <= maxShortUnitLength; unitLength++) {
+			// 对每个可能的起始位置，检查是否从该位置开始有连续重复
+			for (let startPos = 0; startPos < fragmentLength - unitLength * this.config.minRepeatCount; startPos++) {
+				const unit = textFragment.slice(startPos, startPos + unitLength)
+				
+				// 跳过无效的重复单元
+				if (!this.isValidRepeatUnit(unit)) {
+					continue
 				}
-			}
 
-			// 检查最后一次重复
-			if (consecutiveRepeats >= this.config.minRepeatCount - 1 && repeatUnit && this.isValidRepeatUnit(repeatUnit)) {
-				return {
-					detected: true,
-					type: "shortSequenceLoop",
-					details: `检测到短序列循环：重复单元 "${repeatUnit}"`,
+				// 从startPos开始，计算连续重复的次数
+				let repeatCount = 0
+				let pos = startPos
+				while (pos + unitLength <= fragmentLength && textFragment.slice(pos, pos + unitLength) === unit) {
+					repeatCount++
+					pos += unitLength
+				}
+
+				// 如果重复次数达到阈值，返回结果
+				if (repeatCount >= this.config.minRepeatCount) {
+					return {
+						detected: true,
+						type: "shortSequenceLoop",
+						details: `检测到短序列循环：重复单元 "${unit}"`,
+					}
 				}
 			}
 		}
