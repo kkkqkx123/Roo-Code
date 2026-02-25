@@ -1,4 +1,4 @@
-# AGENTS.md
+# QWEN.md
 
 ## Build, Lint, and Test Commands
 
@@ -25,7 +25,7 @@ Monorepo using pnpm workspaces (Node 22.14.0, pnpm 10.8.1):
 - **Error handling**: Try-catch with typed errors, console for debug (extends resolveVerbosity)
 - **Testing**: Use vi.mock() for dependencies, spyOn for spying, expect() assertions, beforeEach hooks for setup
 
-## Command Executio
+## Command Execution Guideline
 
 Your default cli terminal is cmd. If you want to use powershell, Always add `pwsh -c` as prefix. Bash is not accessible.
 Never use bash syntax like `grep`, `head` when call execution-command tool.

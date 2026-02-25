@@ -16,8 +16,8 @@ const HistoryPreview = () => {
 		vscode.postMessage({ type: "switchTab", tab: "history" })
 	}
 
-	// Show up to 4 groups (parent + subtasks count as 1 block)
-	const displayGroups = groups.slice(0, 4)
+	// Show up to 8 groups (parent + subtasks count as 1 block)
+	const displayGroups = groups.slice(0, 8)
 
 	return (
 		<div className="flex flex-col gap-1">

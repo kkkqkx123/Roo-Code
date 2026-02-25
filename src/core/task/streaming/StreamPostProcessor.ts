@@ -194,19 +194,19 @@ export class StreamPostProcessor {
 				const costResult =
 					apiProtocol === "anthropic"
 						? calculateApiCostAnthropic(
-								modelInfo,
-								inputTokensEstimate,
-								totalTokens,
-								result.cacheWriteTokens,
-								result.cacheReadTokens,
-							)
+							modelInfo,
+							inputTokensEstimate,
+							totalTokens,
+							result.cacheWriteTokens,
+							result.cacheReadTokens,
+						)
 						: calculateApiCostOpenAI(
-								modelInfo,
-								inputTokensEstimate,
-								totalTokens,
-								result.cacheWriteTokens,
-								result.cacheReadTokens,
-							)
+							modelInfo,
+							inputTokensEstimate,
+							totalTokens,
+							result.cacheWriteTokens,
+							result.cacheReadTokens,
+						)
 
 				// Update usage data
 				await this.callbacks.updateUsageData({
@@ -235,7 +235,7 @@ export class StreamPostProcessor {
 
 				if (finalToolUse) {
 					// Store the tool call ID
-					;(finalToolUse as any).id = event.id
+					; (finalToolUse as any).id = event.id
 
 					// Replace partial with final
 					if (toolUseIndex !== undefined) {
@@ -262,7 +262,7 @@ export class StreamPostProcessor {
 					const existingToolUse = await this.callbacks.getAssistantMessageContent(toolUseIndex)
 					if (existingToolUse && existingToolUse.type === "tool_use") {
 						existingToolUse.partial = false
-						;(existingToolUse as any).id = event.id
+							; (existingToolUse as any).id = event.id
 						await this.callbacks.updateAssistantMessageContent(toolUseIndex, existingToolUse)
 					}
 
@@ -432,6 +432,13 @@ export class StreamPostProcessor {
 				hasToolUses: hasToolUsesInContent,
 			})
 
+			// CRITICAL: Wait for userMessageContentReady before processing tool use
+			// presentAssistantMessage executes tools and sets userMessageContentReady to true
+			// when all tool results are collected.
+			// MUST be called BEFORE handleNoToolUse() because handleNoToolUse() doesn't set
+			// userMessageContentReady, which would cause a deadlock.
+			await this.callbacks.waitForUserMessageContentReady()
+
 			// Handle tool use or no tool use
 			const didToolUse = hasToolUses(result.assistantMessageContent)
 
@@ -440,12 +447,6 @@ export class StreamPostProcessor {
 			} else {
 				await this.callbacks.resetConsecutiveNoToolUseCount()
 			}
-
-			// CRITICAL: Wait for userMessageContentReady before pushing to stack
-			// This mirrors the old code: await pWaitFor(() => this.userMessageContentReady)
-			// presentAssistantMessage executes tools and sets userMessageContentReady to true
-			// when all tool results are collected.
-			await this.callbacks.waitForUserMessageContentReady()
 
 			// Push to stack if there's content OR if we're paused waiting for a subtask
 			// This triggers the next iteration of the request loop
