@@ -207,7 +207,14 @@
 		"vectorStorageThresholdSmall": "小阈值",
 		"vectorStorageThresholdMedium": "中阈值",
 		"vectorStorageThresholdLarge": "大阈值",
-		"vectorStorageThresholdsDescription": "设置自动模式下切换不同预设的向量数量阈值。"
+		"vectorStorageThresholdsDescription": "设置自动模式下切换不同预设的向量数量阈值。",
+		"allowedProjectsLabel": "允许的项目",
+		"allowedProjectsDescription": "仅为此列表中的项目建立索引。如果为空，则允许所有项目。",
+		"allowedProjectsEmpty": "允许列表中没有项目。允许所有项目。",
+		"addCurrentProjectButton": "添加当前项目",
+		"addCurrentProjectTooltip": "将当前工作区项目添加到允许列表",
+		"removeCurrentProjectButton": "移除当前项目",
+		"removeCurrentProjectTooltip": "从允许列表中移除当前工作区项目"
 	},
 	"autoApprove": {
 		"toggleShortcut": "您可以<SettingsLink>在 IDE 首选项中</SettingsLink>为此设置配置全局快捷方式。",

@@ -62,6 +62,9 @@ export const codebaseIndexConfigSchema = z.object({
 	// autoUpdateIndex: If true, index is automatically updated based on file changes
 	// If false, index is only built at startup and not updated via file watching
 	autoUpdateIndex: z.boolean().optional(),
+	// Allowed projects list: If set, indexing only runs for projects in this list
+	// Empty array or undefined means all projects are allowed
+	codebaseIndexAllowedProjects: z.array(z.string()).optional(),
 	// Vector storage configuration
 	vectorStorageMode: vectorStorageModeSchema.optional(),
 	vectorStoragePreset: vectorStoragePresetSchema.optional(),

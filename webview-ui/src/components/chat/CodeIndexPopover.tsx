@@ -82,6 +82,7 @@ interface LocalCodeIndexSettings {
 	// Indexing behavior configuration
 	manualIndexingOnly?: boolean
 	autoUpdateIndex?: boolean
+	codebaseIndexAllowedProjects?: string[]
 }
 
 // Validation schema for codebase index settings
@@ -181,6 +182,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 		codebaseIndexGeminiApiKey: "",
 		manualIndexingOnly: false,
 		autoUpdateIndex: true,
+		codebaseIndexAllowedProjects: [],
 	})
 
 	// Initial settings state - stores the settings when popover opens
@@ -224,6 +226,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 				codebaseIndexGeminiApiKey: "",
 				manualIndexingOnly: codebaseIndexConfig.manualIndexingOnly ?? false,
 				autoUpdateIndex: codebaseIndexConfig.autoUpdateIndex ?? true,
+				codebaseIndexAllowedProjects: codebaseIndexConfig.codebaseIndexAllowedProjects ?? [],
 			}
 			setInitialSettings(settings)
 			setCurrentSettings(settings)
@@ -1231,6 +1234,83 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 
 							{isIndexingBehaviorOpen && (
 								<div className="mt-4 space-y-3">
+									{/* Allowed Projects List */}
+									<div className="space-y-2">
+										<label className="text-sm font-medium">
+											{t("settings:codeIndex.allowedProjectsLabel")}
+										</label>
+										<p className="text-xs text-vscode-descriptionForeground">
+											{t("settings:codeIndex.allowedProjectsDescription")}
+										</p>
+
+										{/* Quick Add/Remove Current Project Button */}
+										<div className="flex gap-2 mb-2">
+											{cwd && (
+												currentSettings.codebaseIndexAllowedProjects?.includes(cwd) ? (
+													<Button
+														variant="secondary"
+														size="sm"
+														onClick={() => {
+															const newProjects = (
+																currentSettings.codebaseIndexAllowedProjects ?? []
+															).filter((p) => p !== cwd)
+															updateSetting("codebaseIndexAllowedProjects", newProjects)
+														}}
+														title={t("settings:codeIndex.removeCurrentProjectTooltip")}>
+														{t("settings:codeIndex.removeCurrentProjectButton")}
+													</Button>
+												) : (
+													<Button
+														size="sm"
+														onClick={() => {
+															const newProjects = [
+																...(currentSettings.codebaseIndexAllowedProjects ?? []),
+																cwd,
+															]
+															updateSetting("codebaseIndexAllowedProjects", newProjects)
+														}}
+														title={t("settings:codeIndex.addCurrentProjectTooltip")}>
+														{t("settings:codeIndex.addCurrentProjectButton")}
+													</Button>
+												)
+											)}
+										</div>
+
+										{/* Project List */}
+										<div className="space-y-1 max-h-48 overflow-y-auto border border-vscode-dropdown-border rounded-md p-2 bg-vscode-input-background">
+											{(currentSettings.codebaseIndexAllowedProjects ?? []).length === 0 ? (
+												<p className="text-xs text-vscode-descriptionForeground italic p-2">
+													{t("settings:codeIndex.allowedProjectsEmpty")}
+												</p>
+											) : (
+												(currentSettings.codebaseIndexAllowedProjects ?? []).map(
+													(projectPath, index) => (
+														<div
+															key={index}
+															className="flex items-center justify-between gap-2 p-2 bg-vscode-button-background hover:bg-vscode-list-hoverBackground rounded-md"
+															title={projectPath}>
+															<span className="text-sm text-vscode-foreground truncate flex-1">
+																{projectPath}
+															</span>
+															<Button
+																variant="ghost"
+																size="sm"
+																className="text-vscode-foreground hover:text-vscode-textLink-foreground shrink-0"
+																onClick={() => {
+																	const newProjects = (
+																		currentSettings.codebaseIndexAllowedProjects ?? []
+																	).filter((_, i) => i !== index)
+																	updateSetting("codebaseIndexAllowedProjects", newProjects)
+																}}>
+																<span className="codicon codicon-close text-xs" />
+															</Button>
+														</div>
+													),
+												)
+											)}
+										</div>
+									</div>
+
 									<div className="flex items-start gap-2">
 										<Checkbox
 											id="manualIndexingOnly"

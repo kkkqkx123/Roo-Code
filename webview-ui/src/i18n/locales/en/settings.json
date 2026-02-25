@@ -277,7 +277,14 @@
 		"vectorStorageThresholdSmall": "Small Threshold",
 		"vectorStorageThresholdMedium": "Medium Threshold",
 		"vectorStorageThresholdLarge": "Large Threshold",
-		"vectorStorageThresholdsDescription": "Set the vector count thresholds for switching between different presets in Auto mode."
+		"vectorStorageThresholdsDescription": "Set the vector count thresholds for switching between different presets in Auto mode.",
+		"allowedProjectsLabel": "Allowed Projects",
+		"allowedProjectsDescription": "Only index projects in this list. If empty, all projects are allowed.",
+		"allowedProjectsEmpty": "No projects in allowed list. All projects are allowed.",
+		"addCurrentProjectButton": "Add Current Project",
+		"addCurrentProjectTooltip": "Add the current workspace project to the allowed list",
+		"removeCurrentProjectButton": "Remove Current Project",
+		"removeCurrentProjectTooltip": "Remove the current workspace project from the allowed list"
 	},
 	"autoApprove": {
 		"description": "Run these actions without asking for permission. Only enable for actions you fully trust and if you understand the security risks.",

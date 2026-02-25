@@ -116,6 +116,19 @@ export class CodeIndexOrchestrator {
 		}
 		console.log("[CodeIndexOrchestrator] Configuration check passed")
 
+		// Check if current workspace is in the allowed projects list
+		if (!this.configManager.isProjectAllowed(this.workspacePath)) {
+			this.stateManager.setSystemState(
+				"Standby",
+				`Project not in allowed list. Add "${this.workspacePath}" to allowed projects to enable indexing.`,
+			)
+			console.warn(
+				`[CodeIndexOrchestrator] Start rejected: Workspace "${this.workspacePath}" is not in the allowed projects list.`,
+			)
+			return
+		}
+		console.log("[CodeIndexOrchestrator] Project allowlist check passed")
+
 		if (
 			this._isProcessing ||
 			(this.stateManager.state !== "Standby" &&

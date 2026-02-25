@@ -1978,6 +1978,7 @@ export const webviewMessageHandler = async (
 					// Indexing behavior settings
 					manualIndexingOnly: settings.manualIndexingOnly,
 					autoUpdateIndex: settings.autoUpdateIndex,
+					codebaseIndexAllowedProjects: settings.codebaseIndexAllowedProjects,
 					// Vector storage configuration
 					vectorStorageMode: settings.vectorStorageMode,
 					vectorStoragePreset: settings.vectorStoragePreset,

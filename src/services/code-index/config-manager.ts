@@ -25,6 +25,8 @@ export class CodeIndexConfigManager {
 	private _vectorStorageConfig: VectorStorageConfig = DEFAULT_VECTOR_STORAGE_CONFIG
 	// Store the full config object for accessing new fields
 	private codebaseIndexConfig?: any
+	// Allowed projects list
+	private allowedProjects?: string[]
 
 	constructor(private readonly contextProxy: ContextProxy) {
 		// Initialize with current configuration to avoid false restart triggers
@@ -73,7 +75,11 @@ export class CodeIndexConfigManager {
 			vectorStorageMode,
 			vectorStoragePreset,
 			vectorStorageThresholds,
+			codebaseIndexAllowedProjects,
 		} = codebaseIndexConfig
+
+		// Store allowed projects list
+		this.allowedProjects = codebaseIndexAllowedProjects
 
 		const openAiKey = this.contextProxy?.getSecret("codeIndexOpenAiKey") ?? ""
 		const qdrantApiKey = this.contextProxy?.getSecret("codeIndexQdrantApiKey") ?? ""
@@ -531,9 +537,29 @@ export class CodeIndexConfigManager {
 	}
 
 	/**
-		* Gets the current vector storage configuration
-		*/
+	 * Gets the current vector storage configuration
+	 */
 	public get vectorStorageConfig(): VectorStorageConfig {
 		return this._vectorStorageConfig
+	}
+
+	/**
+	 * Checks if a workspace path is in the allowed projects list.
+	 * Returns true if the list is empty/undefined (all projects allowed) or if the path is in the list.
+	 * @param workspacePath - The workspace path to check
+	 */
+	public isProjectAllowed(workspacePath: string): boolean {
+		// If no allowed projects list or empty list, all projects are allowed
+		if (!this.allowedProjects || this.allowedProjects.length === 0) {
+			return true
+		}
+		return this.allowedProjects.includes(workspacePath)
+	}
+
+	/**
+	 * Gets the allowed projects list
+	 */
+	public getAllowedProjects(): string[] {
+		return this.allowedProjects ?? []
 	}
 }
