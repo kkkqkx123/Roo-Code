@@ -8,7 +8,7 @@ import { useCopyToClipboard } from "@/utils/clipboard"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 
 import { DeleteTaskDialog } from "../history/DeleteTaskDialog"
-import { CopyIcon, DownloadIcon, Trash2Icon, FileJsonIcon, MessageSquareCodeIcon } from "lucide-react"
+import { CopyIcon, DownloadIcon, Trash2Icon, FileJsonIcon, MessageSquareCodeIcon, FileTextIcon } from "lucide-react"
 import { LucideIconButton } from "./LucideIconButton"
 
 interface TaskActionsProps {
@@ -28,6 +28,11 @@ export const TaskActions = ({ item, buttonsDisabled }: TaskActionsProps) => {
 				icon={DownloadIcon}
 				title={t("chat:task.export")}
 				onClick={() => vscode.postMessage({ type: "exportCurrentTask" })}
+			/>
+			<LucideIconButton
+				icon={FileTextIcon}
+				title={t("chat:task.exportContext")}
+				onClick={() => vscode.postMessage({ type: "exportCurrentTaskContext" })}
 			/>
 
 			{item?.task && (

@@ -709,6 +709,12 @@ export const webviewMessageHandler = async (
 				provider.exportTaskWithId(currentTaskId)
 			}
 			break
+		case "exportCurrentTaskContext":
+			const currentTaskIdForContext = provider.getCurrentTask()?.taskId
+			if (currentTaskIdForContext) {
+				provider.exportCurrentTaskContext(currentTaskIdForContext)
+			}
+			break
 		case "shareCurrentTask":
 			vscode.window.showInformationMessage("Task sharing is not available")
 			break

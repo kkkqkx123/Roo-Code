@@ -13,6 +13,7 @@
 		"contextWindow": "上下文长度",
 		"closeAndStart": "关闭任务并开始新任务",
 		"export": "导出任务历史",
+		"exportContext": "导出当前上下文",
 		"delete": "删除任务（Shift + 点击跳过确认）",
 		"share": "分享任务",
 		"condenseContext": "智能压缩上下文",

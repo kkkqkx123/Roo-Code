@@ -85,6 +85,7 @@ import { webviewMessageHandler } from "./webviewMessageHandler"
 import type { ClineMessage, TodoItem } from "@coder/types"
 import { readApiMessages, saveApiMessages, saveTaskMessages, TaskHistoryStore } from "../task-persistence"
 import { readTaskMessages } from "../task-persistence/taskMessages"
+import { getEffectiveApiHistory } from "../condense"
 import { getNonce } from "./getNonce"
 import { getUri } from "./getUri"
 import { REQUESTY_BASE_URL } from "../../shared/utils/requesty"
@@ -1682,6 +1683,29 @@ export class ClineProvider
 			fallbackDir: path.join(os.homedir(), "Downloads"),
 		})
 		const saveUri = await downloadTask(historyItem.ts, apiConversationHistory, defaultUri)
+
+		if (saveUri) {
+			await saveLastExportPath(this.contextProxy, "lastTaskExportPath", saveUri)
+		}
+	}
+
+	async exportCurrentTaskContext(id: string) {
+		const { historyItem, apiConversationHistory } = await this.getTaskWithId(id)
+		// Filter to get only the effective (visible) context
+		const effectiveHistory = getEffectiveApiHistory(apiConversationHistory)
+		// Convert ApiMessage[] to MessageParam[] by filtering out system messages and extra fields
+		const messageParams: Anthropic.MessageParam[] = effectiveHistory
+			.filter((msg) => msg.role !== "system")
+			.map((msg) => {
+				const { role, content } = msg
+				return { role, content } as Anthropic.MessageParam
+			})
+		const fileName = getTaskFileName(historyItem.ts)
+		const defaultUri = await resolveDefaultSaveUri(this.contextProxy, "lastTaskExportPath", fileName, {
+			useWorkspace: false,
+			fallbackDir: path.join(os.homedir(), "Downloads"),
+		})
+		const saveUri = await downloadTask(historyItem.ts, messageParams, defaultUri)
 
 		if (saveUri) {
 			await saveLastExportPath(this.contextProxy, "lastTaskExportPath", saveUri)

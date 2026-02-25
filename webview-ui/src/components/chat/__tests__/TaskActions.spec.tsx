@@ -34,6 +34,7 @@ vi.mock("react-i18next", () => ({
 			const translations: Record<string, string> = {
 				"chat:task.share": "Share task",
 				"chat:task.export": "Export task history",
+				"chat:task.exportContext": "Export current context",
 				"chat:task.delete": "Delete Task (Shift + Click to skip confirmation)",
 				"chat:task.shareWithOrganization": "Share with Organization",
 				"chat:task.shareWithOrganizationDescription": "Only members of your organization can access",
@@ -108,6 +109,24 @@ describe("TaskActions", () => {
 			})
 		})
 
+		it("renders export context button", () => {
+			render(<TaskActions item={mockItem} buttonsDisabled={false} />)
+
+			const exportContextButton = screen.getByLabelText("Export current context")
+			expect(exportContextButton).toBeInTheDocument()
+		})
+
+		it("sends exportCurrentTaskContext message when export context button is clicked", () => {
+			render(<TaskActions item={mockItem} buttonsDisabled={false} />)
+
+			const exportContextButton = screen.getByLabelText("Export current context")
+			fireEvent.click(exportContextButton)
+
+			expect(mockPostMessage).toHaveBeenCalledWith({
+				type: "exportCurrentTaskContext",
+			})
+		})
+
 		it("renders delete button when item has size", () => {
 			render(<TaskActions item={mockItem} buttonsDisabled={false} />)
 
@@ -130,10 +149,12 @@ describe("TaskActions", () => {
 			const { rerender } = render(<TaskActions item={mockItem} buttonsDisabled={false} />)
 
 			let exportButton = screen.getByLabelText("Export task history")
+			let exportContextButton = screen.getByLabelText("Export current context")
 			let copyButton = screen.getByLabelText("Copy")
 			let deleteButton = screen.getByLabelText("Delete Task (Shift + Click to skip confirmation)")
 
 			expect(exportButton).not.toBeDisabled()
+			expect(exportContextButton).not.toBeDisabled()
 			expect(copyButton).not.toBeDisabled()
 			expect(deleteButton).not.toBeDisabled()
 
@@ -141,11 +162,13 @@ describe("TaskActions", () => {
 			rerender(<TaskActions item={mockItem} buttonsDisabled={true} />)
 
 			exportButton = screen.getByLabelText("Export task history")
+			exportContextButton = screen.getByLabelText("Export current context")
 			copyButton = screen.getByLabelText("Copy")
 			deleteButton = screen.getByLabelText("Delete Task (Shift + Click to skip confirmation)")
 
 			// Export and copy remain enabled
 			expect(exportButton).not.toBeDisabled()
+			expect(exportContextButton).not.toBeDisabled()
 			expect(copyButton).not.toBeDisabled()
 			// Delete button is disabled
 			expect(deleteButton).toBeDisabled()

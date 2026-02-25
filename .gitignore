@@ -17,10 +17,6 @@ pnpm-lock.yaml
 bin/
 *.vsix
 
-# Local prompts and rules
-/local-prompts
-AGENTS.local.md
-
 # Test environment
 .test_env
 .vscode-test/
@@ -51,8 +47,5 @@ logs
 
 # Qdrant
 qdrant_storage/
-
-# Architect plans
-plans/
 
 roo-cli-*.tar.gz*
