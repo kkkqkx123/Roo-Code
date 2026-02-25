@@ -2,10 +2,11 @@ import React, { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, us
 import { useEvent } from "react-use"
 import DynamicTextArea from "react-textarea-autosize"
 import { VolumeX, Image, WandSparkles, SendHorizontal, X, ListEnd, Square } from "lucide-react"
+import { unstable_batchedUpdates } from "react-dom"
 
 import type { ExtensionMessage } from "@coder/types"
 
-import { mentionRegex, mentionRegexGlobal, commandRegexGlobal, unescapeSpaces } from "@coder/context-mentions"
+import { mentionRegex, unescapeSpaces } from "@coder/context-mentions"
 import { WebviewMessage } from "@coder/WebviewMessage"
 import { Mode, getAllModes } from "@coder/modes"
 
@@ -213,7 +214,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const [searchQuery, setSearchQuery] = useState("")
 		const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 		const [isMouseDownOnMenu, setIsMouseDownOnMenu] = useState(false)
-		const highlightLayerRef = useRef<HTMLDivElement>(null)
 		const [selectedMenuIndex, setSelectedMenuIndex] = useState(-1)
 		const [selectedType, setSelectedType] = useState<ContextMenuOptionType | null>(null)
 		const [justDeletedSpaceAfterMention, setJustDeletedSpaceAfterMention] = useState(false)
@@ -383,9 +383,10 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					// Determine if this is a slash command selection
 					const isSlashCommand = type === ContextMenuOptionType.Mode || type === ContextMenuOptionType.Command
 
+					const pos = cursorPositionRef.current
 					const { newValue, mentionIndex } = insertMention(
 						textAreaRef.current.value,
-						cursorPosition,
+						pos,
 						insertValue,
 						isSlashCommand,
 					)
@@ -394,6 +395,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					const newCursorPosition = newValue.indexOf(" ", mentionIndex + insertValue.length) + 1
 					setCursorPosition(newCursorPosition)
 					setIntendedCursorPosition(newCursorPosition)
+					cursorPositionRef.current = newCursorPosition
 
 					// Scroll to cursor.
 					setTimeout(() => {
@@ -405,7 +407,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				}
 			},
 			// eslint-disable-next-line react-hooks/exhaustive-deps
-			[setInputValue, cursorPosition],
+			[setInputValue],
 		)
 
 		const handleKeyDown = useCallback(
@@ -507,8 +509,10 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				}
 
 				if (event.key === "Backspace" && !isComposing) {
-					const charBeforeCursor = inputValue[cursorPosition - 1]
-					const charAfterCursor = inputValue[cursorPosition + 1]
+					// Use ref for fast cursor position access without re-renders
+					const pos = cursorPositionRef.current
+					const charBeforeCursor = inputValue[pos - 1]
+					const charAfterCursor = inputValue[pos + 1]
 
 					const charBeforeIsWhitespace =
 						charBeforeCursor === " " || charBeforeCursor === "\n" || charBeforeCursor === "\r\n"
@@ -520,9 +524,9 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					if (
 						charBeforeIsWhitespace &&
 						// "$" is added to ensure the match occurs at the end of the string.
-						inputValue.slice(0, cursorPosition - 1).match(new RegExp(mentionRegex.source + "$"))
+						inputValue.slice(0, pos - 1).match(new RegExp(mentionRegex.source + "$"))
 					) {
-						const newCursorPosition = cursorPosition - 1
+						const newCursorPosition = pos - 1
 						// If mention is followed by another word, then instead
 						// of deleting the space separating them we just move
 						// the cursor to the end of the mention.
@@ -530,17 +534,19 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							event.preventDefault()
 							textAreaRef.current?.setSelectionRange(newCursorPosition, newCursorPosition)
 							setCursorPosition(newCursorPosition)
+							cursorPositionRef.current = newCursorPosition
 						}
 
 						setCursorPosition(newCursorPosition)
 						setJustDeletedSpaceAfterMention(true)
 					} else if (justDeletedSpaceAfterMention) {
-						const { newText, newPosition } = removeMention(inputValue, cursorPosition)
+						const { newText, newPosition } = removeMention(inputValue, pos)
 
 						if (newText !== inputValue) {
 							event.preventDefault()
 							setInputValue(newText)
 							setIntendedCursorPosition(newPosition) // Store the new cursor position in state
+							cursorPositionRef.current = newPosition
 						}
 
 						setJustDeletedSpaceAfterMention(false)
@@ -558,7 +564,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				handleMentionSelect,
 				selectedType,
 				inputValue,
-				cursorPosition,
 				setInputValue,
 				justDeletedSpaceAfterMention,
 				queryItems,
@@ -580,73 +585,116 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
 		// Ref to store the search timeout.
 		const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+		// Ref to store cursor position for fast access without re-renders.
+		const cursorPositionRef = useRef(0)
+		// Ref to store full text for incremental update detection.
+		const fullTextRef = useRef("")
+
+		// Check if input is a simple tail append (optimization for common case)
+		const isTailAppend = useCallback((oldText: string, newText: string, cursorPos: number): boolean => {
+			return (
+				cursorPos === newText.length &&           // Cursor at end
+				newText.length > oldText.length &&        // Text got longer
+				newText.startsWith(oldText)               // Old text is prefix
+			)
+		}, [])
+
+		// Check if menu computation is needed (optimization for tail typing)
+		const shouldComputeMenu = useCallback((text: string, cursorPos: number): boolean => {
+			// Quick check: is there @ or / within 100 chars before cursor?
+			const contextStart = Math.max(0, cursorPos - 100)
+			const context = text.slice(contextStart, cursorPos)
+			return context.includes('@') || context.includes('/')
+		}, [])
 
 		const handleInputChange = useCallback(
 			(e: React.ChangeEvent<HTMLTextAreaElement>) => {
 				const newValue = e.target.value
-				setInputValue(newValue)
-
-				// Reset history navigation when user types
-				resetOnInputChange()
-
 				const newCursorPosition = e.target.selectionStart
-				setCursorPosition(newCursorPosition)
+				const oldText = fullTextRef.current
 
-				const showMenu = shouldShowContextMenu(newValue, newCursorPosition)
-				setShowContextMenu(showMenu)
+				// Update refs immediately (for fast access in other handlers)
+				cursorPositionRef.current = newCursorPosition
+				fullTextRef.current = newValue
 
-				if (showMenu) {
-					if (newValue.startsWith("/") && !newValue.includes(" ")) {
-						// Handle slash command - request fresh commands
-						const query = newValue
-						setSearchQuery(query)
-						// Set to first selectable item (skip section headers)
-						setSelectedMenuIndex(1) // Section header is at 0, first command is at 1
-						// Request commands fresh each time slash menu is shown
-						vscode.postMessage({ type: "requestCommands" })
-					} else {
-						// Existing @ mention handling.
-						const lastAtIndex = newValue.lastIndexOf("@", newCursorPosition - 1)
-						const query = newValue.slice(lastAtIndex + 1, newCursorPosition)
-						setSearchQuery(query)
+				// Detect input type for optimization
+				const isSimpleTailAppend = isTailAppend(oldText, newValue, newCursorPosition)
+				const needsMenuComputation = shouldComputeMenu(newValue, newCursorPosition)
 
-						// Send file search request if query is not empty.
-						if (query.length > 0) {
-							setSelectedMenuIndex(0)
+				// Batch all state updates to reduce re-renders
+				unstable_batchedUpdates(() => {
+					setInputValue(newValue)
+					setCursorPosition(newCursorPosition)
 
-							// Don't clear results until we have new ones. This
-							// prevents flickering.
+					// Skip menu computation for simple tail append (common case optimization)
+					if (needsMenuComputation) {
+						// Full menu computation path
+						const showMenu = shouldShowContextMenu(newValue, newCursorPosition)
+						setShowContextMenu(showMenu)
 
-							// Clear any existing timeout.
-							if (searchTimeoutRef.current) {
-								clearTimeout(searchTimeoutRef.current)
+						if (showMenu) {
+							if (newValue.startsWith("/") && !newValue.includes(" ")) {
+								// Handle slash command - request fresh commands
+								const query = newValue
+								setSearchQuery(query)
+								// Set to first selectable item (skip section headers)
+								setSelectedMenuIndex(1) // Section header is at 0, first command is at 1
+								// Request commands fresh each time slash menu is shown
+								vscode.postMessage({ type: "requestCommands" })
+							} else {
+								// Existing @ mention handling.
+								const lastAtIndex = newValue.lastIndexOf("@", newCursorPosition - 1)
+								const query = newValue.slice(lastAtIndex + 1, newCursorPosition)
+								setSearchQuery(query)
+
+								// Send file search request if query is not empty.
+								if (query.length > 0) {
+									setSelectedMenuIndex(0)
+
+									// Don't clear results until we have new ones. This
+									// prevents flickering.
+
+									// Clear any existing timeout.
+									if (searchTimeoutRef.current) {
+										clearTimeout(searchTimeoutRef.current)
+									}
+
+									// Set a timeout to debounce the search requests.
+									searchTimeoutRef.current = setTimeout(() => {
+										// Generate a request ID for this search.
+										const reqId = Math.random().toString(36).substring(2, 9)
+										setSearchRequestId(reqId)
+										setSearchLoading(true)
+
+										// Send message to extension to search files.
+										vscode.postMessage({
+											type: "searchFiles",
+											query: unescapeSpaces(query),
+											requestId: reqId,
+										})
+									}, 200) // 200ms debounce.
+								} else {
+									setSelectedMenuIndex(3) // Set to "File" option by default.
+								}
 							}
-
-							// Set a timeout to debounce the search requests.
-							searchTimeoutRef.current = setTimeout(() => {
-								// Generate a request ID for this search.
-								const reqId = Math.random().toString(36).substring(2, 9)
-								setSearchRequestId(reqId)
-								setSearchLoading(true)
-
-								// Send message to extension to search files.
-								vscode.postMessage({
-									type: "searchFiles",
-									query: unescapeSpaces(query),
-									requestId: reqId,
-								})
-							}, 200) // 200ms debounce.
 						} else {
-							setSelectedMenuIndex(3) // Set to "File" option by default.
+							setSearchQuery("")
+							setSelectedMenuIndex(-1)
+							setFileSearchResults([]) // Clear file search results.
 						}
+					} else {
+						// Fast path: skip menu computation, just hide menu
+						setShowContextMenu(false)
+						setSearchQuery("")
+						setSelectedMenuIndex(-1)
+						setFileSearchResults([])
 					}
-				} else {
-					setSearchQuery("")
-					setSelectedMenuIndex(-1)
-					setFileSearchResults([]) // Clear file search results.
-				}
+				})
+
+				// Reset history navigation when user types (non-urgent, outside batch)
+				resetOnInputChange()
 			},
-			[setInputValue, setSearchRequestId, setFileSearchResults, setSearchLoading, resetOnInputChange],
+			[setInputValue, setSearchRequestId, setFileSearchResults, setSearchLoading, resetOnInputChange, isTailAppend, shouldComputeMenu],
 		)
 
 		useEffect(() => {
@@ -675,12 +723,14 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				if (urlRegex.test(pastedText.trim())) {
 					e.preventDefault()
 					const trimmedUrl = pastedText.trim()
+					const pos = cursorPositionRef.current
 					const newValue =
-						inputValue.slice(0, cursorPosition) + trimmedUrl + " " + inputValue.slice(cursorPosition)
+						inputValue.slice(0, pos) + trimmedUrl + " " + inputValue.slice(pos)
 					setInputValue(newValue)
-					const newCursorPosition = cursorPosition + trimmedUrl.length + 1
+					const newCursorPosition = pos + trimmedUrl.length + 1
 					setCursorPosition(newCursorPosition)
 					setIntendedCursorPosition(newCursorPosition)
+					cursorPositionRef.current = newCursorPosition
 					setShowContextMenu(false)
 
 					// Scroll to new cursor position.
@@ -739,61 +789,18 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					}
 				}
 			},
-			[shouldDisableImages, setSelectedImages, cursorPosition, setInputValue, inputValue, t],
+			[shouldDisableImages, setSelectedImages, setInputValue, inputValue, t],
 		)
 
 		const handleMenuMouseDown = useCallback(() => {
 			setIsMouseDownOnMenu(true)
 		}, [])
 
-		const updateHighlights = useCallback(() => {
-			if (!textAreaRef.current || !highlightLayerRef.current) return
-
-			const text = textAreaRef.current.value
-
-			// Helper function to check if a command is valid
-			const isValidCommand = (commandName: string): boolean => {
-				return commands?.some((cmd) => cmd.name === commandName) || false
-			}
-
-			// Process the text to highlight mentions and valid commands
-			let processedText = text
-				.replace(/\n$/, "\n\n")
-				.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c] || c)
-				.replace(mentionRegexGlobal, '<mark class="mention-context-textarea-highlight">$&</mark>')
-
-			// Custom replacement for commands - only highlight valid ones
-			processedText = processedText.replace(commandRegexGlobal, (match, commandName) => {
-				// Only highlight if the command exists in the valid commands list
-				if (isValidCommand(commandName)) {
-					// Check if the match starts with a space
-					const startsWithSpace = match.startsWith(" ")
-					const commandPart = `/${commandName}`
-
-					if (startsWithSpace) {
-						// Keep the space but only highlight the command part
-						return ` <mark class="mention-context-textarea-highlight">${commandPart}</mark>`
-					} else {
-						// Highlight the entire command (starts at beginning of line)
-						return `<mark class="mention-context-textarea-highlight">${commandPart}</mark>`
-					}
-				}
-				return match // Return unhighlighted if command is not valid
-			})
-
-			highlightLayerRef.current.innerHTML = processedText
-
-			highlightLayerRef.current.scrollTop = textAreaRef.current.scrollTop
-			highlightLayerRef.current.scrollLeft = textAreaRef.current.scrollLeft
-		}, [commands])
-
-		useLayoutEffect(() => {
-			updateHighlights()
-		}, [inputValue, updateHighlights])
-
 		const updateCursorPosition = useCallback(() => {
 			if (textAreaRef.current) {
-				setCursorPosition(textAreaRef.current.selectionStart)
+				const newPos = textAreaRef.current.selectionStart
+				setCursorPosition(newPos)
+				cursorPositionRef.current = newPos
 			}
 		}, [])
 
@@ -821,7 +828,8 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
 					if (lines.length > 0) {
 						// Process each line as a separate file path
-						let newValue = inputValue.slice(0, cursorPosition)
+						const pos = cursorPositionRef.current
+						let newValue = inputValue.slice(0, pos)
 						let totalLength = 0
 
 						// Using a standard for loop instead of forEach for potential performance gains.
@@ -840,13 +848,14 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						}
 
 						// Add space after the last mention and append the rest of the input
-						newValue += " " + inputValue.slice(cursorPosition)
+						newValue += " " + inputValue.slice(pos)
 						totalLength += 1
 
 						setInputValue(newValue)
-						const newCursorPosition = cursorPosition + totalLength
+						const newCursorPosition = pos + totalLength
 						setCursorPosition(newCursorPosition)
 						setIntendedCursorPosition(newCursorPosition)
+						cursorPositionRef.current = newCursorPosition
 					}
 
 					return
@@ -899,11 +908,9 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				}
 			},
 			[
-				cursorPosition,
 				cwd,
 				inputValue,
 				setInputValue,
-				setCursorPosition,
 				setIntendedCursorPosition,
 				shouldDisableImages,
 				setSelectedImages,
@@ -1018,36 +1025,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 								"overflow-hidden",
 								"rounded-lg",
 							)}>
-							<div
-								ref={highlightLayerRef}
-								data-testid="highlight-layer"
-								className={cn(
-									"absolute",
-									"inset-0",
-									"pointer-events-none",
-									"whitespace-pre-wrap",
-									"break-words",
-									"text-transparent",
-									"overflow-hidden",
-									"font-vscode-font-family",
-									"text-vscode-editor-font-size",
-									"leading-vscode-editor-line-height",
-									isFocused
-										? "border border-vscode-focusBorder outline outline-vscode-focusBorder"
-										: isDraggingOver
-											? "border-2 border-dashed border-vscode-focusBorder"
-											: "border border-transparent",
-									"pl-2",
-									"py-2",
-									isEditMode ? "pr-20" : "pr-9",
-									"z-10",
-									"forced-color-adjust-none",
-									"rounded-lg",
-								)}
-								style={{
-									color: "transparent",
-								}}
-							/>
 							<DynamicTextArea
 								ref={(el) => {
 									if (typeof ref === "function") {
@@ -1060,7 +1037,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 								value={inputValue}
 								onChange={(e) => {
 									handleInputChange(e)
-									updateHighlights()
 								}}
 								onFocus={() => setIsFocused(true)}
 								onKeyDown={(e) => {
@@ -1118,7 +1094,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 									"scrollbar-none",
 									"scrollbar-hide",
 								)}
-								onScroll={() => updateHighlights()}
 							/>
 
 							<div className="absolute bottom-2 right-1 z-30 flex flex-col items-center gap-0">
