@@ -79,15 +79,13 @@ export async function checkpointRestore(
 			// Report the deleted API request metrics
 			await task.say(
 				"api_req_deleted",
-				{
-					text: JSON.stringify({
-						tokensIn: totalTokensIn,
-						tokensOut: totalTokensOut,
-						cacheWrites: totalCacheWrites,
-						cacheReads: totalCacheReads,
-						cost: totalCost,
-					} satisfies ClineApiReqInfo),
-				},
+				JSON.stringify({
+					tokensIn: totalTokensIn,
+					tokensOut: totalTokensOut,
+					cacheWrites: totalCacheWrites,
+					cacheReads: totalCacheReads,
+					cost: totalCost,
+				} satisfies ClineApiReqInfo),
 			)
 		}
 

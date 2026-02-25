@@ -182,11 +182,12 @@ async function checkGitInstallation(
 				// so the chatview can choose not to render it while keeping it in history.
 				task.say(
 					"checkpoint_saved",
-					{
-						text: to,
-						checkpoint: { from, to, suppressMessage: !!suppressMessage },
-						isNonInteractive: true,
-					},
+					to,
+					undefined,
+					undefined,
+					{ from, to, suppressMessage: !!suppressMessage },
+					undefined,
+					{ isNonInteractive: true },
 				).catch((err) => {
 					log("[Task#getCheckpointService] caught unexpected error in say('checkpoint_saved')")
 					console.error(err)
