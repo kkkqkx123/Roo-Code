@@ -48,12 +48,12 @@ describe("TaskItemFooter", () => {
 		expect(screen.getByTestId("export")).toBeInTheDocument()
 	})
 
-	it("hides export button in compact variant", () => {
+	it("shows export button in compact variant", () => {
 		render(<TaskItemFooter item={mockItem} variant="compact" />)
 
-		// Should show copy button but not export button
+		// Should show copy and export buttons
 		expect(screen.getByTestId("copy-prompt-button")).toBeInTheDocument()
-		expect(screen.queryByTestId("export")).not.toBeInTheDocument()
+		expect(screen.getByTestId("export")).toBeInTheDocument()
 	})
 
 	it("hides action buttons in selection mode", () => {
