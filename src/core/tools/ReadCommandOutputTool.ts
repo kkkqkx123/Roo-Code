@@ -180,21 +180,19 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 			}
 
 			// Report to UI that we read command output
-			await task.say("tool", {
-				text: JSON.stringify({
-					tool: "readCommandOutput",
-					readStart,
-					readEnd,
-					totalBytes: totalSize,
-					...(search && { searchPattern: search, matchCount }),
-				}),
-			})
+			await task.say("tool", JSON.stringify({
+				tool: "readCommandOutput",
+				readStart,
+				readEnd,
+				totalBytes: totalSize,
+				...(search && { searchPattern: search, matchCount }),
+			}))
 
 			task.consecutiveMistakeCount = 0
 			pushToolResult(result)
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error)
-			await task.say("error", { text: `Error reading command output: ${errorMsg}` })
+			await task.say("error", `Error reading command output: ${errorMsg}`)
 			task.didToolFailInCurrentTurn = true
 			pushToolResult(`Error reading command output: ${errorMsg}`)
 		}
