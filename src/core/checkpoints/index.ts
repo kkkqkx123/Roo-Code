@@ -118,10 +118,10 @@ export async function getCheckpointService(task: Task, { interval = 250 }: { int
 		}
 		return service
 	} catch (err) {
-		if (err.name === "TimeoutError" && task.enableCheckpoints) {
+		if ((err as any)?.name === "TimeoutError" && task.enableCheckpoints) {
 			sendCheckpointInitWarn(task, "INIT_TIMEOUT", task.checkpointTimeout)
 		}
-		log(`[Task#getCheckpointService] ${err.message}`)
+		log(`[Task#getCheckpointService] ${(err as Error)?.message || String(err)}`)
 		task.enableCheckpoints = false
 		task.checkpointServiceInitializing = false
 		return undefined
@@ -175,12 +175,11 @@ async function checkGitInstallation(
 				// so the chatview can choose not to render it while keeping it in history.
 				task.say(
 					"checkpoint_saved",
-					to,
-					undefined,
-					undefined,
-					{ from, to, suppressMessage: !!suppressMessage },
-					undefined,
-					{ isNonInteractive: true },
+					{
+						text: to,
+						checkpoint: { from, to, suppressMessage: !!suppressMessage },
+						isNonInteractive: true,
+					},
 				).catch((err) => {
 					log("[Task#getCheckpointService] caught unexpected error in say('checkpoint_saved')")
 					console.error(err)
@@ -197,11 +196,11 @@ async function checkGitInstallation(
 		try {
 			await service.initShadowGit()
 		} catch (err) {
-			log(`[Task#getCheckpointService] initShadowGit -> ${err.message}`)
+			log(`[Task#getCheckpointService] initShadowGit -> ${(err as Error)?.message || String(err)}`)
 			task.enableCheckpoints = false
 		}
 	} catch (err) {
-		log(`[Task#getCheckpointService] Unexpected error during Git check: ${err.message}`)
+		log(`[Task#getCheckpointService] Unexpected error during Git check: ${(err as Error)?.message || String(err)}`)
 		console.error("Git check error:", err)
 		task.enableCheckpoints = false
 		task.checkpointServiceInitializing = false
@@ -258,8 +257,19 @@ export async function checkpointRestore(
 			const deletedMessages = task.clineMessages.slice(index + 1)
 
 			const { totalTokensIn, totalTokensOut, totalCacheWrites, totalCacheReads, totalCost } = getApiMetrics(
-				task.combineMessages(deletedMessages),
+				deletedMessages,
 			)
+
+			// Explicitly truncate API conversation history to ensure prompt context is properly rewound.
+			// This is critical for checkpoint restore to correctly remove deleted messages from the
+			// API context, not just from clineMessages.
+			//
+			// For both "delete" and "edit" operations: keep messages [0, apiIndex) - exclude the target message
+			// The edit operation will later re-add the edited message via pending edit processing
+			const apiIndex = task.apiConversationHistory.findIndex((m) => m.ts === ts)
+			if (apiIndex !== -1) {
+				await task.overwriteApiConversationHistory(task.apiConversationHistory.slice(0, apiIndex))
+			}
 
 			// Use MessageManager to properly handle context-management events
 			// This ensures orphaned Summary messages and truncation markers are cleaned up
@@ -270,13 +280,15 @@ export async function checkpointRestore(
 			// Report the deleted API request metrics
 			await task.say(
 				"api_req_deleted",
-				JSON.stringify({
-					tokensIn: totalTokensIn,
-					tokensOut: totalTokensOut,
-					cacheWrites: totalCacheWrites,
-					cacheReads: totalCacheReads,
-					cost: totalCost,
-				} satisfies ClineApiReqInfo),
+				{
+					text: JSON.stringify({
+						tokensIn: totalTokensIn,
+						tokensOut: totalTokensOut,
+						cacheWrites: totalCacheWrites,
+						cacheReads: totalCacheReads,
+						cost: totalCost,
+					} satisfies ClineApiReqInfo),
+				},
 			)
 		}
 
