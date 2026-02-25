@@ -24,3 +24,8 @@ Monorepo using pnpm workspaces (Node 22.14.0, pnpm 10.8.1):
 - **Types**: Strict TypeScript enabled via config/typescript/base.json, use type imports
 - **Error handling**: Try-catch with typed errors, console for debug (extends resolveVerbosity)
 - **Testing**: Use vi.mock() for dependencies, spyOn for spying, expect() assertions, beforeEach hooks for setup
+
+## Command Executio
+
+Your default cli terminal is cmd. If you want to use powershell, Always add `pwsh -c` as prefix. Bash is not accessible.
+Never use bash syntax like `grep`, `head` when call execution-command tool.

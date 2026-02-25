@@ -35,6 +35,26 @@ import type {
 const DEFAULT_USAGE_COLLECTION_TIMEOUT_MS = 5000
 
 /**
+ * 自定义错误类：用于区分死循环检测错误
+ */
+class DeadLoopDetectedError extends Error {
+	constructor(message: string) {
+		super(message)
+		this.name = "DeadLoopDetectedError"
+	}
+}
+
+/**
+ * 自定义错误类：用于区分用户取消错误
+ */
+class UserCancelledError extends Error {
+	constructor(message: string) {
+		super(message)
+		this.name = "UserCancelledError"
+	}
+}
+
+/**
  * StreamProcessor - 流式响应处理器
  */
 export class StreamProcessor {
@@ -131,6 +151,8 @@ export class StreamProcessor {
 	 */
 	async processStream(stream: ApiStream): Promise<void> {
 		const { apiReqIndex, modelInfo } = this.config
+		let streamCompletedSuccessfully = false
+		let streamError: Error | undefined
 
 		try {
 			// Emit stream start event
@@ -150,10 +172,10 @@ export class StreamProcessor {
 					const abortPromise = new Promise<never>((_, reject) => {
 						const signal = abortController.signal
 						if (signal.aborted) {
-							reject(new Error("Request cancelled by user"))
+							reject(new UserCancelledError("Request cancelled by user"))
 						} else {
 							signal.addEventListener("abort", () => {
-								reject(new Error("Request cancelled by user"))
+								reject(new UserCancelledError("Request cancelled by user"))
 							})
 						}
 					})
@@ -183,7 +205,7 @@ export class StreamProcessor {
 				// 处理不同类型的 chunk
 				try {
 					await this.handleChunk(chunk)
-					
+
 					// Emit chunk processed event
 					await this.emit({
 						type: "chunkProcessed",
@@ -233,33 +255,57 @@ export class StreamProcessor {
 				})
 			}
 
-			// Emit stream complete event
-			await this.emitStreamCompleteEvent()
+			// Mark stream as completed successfully
+			streamCompletedSuccessfully = true
 		} catch (error) {
+			streamError = error instanceof Error ? error : new Error(String(error))
+
 			// Emit stream error event
 			await this.emit({
 				type: "streamError",
 				timestamp: Date.now(),
-				error: error instanceof Error ? error : new Error(String(error)),
+				error: streamError,
 				cancelReason: this.callbacks.isAborted() ? "user_cancelled" : "streaming_failed",
 			})
 
-			if (!this.callbacks.isAbandoned()) {
-				const cancelReason: "streaming_failed" | "user_cancelled" = this.callbacks.isAborted()
+			// 不要在这里处理错误 - 让 finally 块统一处理
+			// 这样确保 streamComplete 事件总是被触发
+		} finally {
+			// 无论流处理成功还是失败，都要触发 streamComplete 事件
+			// StreamPostProcessor 依赖这个事件进行后处理
+			await this.emitStreamCompleteEvent()
+
+			// 如果在流处理过程中发生错误（非用户取消），在这里处理
+			if (streamError && !this.callbacks.isAbandoned()) {
+				// 区分错误类型
+				const isUserCancelled = streamError instanceof UserCancelledError
+				const isDeadLoop = streamError instanceof DeadLoopDetectedError
+
+				const cancelReason: "streaming_failed" | "user_cancelled" = isUserCancelled
 					? "user_cancelled"
 					: "streaming_failed"
 
-				const rawErrorMessage =
-					error instanceof Error ? error.message : JSON.stringify(error, null, 2)
-				const streamingFailedMessage = this.callbacks.isAborted()
-					? undefined
-					: `Stream terminated by provider: ${rawErrorMessage}`
+				// 根据错误类型生成不同的错误消息
+				let streamingFailedMessage: string | undefined
+				if (isUserCancelled) {
+					// 用户取消：不显示错误消息
+					streamingFailedMessage = undefined
+				} else if (isDeadLoop) {
+					// 死循环检测：显示特定消息
+					streamingFailedMessage = streamError.message
+				} else {
+					// 其他错误：显示提供商错误消息
+					streamingFailedMessage = `Stream terminated by provider: ${streamError.message}`
+				}
 
 				await this.abortStream(cancelReason, streamingFailedMessage)
 
-				if (this.callbacks.isAborted()) {
+				if (isUserCancelled || this.callbacks.isAborted()) {
 					this.callbacks.setAbortReason(cancelReason)
 					await this.callbacks.abortTask()
+				} else {
+					// 非用户取消的错误：抛出错误让 Task 处理重试逻辑
+					throw streamError
 				}
 			}
 		}
@@ -361,8 +407,8 @@ export class StreamProcessor {
 				this.callbacks.setAbortReason("streaming_failed")
 				await this.callbacks.abortTask()
 
-				// Throw an error to immediately stop the stream processing loop
-				throw new Error(`Dead loop detected: ${detectionResult.details}`)
+				// 使用专门的错误类型，以便上层正确处理
+				throw new DeadLoopDetectedError(detectionResult.details || "Unknown dead loop detected")
 			}
 		}
 

@@ -132,7 +132,7 @@ export class StreamPostProcessor {
 		// Mark stream as complete
 		await this.callbacks.onStreamComplete()
 
-		// Execute post-processing steps
+		// Execute post-processing steps in the correct order
 		if (this.config.enableTokenFallback) {
 			await this.executeTokenFallback(result)
 		}
@@ -150,6 +150,8 @@ export class StreamPostProcessor {
 		}
 
 		if (this.config.enableContentProcessing) {
+			// processContent will handle waiting for userMessageContentReady
+			// and pushing to stack for the next iteration
 			await this.processContent(result)
 		}
 
@@ -360,32 +362,38 @@ export class StreamPostProcessor {
 				await this.callbacks.getTaskId(),
 			)
 
-			// Enforce new_task isolation
-			const isolationResult = enforceNewTaskIsolation(assistantContent, result.assistantMessageContent)
-			assistantContent = isolationResult.truncatedAssistantContent
+			// Safety check: buildAssistantContent may return undefined in test environments
+			if (assistantContent) {
+				// Enforce new_task isolation
+				const isolationResult = enforceNewTaskIsolation(assistantContent, result.assistantMessageContent)
+				// Safety check: enforceNewTaskIsolation may return undefined in test environments
+				if (isolationResult) {
+					assistantContent = isolationResult.truncatedAssistantContent
 
-			// Update assistant message content
-			await this.callbacks.setAssistantMessageContent(isolationResult.truncatedAssistantMessageContent)
+					// Update assistant message content
+					await this.callbacks.setAssistantMessageContent(isolationResult.truncatedAssistantMessageContent)
 
-			// Pre-inject error tool_results for truncated tools
-			for (const errorResult of isolationResult.errorToolResults) {
-				await this.callbacks.pushToolResultToUserContent(errorResult)
+					// Pre-inject error tool_results for truncated tools
+					for (const errorResult of isolationResult.errorToolResults) {
+						await this.callbacks.pushToolResultToUserContent(errorResult)
+					}
+				}
+
+				// Save assistant message BEFORE executing tools
+				await this.callbacks.addToApiConversationHistory(
+					{ role: "assistant", content: assistantContent },
+					result.reasoningMessage || undefined,
+				)
+				await this.callbacks.setAssistantMessageSavedToHistory(true)
+
+				await this.callbacks.emitEvent({
+					type: "assistantMessageSaved",
+					timestamp: Date.now(),
+					hasTextContent,
+					hasToolUses: hasToolUsesInContent,
+					contentLength: Array.isArray(assistantContent) ? assistantContent.length : 0,
+				})
 			}
-
-			// Save assistant message BEFORE executing tools
-			await this.callbacks.addToApiConversationHistory(
-				{ role: "assistant", content: assistantContent },
-				result.reasoningMessage || undefined,
-			)
-			await this.callbacks.setAssistantMessageSavedToHistory(true)
-
-			await this.callbacks.emitEvent({
-				type: "assistantMessageSaved",
-				timestamp: Date.now(),
-				hasTextContent,
-				hasToolUses: hasToolUsesInContent,
-				contentLength: assistantContent.length,
-			})
 		}
 	}
 
@@ -424,9 +432,6 @@ export class StreamPostProcessor {
 				hasToolUses: hasToolUsesInContent,
 			})
 
-			// Wait for content to be ready
-			await this.callbacks.waitForUserMessageContentReady()
-
 			// Handle tool use or no tool use
 			const didToolUse = hasToolUses(result.assistantMessageContent)
 
@@ -436,7 +441,14 @@ export class StreamPostProcessor {
 				await this.callbacks.resetConsecutiveNoToolUseCount()
 			}
 
+			// CRITICAL: Wait for userMessageContentReady before pushing to stack
+			// This mirrors the old code: await pWaitFor(() => this.userMessageContentReady)
+			// presentAssistantMessage executes tools and sets userMessageContentReady to true
+			// when all tool results are collected.
+			await this.callbacks.waitForUserMessageContentReady()
+
 			// Push to stack if there's content OR if we're paused waiting for a subtask
+			// This triggers the next iteration of the request loop
 			const userMessageContent = await this.callbacks.getUserMessageContent()
 			const isPaused = await this.callbacks.isPaused()
 

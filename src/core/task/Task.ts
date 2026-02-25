@@ -136,6 +136,7 @@ import { validateAndFixToolResultIds } from "./validateToolResultIds"
 import { mergeConsecutiveApiMessages } from "./mergeConsecutiveApiMessages"
 import { buildCleanConversationHistory } from "./utils/history-utils"
 import { hasToolUses, buildAssistantContent, enforceNewTaskIsolation } from "./utils/tool-utils"
+import { MessageHandler } from "./handlers/MessageHandler"
 
 const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
 const DEFAULT_USAGE_COLLECTION_TIMEOUT_MS = 5000 // 5 seconds
@@ -291,6 +292,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	private static lastGlobalApiRequestTime?: number
 	private autoApprovalHandler: AutoApprovalHandler
 
+	// MessageHandler (lazy initialized)
+	private _messageHandler?: MessageHandler
+
 	/**
 	 * Reset the global API request timestamp. This should only be used for testing.
 	 * @internal
@@ -404,6 +408,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	// StreamProcessor and StreamPostProcessor for handling streaming
 	private streamProcessor?: StreamProcessor
 	private streamPostProcessor?: StreamPostProcessor
+
+	// Reference to current stack for StreamPostProcessor pushToStack callback
+	private _currentStack?: any[]
 
 	// Cached model info for current streaming session (set at start of each API request)
 	// This prevents excessive getModel() calls during tool execution
@@ -1563,6 +1570,122 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	/**
+	 * Clear the ask response state.
+	 * Used by MessageHandler to reset ask response state.
+	 */
+	public clearAskResponse(): void {
+		this.askResponse = undefined
+		this.askResponseText = undefined
+		this.askResponseImages = undefined
+	}
+
+	/**
+	 * Get the current ask response state.
+	 * Used by MessageHandler to check if ask response is set.
+	 */
+	public getAskResponse(): {
+		response?: ClineAskResponse
+		text?: string
+		images?: string[]
+	} {
+		return {
+			response: this.askResponse,
+			text: this.askResponseText,
+			images: this.askResponseImages,
+		}
+	}
+
+	/**
+	 * Set the ask response state.
+	 * Used by MessageHandler to set ask response.
+	 */
+	public setAskResponse(askResponse: ClineAskResponse, text?: string, images?: string[]): void {
+		this.askResponse = askResponse
+		this.askResponseText = text
+		this.askResponseImages = images
+	}
+
+	/**
+	 * Set auto-approval timeout.
+	 * Used by MessageHandler to set auto-approval timeout.
+	 */
+	public setAutoApprovalTimeout(
+		callback: () => void,
+		delay: number,
+	): NodeJS.Timeout {
+		this.cancelAutoApprovalTimeout()
+		this.autoApprovalTimeoutRef = setTimeout(() => {
+			callback()
+			this.autoApprovalTimeoutRef = undefined
+		}, delay)
+		return this.autoApprovalTimeoutRef
+	}
+
+	/**
+	 * Get global storage path.
+	 * Used by MessageHandler for saving messages.
+	 */
+	public getGlobalStoragePath(): string {
+		return this.globalStoragePath
+	}
+
+	/**
+	 * Get system prompt.
+	 * Used by MessageHandler for API conversation history.
+	 */
+	public async getSystemPromptForHandler(): Promise<string> {
+		return this.getSystemPrompt()
+	}
+
+	/**
+	 * Save API messages.
+	 * Used by MessageHandler for API conversation history.
+	 */
+	public async saveApiMessagesForHandler(messages: ApiMessage[]): Promise<void> {
+		await saveApiMessages({
+			messages,
+			taskId: this.taskId,
+			globalStoragePath: this.globalStoragePath,
+		})
+	}
+
+	/**
+	 * Save task messages.
+	 * Used by MessageHandler for saving Cline messages.
+	 */
+	public async saveTaskMessagesForHandler(messages: ClineMessage[]): Promise<void> {
+		await saveTaskMessages({
+			messages,
+			taskId: this.taskId,
+			globalStoragePath: this.globalStoragePath,
+		})
+	}
+
+	/**
+	 * Wait for task API config to be ready.
+	 * Used by MessageHandler for task metadata.
+	 */
+	public async waitForTaskApiConfig(): Promise<void> {
+		await this.taskApiConfigReady
+	}
+
+	/**
+	 * Get initial status.
+	 * Used by MessageHandler for task metadata.
+	 */
+	public getInitialStatus(): "active" | "delegated" | "completed" | undefined {
+		return this.initialStatus
+	}
+
+	/**
+	 * Emit token usage.
+	 * Used by MessageHandler for emitting token usage updates.
+	 */
+	public emitTokenUsageForHandler(tokenUsage: TokenUsage, toolUsage: ToolUsage): void {
+		this.debouncedEmitTokenUsage(tokenUsage, toolUsage)
+	}
+
+	/**
 	 * Updates the API configuration and rebuilds the API handler.
 	 * There is no tool-protocol switching or tool parser swapping.
 	 *
@@ -2668,6 +2791,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				const stream = this.attemptApiRequest(currentItem.retryAttempt ?? 0, { skipProviderRateLimit: true })
 				this.isStreaming = true
 
+				// Set current stack reference for StreamPostProcessor pushToStack callback
+				this._currentStack = stack
+
 				// Create StreamProcessor and StreamPostProcessor
 				const streamCallbacks = this.createStreamProcessorCallbacks()
 				const postProcessorCallbacks = this.createStreamPostProcessorCallbacks()
@@ -2705,6 +2831,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 				// Process stream
 				await this.streamProcessor.processStream(stream)
+
+				// Clear stack reference after stream processing completes
+				this._currentStack = undefined
 			} catch (error) {
 				// Abandoned happens when extension is no longer waiting for the
 				// Cline instance to finish aborting (error is thrown here when
@@ -2764,6 +2893,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				this.isStreaming = false
 				// Clean up the abort controller when streaming completes
 				this.currentRequestAbortController = undefined
+				// Clear stack reference
+				this._currentStack = undefined
 			}
 
 			// Post-streaming logic is now handled by StreamPostProcessor
@@ -3745,8 +3876,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				this.userMessageContent.push(content)
 			},
 			pushToStack: async (item: any) => {
-				// This should be handled by the calling context
-				console.log("[Task] pushToStack called:", item)
+				// Push item back onto the stack for processing
+				// This is called by StreamPostProcessor when content is ready
+				if (this._currentStack) {
+					this._currentStack.push(item)
+				} else {
+					console.warn("[Task] pushToStack called but no stack is available")
+				}
 			},
 			incrementConsecutiveNoToolUseCount: async () => {
 				this.consecutiveNoToolUseCount++

@@ -1,7 +1,7 @@
 import * as path from "path"
 import fs from "fs/promises"
 
-import type { MockedFunction } from "vitest"
+import { beforeEach, describe, expect, it, vi, type MockedFunction } from "vitest"
 
 import { fileExistsAtPath } from "../../../utils/fs"
 import { isPathOutsideWorkspace } from "../../../utils/pathUtils"
