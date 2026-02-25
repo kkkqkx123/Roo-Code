@@ -117,7 +117,7 @@ export class UseMcpToolTool extends BaseTool<"use_mcp_tool"> {
 			if (typeof params.arguments !== "object" || params.arguments === null || Array.isArray(params.arguments)) {
 				task.consecutiveMistakeCount++
 				task.recordToolError("use_mcp_tool")
-				await task.say("error", { text: t("mcp:errors.invalidJsonArgument", { toolName: params.tool_name }) })
+				await task.say("error", t("mcp:errors.invalidJsonArgument", { toolName: params.tool_name }))
 				task.didToolFailInCurrentTurn = true
 				pushToolResult(
 					formatResponse.toolError(
@@ -165,7 +165,7 @@ export class UseMcpToolTool extends BaseTool<"use_mcp_tool"> {
 
 				task.consecutiveMistakeCount++
 				task.recordToolError("use_mcp_tool")
-				await task.say("error", { text: t("mcp:errors.serverNotFound", { serverName, availableServers }) })
+				await task.say("error", t("mcp:errors.serverNotFound", { serverName, availableServers }))
 				task.didToolFailInCurrentTurn = true
 
 				pushToolResult(formatResponse.unknownMcpServerError(serverName, availableServersArray))
@@ -177,13 +177,11 @@ export class UseMcpToolTool extends BaseTool<"use_mcp_tool"> {
 				// No tools available on this server
 				task.consecutiveMistakeCount++
 				task.recordToolError("use_mcp_tool")
-				await task.say("error", {
-					text: t("mcp:errors.toolNotFound", {
-						toolName,
-						serverName,
-						availableTools: "No tools available",
-					}),
-				})
+				await task.say("error", t("mcp:errors.toolNotFound", {
+					toolName,
+					serverName,
+					availableTools: "No tools available",
+				}))
 				task.didToolFailInCurrentTurn = true
 
 				pushToolResult(formatResponse.unknownMcpToolError(serverName, toolName, []))
@@ -199,13 +197,11 @@ export class UseMcpToolTool extends BaseTool<"use_mcp_tool"> {
 
 				task.consecutiveMistakeCount++
 				task.recordToolError("use_mcp_tool")
-				await task.say("error", {
-					text: t("mcp:errors.toolNotFound", {
-						toolName,
-						serverName,
-						availableTools: availableToolNames.join(", "),
-					}),
-				})
+				await task.say("error", t("mcp:errors.toolNotFound", {
+					toolName,
+					serverName,
+					availableTools: availableToolNames.join(", "),
+				}))
 				task.didToolFailInCurrentTurn = true
 
 				pushToolResult(formatResponse.unknownMcpToolError(serverName, toolName, availableToolNames))
@@ -343,7 +339,7 @@ export class UseMcpToolTool extends BaseTool<"use_mcp_tool"> {
 			})
 		}
 
-		await task.say("mcp_server_response", { text: toolResultPretty, images })
+		await task.say("mcp_server_response", toolResultPretty, images)
 		pushToolResult(formatResponse.toolResult(toolResultPretty, images))
 	}
 }

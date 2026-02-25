@@ -107,7 +107,7 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 			})
 
 			const payload = { tool: "codebaseSearch", content: jsonResult }
-			await task.say("codebase_search_result", { text: JSON.stringify(payload) })
+			await task.say("codebase_search_result", JSON.stringify(payload))
 
 			const output = `Query: ${query}
 Results:

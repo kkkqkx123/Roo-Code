@@ -76,7 +76,7 @@ export class AccessMcpResourceTool extends BaseTool<"access_mcp_resource"> {
 				}
 			})
 
-			await task.say("mcp_server_response", { text: resourceResultPretty, images })
+			await task.say("mcp_server_response", resourceResultPretty, images)
 			pushToolResult(formatResponse.toolResult(resourceResultPretty, images))
 		} catch (error) {
 			await handleError("accessing MCP resource", error instanceof Error ? error : new Error(String(error)))

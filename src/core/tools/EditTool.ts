@@ -67,7 +67,7 @@ export class EditTool extends BaseTool<"edit"> {
 			const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
 
 			if (!accessAllowed) {
-				await task.say("rooignore_error", { text: relPath })
+				await task.say("rooignore_error", relPath)
 				pushToolResult(formatResponse.rooIgnoreError(relPath))
 				return
 			}
@@ -82,7 +82,7 @@ export class EditTool extends BaseTool<"edit"> {
 				task.consecutiveMistakeCount++
 				task.recordToolError("edit")
 				const errorMessage = `File not found: ${relPath}. Cannot perform edit on a non-existent file.`
-				await task.say("error", { text: errorMessage })
+				await task.say("error", errorMessage)
 				pushToolResult(formatResponse.toolError(errorMessage))
 				return
 			}
@@ -96,7 +96,7 @@ export class EditTool extends BaseTool<"edit"> {
 				task.consecutiveMistakeCount++
 				task.recordToolError("edit")
 				const errorMessage = `Failed to read file '${relPath}'. Please verify file permissions and try again.`
-				await task.say("error", { text: errorMessage })
+				await task.say("error", errorMessage)
 				pushToolResult(formatResponse.toolError(errorMessage))
 				return
 			}

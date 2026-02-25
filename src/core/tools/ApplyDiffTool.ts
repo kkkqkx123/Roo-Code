@@ -49,7 +49,7 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 			const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
 
 			if (!accessAllowed) {
-				await task.say("rooignore_error", { text: relPath })
+				await task.say("rooignore_error", relPath)
 				pushToolResult(formatResponse.rooIgnoreError(relPath))
 				return
 			}
@@ -61,7 +61,7 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 				task.consecutiveMistakeCount++
 				task.recordToolError("apply_diff")
 				const formattedError = `File does not exist at path: ${absolutePath}\n\n<error_details>\nThe specified file could not be found. Please verify the file path and try again.\n</error_details>`
-				await task.say("error", { text: formattedError })
+				await task.say("error", formattedError)
 				task.didToolFailInCurrentTurn = true
 				pushToolResult(formattedError)
 				return
@@ -104,7 +104,7 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 				}
 
 				if (currentCount >= 2) {
-					await task.say("diff_error", { text: formattedError })
+					await task.say("diff_error", formattedError)
 				}
 
 				task.recordToolError("apply_diff", formattedError)
