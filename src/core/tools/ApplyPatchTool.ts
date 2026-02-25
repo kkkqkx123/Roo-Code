@@ -110,7 +110,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 				// Check access permissions
 				const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
 				if (!accessAllowed) {
-					await task.say("rooignore_error", relPath)
+					await task.say("rooignore_error", { text: relPath })
 					pushToolResult(formatResponse.rooIgnoreError(relPath))
 					return
 				}
@@ -154,7 +154,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			task.consecutiveMistakeCount++
 			task.recordToolError("apply_patch")
 			const errorMessage = `File already exists: ${relPath}. Use Update File instead.`
-			await task.say("error", errorMessage)
+			await task.say("error", { text: errorMessage })
 			pushToolResult(formatResponse.toolError(errorMessage))
 			return
 		}
@@ -167,7 +167,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			task.recordToolError("apply_patch")
 			const errorDetails = error instanceof Error ? error.message : String(error)
 			const errorMessage = `Failed to create directories for file: ${relPath}\n\n<error_details>\n${errorDetails}\n</error_details>`
-			await task.say("error", errorMessage)
+			await task.say("error", { text: errorMessage })
 			pushToolResult(formatResponse.toolError(errorMessage))
 			return
 		}
@@ -258,7 +258,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			task.consecutiveMistakeCount++
 			task.recordToolError("apply_patch")
 			const errorMessage = `File not found: ${relPath}. Cannot delete a non-existent file.`
-			await task.say("error", errorMessage)
+			await task.say("error", { text: errorMessage })
 			pushToolResult(formatResponse.toolError(errorMessage))
 			return
 		}
@@ -290,7 +290,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			await fs.unlink(absolutePath)
 		} catch (error) {
 			const errorMessage = `Failed to delete file '${relPath}': ${error instanceof Error ? error.message : String(error)}`
-			await task.say("error", errorMessage)
+			await task.say("error", { text: errorMessage })
 			pushToolResult(formatResponse.toolError(errorMessage))
 			return
 		}
@@ -316,7 +316,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			task.consecutiveMistakeCount++
 			task.recordToolError("apply_patch")
 			const errorMessage = `File not found: ${relPath}. Cannot update a non-existent file.`
-			await task.say("error", errorMessage)
+			await task.say("error", { text: errorMessage })
 			pushToolResult(formatResponse.toolError(errorMessage))
 			return
 		}
@@ -389,7 +389,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			// Validate destination path access permissions
 			const moveAccessAllowed = task.rooIgnoreController?.validateAccess(change.movePath)
 			if (!moveAccessAllowed) {
-				await task.say("rooignore_error", change.movePath)
+				await task.say("rooignore_error", { text: change.movePath })
 				pushToolResult(formatResponse.rooIgnoreError(change.movePath))
 				await task.diffViewProvider.reset()
 				return
@@ -401,7 +401,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 				task.consecutiveMistakeCount++
 				task.recordToolError("apply_patch")
 				const errorMessage = `Cannot move file to write-protected path: ${change.movePath}`
-				await task.say("error", errorMessage)
+				await task.say("error", { text: errorMessage })
 				pushToolResult(formatResponse.toolError(errorMessage))
 				await task.diffViewProvider.reset()
 				return
@@ -413,7 +413,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 				task.consecutiveMistakeCount++
 				task.recordToolError("apply_patch")
 				const errorMessage = `Cannot move file to path outside workspace: ${change.movePath}`
-				await task.say("error", errorMessage)
+				await task.say("error", { text: errorMessage })
 				pushToolResult(formatResponse.toolError(errorMessage))
 				await task.diffViewProvider.reset()
 				return

@@ -197,7 +197,7 @@ export async function presentAssistantMessage(cline: Task) {
 
 				if (response !== "yesButtonClicked") {
 					if (text) {
-						await cline.say("user_feedback", text, images)
+						await cline.say("user_feedback", { text, images })
 						pushToolResult(formatResponse.toolResult(formatResponse.toolDeniedWithFeedback(text), images))
 					} else {
 						pushToolResult(formatResponse.toolDenied())
@@ -210,7 +210,7 @@ export async function presentAssistantMessage(cline: Task) {
 				// Don't push it as a separate tool_result here - that would create duplicates.
 				// The tool will call pushToolResult, which will merge the feedback into the actual result.
 				if (text) {
-					await cline.say("user_feedback", text, images)
+					await cline.say("user_feedback", { text, images })
 					approvalFeedback = { text, images }
 				}
 
@@ -289,7 +289,7 @@ export async function presentAssistantMessage(cline: Task) {
 				content = content.replace(/\s?<\/thinking>/g, "")
 			}
 
-			await cline.say("text", content, undefined, block.partial)
+			await cline.say("text", { text: content, partial: block.partial })
 			break
 		}
 		case "tool_use": {
@@ -311,7 +311,7 @@ export async function presentAssistantMessage(cline: Task) {
 					// Best-effort only
 				}
 				cline.consecutiveMistakeCount++
-				await cline.say("error", errorMessage)
+				await cline.say("error", { text: errorMessage })
 				cline.userMessageContent.push({ type: "text", text: errorMessage })
 				cline.didAlreadyUseTool = true
 				break
@@ -504,7 +504,7 @@ export async function presentAssistantMessage(cline: Task) {
 				if (response !== "yesButtonClicked") {
 					// Handle both messageResponse and noButtonClicked with text.
 					if (text) {
-						await cline.say("user_feedback", text, images)
+						await cline.say("user_feedback", { text, images })
 						pushToolResult(formatResponse.toolResult(formatResponse.toolDeniedWithFeedback(text), images))
 					} else {
 						pushToolResult(formatResponse.toolDenied())
@@ -517,7 +517,7 @@ export async function presentAssistantMessage(cline: Task) {
 				// Don't push it as a separate tool_result here - that would create duplicates.
 				// The tool will call pushToolResult, which will merge the feedback into the actual result.
 				if (text) {
-					await cline.say("user_feedback", text, images)
+					await cline.say("user_feedback", { text, images })
 					approvalFeedback = { text, images }
 				}
 
@@ -640,7 +640,7 @@ export async function presentAssistantMessage(cline: Task) {
 						)
 
 						// Add user feedback to chat.
-						await cline.say("user_feedback", text, images)
+						await cline.say("user_feedback", { text, images })
 					}
 
 					// Return tool result message about the repetition
@@ -844,7 +844,7 @@ export async function presentAssistantMessage(cline: Task) {
 									const message = `Custom tool "${block.name}" argument validation failed: ${errorMsg}`
 									console.error(message)
 									cline.consecutiveMistakeCount++
-									await cline.say("error", message)
+									await cline.say("error", { text: message })
 									pushToolResult(formatResponse.toolError(message))
 									break
 								}
@@ -875,7 +875,7 @@ export async function presentAssistantMessage(cline: Task) {
 					const errorMessage = `Unknown tool "${block.name}". This tool does not exist. Please use one of the available tools.`
 					cline.consecutiveMistakeCount++
 					cline.recordToolError(block.name as ToolName, errorMessage)
-					await cline.say("error", t("tools:unknownToolError", { toolName: block.name }))
+					await cline.say("error", { text: t("tools:unknownToolError", { toolName: block.name }) })
 					// Push tool_result directly WITHOUT setting didAlreadyUseTool
 					// This prevents the stream from being interrupted with "Response interrupted by tool use result"
 					cline.pushToolResultToUserContent({

@@ -1,7 +1,7 @@
 import * as path from "path"
 import fs from "fs/promises"
 
-import type { MockedFunction } from "vitest"
+import { beforeEach, describe, expect, it, vi, type MockedFunction } from "vitest"
 
 import { fileExistsAtPath } from "../../../utils/fs"
 import { isPathOutsideWorkspace } from "../../../utils/pathUtils"
@@ -378,7 +378,7 @@ describe("editFileTool", () => {
 			await executeEditFileTool({ old_string: "NonExistent" }, { fileContent: "Line 1\nLine 2\nLine 3" })
 			await executeEditFileTool({ old_string: "NonExistent" }, { fileContent: "Line 1\nLine 2\nLine 3" })
 
-			expect(mockTask.say).toHaveBeenCalledWith("diff_error", expect.stringContaining("No match found"))
+			expect(mockTask.say).toHaveBeenCalledWith("diff_error", { text: expect.stringContaining("No match found") })
 		})
 
 		it("returns error when occurrence count does not match expected_replacements", async () => {
@@ -438,7 +438,7 @@ describe("editFileTool", () => {
 			await executeEditFileTool({ old_string: "NonExistent" }, { fileContent: "Line 1\nLine 2\nLine 3" })
 
 			expect(mockTask.consecutiveMistakeCountForEditFile.get(testFilePath)).toBe(1)
-			expect(mockTask.say).not.toHaveBeenCalledWith("diff_error", expect.any(String))
+			expect(mockTask.say).not.toHaveBeenCalledWith("diff_error", { text: expect.any(String) })
 			expect(mockTask.recordToolError).toHaveBeenCalledWith(
 				"edit_file",
 				expect.stringContaining("No match found"),
@@ -453,7 +453,7 @@ describe("editFileTool", () => {
 			await executeEditFileTool({ old_string: "AlsoNonExistent" }, { fileContent: "Line 1\nLine 2\nLine 3" })
 
 			expect(mockTask.consecutiveMistakeCountForEditFile.get(testFilePath)).toBe(2)
-			expect(mockTask.say).toHaveBeenCalledWith("diff_error", expect.stringContaining("No match found"))
+			expect(mockTask.say).toHaveBeenCalledWith("diff_error", { text: expect.stringContaining("No match found") })
 		})
 
 		it("does NOT show diff_error to user on first occurrence_mismatch failure", async () => {
@@ -463,7 +463,7 @@ describe("editFileTool", () => {
 			)
 
 			expect(mockTask.consecutiveMistakeCountForEditFile.get(testFilePath)).toBe(1)
-			expect(mockTask.say).not.toHaveBeenCalledWith("diff_error", expect.any(String))
+			expect(mockTask.say).not.toHaveBeenCalledWith("diff_error", { text: expect.any(String) })
 			expect(mockTask.recordToolError).toHaveBeenCalledWith(
 				"edit_file",
 				expect.stringContaining("Occurrence count mismatch"),
@@ -486,7 +486,7 @@ describe("editFileTool", () => {
 			expect(mockTask.consecutiveMistakeCountForEditFile.get(testFilePath)).toBe(2)
 			expect(mockTask.say).toHaveBeenCalledWith(
 				"diff_error",
-				expect.stringContaining("Occurrence count mismatch"),
+				{ text: expect.stringContaining("Occurrence count mismatch") },
 			)
 		})
 
@@ -523,7 +523,7 @@ describe("editFileTool", () => {
 			expect(mockTask.consecutiveMistakeCountForEditFile.get(otherFilePath)).toBe(1)
 
 			// Neither should have triggered diff_error display
-			expect(mockTask.say).not.toHaveBeenCalledWith("diff_error", expect.any(String))
+			expect(mockTask.say).not.toHaveBeenCalledWith("diff_error", { text: expect.any(String) })
 		})
 	})
 

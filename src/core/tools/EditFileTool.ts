@@ -175,7 +175,7 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 			task.consecutiveMistakeCountForEditFile.set(relPath, currentCount)
 
 			if (currentCount >= 2) {
-				await task.say("diff_error", formattedError)
+				await task.say("diff_error", { text: formattedError })
 			}
 		}
 
@@ -212,7 +212,7 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 				// Finalize the partial tool preview before emitting any say() messages.
 				await finalizePartialToolAskIfNeeded(relPath)
 				task.didToolFailInCurrentTurn = true
-				await task.say("rooignore_error", relPath)
+				await task.say("rooignore_error", { text: relPath })
 				pushToolResult(formatResponse.rooIgnoreError(relPath))
 				return
 			}
@@ -284,7 +284,7 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 					const formattedError = `File does not exist at path: ${absolutePath}\n\n<error_details>\nThe specified file could not be found, so the replacement could not be performed.\n\nRecovery suggestions:\n1. Verify the file path is correct\n2. If you intended to create a new file, set old_string to an empty string\n3. Use list_files or read_file to confirm the correct path\n</error_details>`
 					// Match apply_diff behavior: surface missing file via the generic error channel.
 					await finalizePartialToolAskIfNeeded(relPath)
-					await task.say("error", formattedError)
+					await task.say("error", { text: formattedError })
 					await recordFailureForPathAndMaybeEscalate(relPath, formattedError)
 					task.recordToolError("edit_file", formattedError)
 					pushToolResult(formattedError)

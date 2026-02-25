@@ -48,7 +48,7 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 			const ignoredFileAttemptedToAccess = task.rooIgnoreController?.validateCommand(canonicalCommand)
 
 			if (ignoredFileAttemptedToAccess) {
-				await task.say("rooignore_error", ignoredFileAttemptedToAccess)
+				await task.say("rooignore_error", { text: ignoredFileAttemptedToAccess })
 				pushToolResult(formatResponse.rooIgnoreError(ignoredFileAttemptedToAccess))
 				return
 			}
@@ -269,7 +269,7 @@ export async function executeCommandInTerminal(
 				// Continue using compressed output for UI display
 				result = Terminal.compressTerminalOutput(output ?? "")
 
-				task.say("command_output", result)
+				task.say("command_output", { text: result })
 				completed = true
 			} finally {
 				// Signal that onCompleted has finished, so the main code can safely use persistedResult
@@ -366,7 +366,7 @@ export async function executeCommandInTerminal(
 			if (isTimedOut) {
 				const status: CommandExecutionStatus = { executionId, status: "timeout" }
 				provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
-				await task.say("error", t("common:errors:command_timeout", { seconds: commandExecutionTimeoutSeconds }))
+				await task.say("error", { text: t("common:errors:command_timeout", { seconds: commandExecutionTimeoutSeconds }) })
 				task.didToolFailInCurrentTurn = true
 				task.terminalProcess = undefined
 
@@ -412,7 +412,7 @@ export async function executeCommandInTerminal(
 
 	if (message) {
 		const { text, images } = message
-		await task.say("user_feedback", text, images)
+		await task.say("user_feedback", { text, images })
 
 		return [
 			true,

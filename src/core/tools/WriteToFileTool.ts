@@ -50,7 +50,7 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 		const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
 
 		if (!accessAllowed) {
-			await task.say("rooignore_error", relPath)
+			await task.say("rooignore_error", { text: relPath })
 			pushToolResult(formatResponse.rooIgnoreError(relPath))
 			return
 		}
@@ -77,7 +77,7 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 				task.recordToolError("write_to_file")
 				const errorDetails = error instanceof Error ? error.message : String(error)
 				const formattedError = `Failed to create directories for file: ${relPath}\n\n<error_details>\n${errorDetails}\n\nRecovery suggestions:\n1. Verify the file path is within the workspace directory\n2. Check that you have permission to create directories\n3. Use a simpler path structure\n</error_details>`
-				await task.say("error", formattedError)
+				await task.say("error", { text: formattedError })
 				pushToolResult(formattedError)
 				await task.diffViewProvider.reset()
 				return

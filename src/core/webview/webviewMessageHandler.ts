@@ -2362,6 +2362,60 @@ export const webviewMessageHandler = async (
 			await handleRequestSkills(provider)
 			break
 		}
+		case "requestOpenAiModels": {
+			const { baseUrl, apiKey, openAiHeaders } = message.values || {}
+
+			if (baseUrl && apiKey) {
+				try {
+					// Trim trailing slash from baseUrl if present
+					const trimmedBaseUrl = baseUrl.replace(/\/$/, "")
+					const modelsUrl = `${trimmedBaseUrl}/models`
+
+					const response = await fetch(modelsUrl, {
+						headers: {
+							"Authorization": `Bearer ${apiKey}`,
+							"Content-Type": "application/json",
+							...openAiHeaders,
+						},
+					})
+
+					if (response.ok) {
+						const data = await response.json()
+						const modelsArray = data.data?.map((model: any) => model.id) || []
+						// Remove duplicates and return
+						const uniqueModels = [...new Set<string>(modelsArray)]
+						await provider.postMessageToWebview({
+							type: "openAiModels",
+							openAiModels: uniqueModels,
+						})
+					} else {
+						provider.log(
+							`[requestOpenAiModels] Failed to fetch models: HTTP ${response.status} ${response.statusText}`,
+						)
+						await provider.postMessageToWebview({
+							type: "openAiModels",
+							openAiModels: [],
+						})
+					}
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : String(error)
+					provider.log(`[requestOpenAiModels] Error: ${errorMessage}`)
+					await provider.postMessageToWebview({
+						type: "openAiModels",
+						openAiModels: [],
+					})
+				}
+			} else {
+				provider.log(
+					`[requestOpenAiModels] Missing baseUrl or apiKey. baseUrl: ${!!baseUrl}, apiKey: ${!!apiKey}`,
+				)
+				await provider.postMessageToWebview({
+					type: "openAiModels",
+					openAiModels: [],
+				})
+			}
+			break
+		}
 		case "getEnabledSkills": {
 			try {
 				const state = await provider.getState()

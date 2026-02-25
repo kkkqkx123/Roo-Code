@@ -396,7 +396,9 @@ export class StreamPostProcessor {
 		const citationLinks = sources.map((source: { url: any }, i: number) => `[${i + 1}](${source.url})`)
 		const sourcesText = `${await this.callbacks.getTranslation("common:gemini.sources")} ${citationLinks.join(", ")}`
 
-		await this.callbacks.say("text", sourcesText, undefined, false, undefined, undefined, {
+		await this.callbacks.say("text", {
+			text: sourcesText,
+			partial: false,
 			isNonInteractive: true,
 		})
 	}
@@ -460,7 +462,7 @@ export class StreamPostProcessor {
 
 		// Only show error and count toward mistake limit after 2 consecutive failures
 		if (count >= 2) {
-			await this.callbacks.say("error", "MODEL_NO_TOOLS_USED")
+			await this.callbacks.say("error", { text: "MODEL_NO_TOOLS_USED" })
 			await this.callbacks.incrementConsecutiveMistakeCount()
 		}
 
@@ -480,7 +482,7 @@ export class StreamPostProcessor {
 
 		// Only show error after 2 consecutive failures
 		if (count >= 2) {
-			await this.callbacks.say("error", "MODEL_NO_ASSISTANT_MESSAGES")
+			await this.callbacks.say("error", { text: "MODEL_NO_ASSISTANT_MESSAGES" })
 		}
 
 		await this.callbacks.emitEvent({
@@ -558,10 +560,9 @@ export class StreamPostProcessor {
 					content: currentUserContent,
 				})
 
-				await this.callbacks.say(
-					"error",
-					"Unexpected API Response: The language model did not provide any assistant messages. This may indicate an issue with the API or the model's output.",
-				)
+				await this.callbacks.say("error", {
+					text: "Unexpected API Response: The language model did not provide any assistant messages. This may indicate an issue with the API or the model's output.",
+				})
 
 				await this.callbacks.addToApiConversationHistory({
 					role: "assistant",

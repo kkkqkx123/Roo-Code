@@ -354,17 +354,19 @@ export class StreamProcessor {
 
 				const deadLoopErrorMessage = `检测到死循环：${detectionResult.details}。任务已终止，请尝试重新描述任务或调整提示词。`
 
-				await this.callbacks.say("error", deadLoopErrorMessage)
+				await this.callbacks.say("error", { text: deadLoopErrorMessage })
 				await this.abortStream("streaming_failed", deadLoopErrorMessage)
 
 				this.callbacks.setAbort(true)
 				this.callbacks.setAbortReason("streaming_failed")
 				await this.callbacks.abortTask()
-				return
+
+				// Throw an error to immediately stop the stream processing loop
+				throw new Error(`Dead loop detected: ${detectionResult.details}`)
 			}
 		}
 
-		await this.callbacks.say("reasoning", formattedReasoning, undefined, true)
+		await this.callbacks.say("reasoning", { text: formattedReasoning, partial: true })
 	}
 
 	/**

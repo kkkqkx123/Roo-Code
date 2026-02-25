@@ -10,6 +10,7 @@ import type {
 } from "../StreamProcessorCallbacks"
 import type { ModelInfo } from "@coder/types"
 import type { ApiStream, ApiStreamChunk } from "../../../../api/transform/stream"
+import { mockDetectImpl } from "./mocks"
 
 // Mock NativeToolCallParser
 vi.mock("../../assistant-message/NativeToolCallParser", () => ({
@@ -41,10 +42,10 @@ vi.mock("../../../utils/tiktoken", () => ({
 	})),
 }))
 
-// Mock DeadLoopDetector
+// Mock DeadLoopDetector using shared mock from mocks.ts
 vi.mock("../../../utils/deadLoopDetector", () => ({
 	DeadLoopDetector: vi.fn().mockImplementation(() => ({
-		detect: vi.fn().mockReturnValue({ detected: false }),
+		detect: mockDetectImpl,
 		reset: vi.fn(),
 	})),
 }))
@@ -55,7 +56,11 @@ describe("StreamProcessor", () => {
 	let modelInfo: ModelInfo
 
 	beforeEach(() => {
-		// 创建 mock callbacks
+		// Reset mock completely and set default return value
+		mockDetectImpl.mockReset()
+		mockDetectImpl.mockReturnValue({ detected: false })
+
+		// Create fresh mock callbacks
 		callbacks = {
 			updateApiReqMessage: vi.fn().mockResolvedValue(undefined),
 			saveClineMessages: vi.fn().mockResolvedValue(undefined),
@@ -262,6 +267,7 @@ describe("StreamProcessor", () => {
 	describe("中止处理", () => {
 		it("应该在用户取消时中止流", async () => {
 			callbacks.isAborted = vi.fn().mockReturnValue(true)
+			callbacks.isAbandoned = vi.fn().mockReturnValue(false)
 			const processor = new StreamProcessor(callbacks, config)
 
 			async function* abortStream(): ApiStream {
@@ -270,10 +276,16 @@ describe("StreamProcessor", () => {
 
 			await processor.processStream(abortStream())
 
-			expect(callbacks.abortStream).toHaveBeenCalledWith("user_cancelled")
+			// 检查是否调用了 isAborted 和 isAbandoned
+			expect(callbacks.isAborted).toHaveBeenCalled()
+			expect(callbacks.isAbandoned).toHaveBeenCalled()
+			// abortStream 是私有方法，不会直接调用 callbacks.abortStream
+			// 但应该调用 setDidFinishAbortingStream
+			expect(callbacks.setDidFinishAbortingStream).toHaveBeenCalledWith(true)
 		})
 
 		it("应该在流失败时中止流", async () => {
+			callbacks.isAbandoned = vi.fn().mockReturnValue(false)
 			const processor = new StreamProcessor(callbacks, config)
 
 			async function* errorStream(): ApiStream {
@@ -282,7 +294,8 @@ describe("StreamProcessor", () => {
 
 			await processor.processStream(errorStream())
 
-			expect(callbacks.abortStream).toHaveBeenCalledWith("streaming_failed", "Stream failed")
+			// error chunk 应该触发内部 abortStream，最终调用 setDidFinishAbortingStream
+			expect(callbacks.setDidFinishAbortingStream).toHaveBeenCalledWith(true)
 		})
 	})
 
@@ -331,7 +344,7 @@ describe("StreamProcessor", () => {
 			await processor.processStream(toolRejectStream())
 
 			// 流应该被中断，但不会调用 abortStream
-			expect(callbacks.abortStream).not.toHaveBeenCalled()
+			expect(callbacks.setDidFinishAbortingStream).not.toHaveBeenCalled()
 		})
 	})
 
@@ -347,12 +360,14 @@ describe("StreamProcessor", () => {
 			await processor.processStream(toolUsedStream())
 
 			// 流应该被中断，但不会调用 abortStream
-			expect(callbacks.abortStream).not.toHaveBeenCalled()
+			expect(callbacks.setDidFinishAbortingStream).not.toHaveBeenCalled()
 		})
 	})
 
 	describe("错误处理", () => {
 		it("应该处理流错误", async () => {
+			callbacks.isAbandoned = vi.fn().mockReturnValue(false)
+			callbacks.isAborted = vi.fn().mockReturnValue(false)
 			const processor = new StreamProcessor(callbacks, config)
 
 			async function* errorStream(): ApiStream {
@@ -362,11 +377,13 @@ describe("StreamProcessor", () => {
 
 			await processor.processStream(errorStream())
 
-			expect(callbacks.abortStream).toHaveBeenCalledWith("streaming_failed", expect.any(String))
+			// 应该调用 setDidFinishAbortingStream
+			expect(callbacks.setDidFinishAbortingStream).toHaveBeenCalledWith(true)
 		})
 
 		it("应该在非放弃状态下处理错误", async () => {
 			callbacks.isAbandoned = vi.fn().mockReturnValue(false)
+			callbacks.isAborted = vi.fn().mockReturnValue(false)
 			const processor = new StreamProcessor(callbacks, config)
 
 			async function* errorStream(): ApiStream {
@@ -375,7 +392,8 @@ describe("StreamProcessor", () => {
 
 			await processor.processStream(errorStream())
 
-			expect(callbacks.abortStream).toHaveBeenCalled()
+			// 应该调用 setDidFinishAbortingStream
+			expect(callbacks.setDidFinishAbortingStream).toHaveBeenCalledWith(true)
 		})
 
 		it("应该在放弃状态下不处理错误", async () => {
@@ -388,7 +406,8 @@ describe("StreamProcessor", () => {
 
 			await processor.processStream(errorStream())
 
-			expect(callbacks.abortStream).not.toHaveBeenCalled()
+			// 放弃状态下不应该调用 setDidFinishAbortingStream
+			expect(callbacks.setDidFinishAbortingStream).not.toHaveBeenCalled()
 		})
 	})
 
@@ -396,6 +415,8 @@ describe("StreamProcessor", () => {
 		it("应该使用中止控制器取消请求", async () => {
 			const abortController = new AbortController()
 			callbacks.getAbortController = vi.fn().mockReturnValue(abortController)
+			callbacks.isAbandoned = vi.fn().mockReturnValue(false)
+			callbacks.isAborted = vi.fn().mockReturnValue(false)
 
 			const processor = new StreamProcessor(callbacks, config)
 
@@ -411,8 +432,8 @@ describe("StreamProcessor", () => {
 
 			await processor.processStream(abortableStream())
 
-			// 应该因为中止而提前结束
-			expect(callbacks.abortStream).toHaveBeenCalledWith("user_cancelled")
+			// 应该因为中止而提前结束，并调用 setDidFinishAbortingStream
+			expect(callbacks.setDidFinishAbortingStream).toHaveBeenCalledWith(true)
 		})
 	})
 
@@ -441,8 +462,83 @@ describe("StreamProcessor", () => {
 
 			await processor.processStream(usageStream())
 
-			// 后台收集被禁用，但主流程应该正常工作
-			expect(callbacks.updateApiReqMessage).toHaveBeenCalled()
+			// 后台收集被禁用，updateApiReqMessage 不会在后台调用
+			// 流处理完成时也不会调用，因为没有文本内容
+			expect(callbacks.updateApiReqMessage).not.toHaveBeenCalled()
+		})
+	})
+
+	describe("死循环检测", () => {
+		it("应该在检测到死循环时中止流", async () => {
+			// Mock dead loop detection to trigger - use mockImplementation to override beforeEach
+			mockDetectImpl.mockImplementation(() => ({
+				detected: true,
+				type: "shortSequenceLoop",
+				details: '检测到短序列循环：重复单元 "思考"',
+			}))
+
+			const processor = new StreamProcessor(callbacks, config)
+
+			async function* deadLoopStream(): ApiStream {
+				yield { type: "reasoning", text: "思考思考思考思考" } as ApiStreamChunk
+				// This chunk should never be reached due to dead loop detection
+				yield { type: "text", text: "More text" } as ApiStreamChunk
+			}
+
+			// processStream will not throw, but will trigger abort flow
+			await processor.processStream(deadLoopStream())
+
+			// Verify abort flow was triggered
+			// say 应该被调用，包含错误消息
+			expect(callbacks.say).toHaveBeenCalledWith(
+				"error",
+				expect.stringContaining("检测到死循环"),
+			)
+			expect(callbacks.setAbort).toHaveBeenCalledWith(true)
+			expect(callbacks.setAbortReason).toHaveBeenCalledWith("streaming_failed")
+			expect(callbacks.abortTask).toHaveBeenCalled()
+			expect(callbacks.setDidFinishAbortingStream).toHaveBeenCalledWith(true)
+		})
+
+		it("应该在死循环检测被禁用时不触发中止", async () => {
+			// Even with detection returning true, disabled option should prevent abort
+			mockDetectImpl.mockImplementation(() => ({
+				detected: true,
+				type: "shortSequenceLoop",
+				details: "检测到短序列循环",
+			}))
+
+			const options = { enableDeadLoopDetection: false }
+			const processor = new StreamProcessor(callbacks, config, options)
+
+			async function* reasoningStream(): ApiStream {
+				yield { type: "reasoning", text: "思考思考思考思考" } as ApiStreamChunk
+			}
+
+			await processor.processStream(reasoningStream())
+
+			// Should not abort when detection is disabled
+			expect(callbacks.abortTask).not.toHaveBeenCalled()
+			expect(callbacks.setDidFinishAbortingStream).not.toHaveBeenCalled()
+		})
+
+		it("应该继续处理未检测到死循环的 reasoning", async () => {
+			// Normal reasoning should not trigger abort
+			mockDetectImpl.mockImplementation(() => ({ detected: false }))
+
+			const processor = new StreamProcessor(callbacks, config)
+
+			async function* reasoningStream(): ApiStream {
+				yield { type: "reasoning", text: "让我思考这个问题" } as ApiStreamChunk
+				yield { type: "text", text: "这是答案" } as ApiStreamChunk
+			}
+
+			await processor.processStream(reasoningStream())
+
+			// Should not abort for normal reasoning
+			expect(callbacks.abortTask).not.toHaveBeenCalled()
+			expect(callbacks.setDidFinishAbortingStream).not.toHaveBeenCalled()
+			expect(callbacks.say).toHaveBeenCalledWith("reasoning", expect.any(String), undefined, true)
 		})
 	})
 })

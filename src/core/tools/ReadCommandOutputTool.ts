@@ -115,7 +115,7 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 			task.recordToolError("read_command_output")
 			task.didToolFailInCurrentTurn = true
 			const errorMsg = `Invalid artifact_id format: "${artifact_id}". Expected format: cmd-{timestamp}.txt (e.g., "cmd-1706119234567.txt")`
-			await task.say("error", errorMsg)
+			await task.say("error", { text: errorMsg })
 			pushToolResult(`Error: ${errorMsg}`)
 			return
 		}
@@ -127,7 +127,7 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 
 			if (!globalStoragePath) {
 				const errorMsg = "Unable to access command output storage. Global storage path is not available."
-				await task.say("error", errorMsg)
+				await task.say("error", { text: errorMsg })
 				pushToolResult(`Error: ${errorMsg}`)
 				return
 			}
@@ -140,7 +140,7 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 				await fs.access(artifactPath)
 			} catch {
 				const errorMsg = `Artifact not found: "${artifact_id}". Please verify the artifact_id from the command output message. Available artifacts are created when command output exceeds the preview size.`
-				await task.say("error", errorMsg)
+				await task.say("error", { text: errorMsg })
 				task.didToolFailInCurrentTurn = true
 				pushToolResult(`Error: ${errorMsg}`)
 				return
@@ -153,7 +153,7 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 			// Validate offset
 			if (offset < 0 || offset >= totalSize) {
 				const errorMsg = `Invalid offset: ${offset}. File size is ${totalSize} bytes. Offset must be between 0 and ${totalSize - 1}.`
-				await task.say("error", errorMsg)
+				await task.say("error", { text: errorMsg })
 				pushToolResult(`Error: ${errorMsg}`)
 				return
 			}
@@ -180,22 +180,21 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 			}
 
 			// Report to UI that we read command output
-			await task.say(
-				"tool",
-				JSON.stringify({
+			await task.say("tool", {
+				text: JSON.stringify({
 					tool: "readCommandOutput",
 					readStart,
 					readEnd,
 					totalBytes: totalSize,
 					...(search && { searchPattern: search, matchCount }),
 				}),
-			)
+			})
 
 			task.consecutiveMistakeCount = 0
 			pushToolResult(result)
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error)
-			await task.say("error", `Error reading command output: ${errorMsg}`)
+			await task.say("error", { text: `Error reading command output: ${errorMsg}` })
 			task.didToolFailInCurrentTurn = true
 			pushToolResult(`Error reading command output: ${errorMsg}`)
 		}

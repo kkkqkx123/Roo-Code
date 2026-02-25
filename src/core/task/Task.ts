@@ -51,6 +51,7 @@ import {
 	MAX_MCP_TOOLS_THRESHOLD,
 	countEnabledMcpTools,
 } from "@coder/types"
+import type { SayOptions } from "./streaming/SayOptions"
 
 // api
 import { ApiHandler, ApiHandlerCreateMessageMetadata, buildApiHandler } from "../../api"
@@ -1709,15 +1710,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			rooIgnoreController: this.rooIgnoreController,
 		})
 		if (error) {
-			await this.say(
-				"condense_context_error",
-				error,
-				undefined /* images */,
-				false /* partial */,
-				undefined /* checkpoint */,
-				undefined /* progressStatus */,
-				{ isNonInteractive: true } /* options */,
-			)
+			await this.say("condense_context_error", {
+				text: error,
+				partial: false,
+				isNonInteractive: true,
+			})
 			return
 		}
 		await this.overwriteApiConversationHistory(messages)
@@ -1729,34 +1726,27 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			prevContextTokens,
 			condenseId: condenseId!,
 		}
-		await this.say(
-			"condense_context",
-			undefined /* text */,
-			undefined /* images */,
-			false /* partial */,
-			undefined /* checkpoint */,
-			undefined /* progressStatus */,
-			{ isNonInteractive: true } /* options */,
+		await this.say("condense_context", {
+			partial: false,
+			isNonInteractive: true,
 			contextCondense,
-		)
+		})
 
 		// Process any queued messages after condensing completes
 		this.processQueuedMessages()
 	}
 
-	async say(
-		type: ClineSay,
-		text?: string,
-		images?: string[],
-		partial?: boolean,
-		checkpoint?: Record<string, unknown>,
-		progressStatus?: ToolProgressStatus,
-		options: {
-			isNonInteractive?: boolean
-		} = {},
-		contextCondense?: ContextCondense,
-		contextTruncation?: ContextTruncation,
-	): Promise<undefined> {
+	async say(type: ClineSay, options?: SayOptions): Promise<undefined> {
+		const {
+			text,
+			images,
+			partial,
+			isNonInteractive = false,
+			checkpoint,
+			progressStatus,
+			contextCondense,
+			contextTruncation,
+		} = options || {}
 		if (this.abort) {
 			throw new Error(`[Coder#say] task ${this.taskId}.${this.instanceId} aborted`)
 		}
@@ -1779,7 +1769,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					// This is a new partial message, so add it with partial state.
 					const sayTs = Date.now()
 
-					if (!options.isNonInteractive) {
+					if (!isNonInteractive) {
 						this.lastMessageTs = sayTs
 					}
 
@@ -1799,7 +1789,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				// This is the complete version of a previously partial
 				// message, so replace the partial with the complete version.
 				if (isUpdatingPreviousPartial) {
-					if (!options.isNonInteractive) {
+					if (!isNonInteractive) {
 						this.lastMessageTs = lastMessage.ts
 					}
 
@@ -1818,7 +1808,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					// This is a new and complete message, so add it like normal.
 					const sayTs = Date.now()
 
-					if (!options.isNonInteractive) {
+					if (!isNonInteractive) {
 						this.lastMessageTs = sayTs
 					}
 
@@ -1841,7 +1831,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			// does not need to respond to. We don't want these message types
 			// to trigger an update to `lastMessageTs` since they can be created
 			// asynchronously and could interrupt a pending ask.
-			if (!options.isNonInteractive) {
+			if (!isNonInteractive) {
 				this.lastMessageTs = sayTs
 			}
 
@@ -1859,11 +1849,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	async sayAndCreateMissingParamError(toolName: ToolName, paramName: string, relPath?: string) {
-		await this.say(
-			"error",
-			`Roo tried to use ${toolName}${relPath ? ` for '${relPath.toPosix()}'` : ""
+		await this.say("error", {
+			text: `Roo tried to use ${toolName}${relPath ? ` for '${relPath.toPosix()}'` : ""
 			} without value for required parameter '${paramName}'. Retrying...`,
-		)
+		})
 		return formatResponse.toolError(formatResponse.missingToolParameterError(paramName))
 	}
 
@@ -1941,24 +1930,19 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 			await this.providerRef.deref()?.postStateToWebviewWithoutTaskHistory()
 
-			await this.say("text", task, images)
+			await this.say("text", { text: task, images })
 
 			// Check for too many MCP tools and warn the user
 			const { enabledToolCount, enabledServerCount } = await this.getEnabledMcpToolsCount()
 			if (enabledToolCount > MAX_MCP_TOOLS_THRESHOLD) {
-				await this.say(
-					"too_many_tools_warning",
-					JSON.stringify({
+				await this.say("too_many_tools_warning", {
+					text: JSON.stringify({
 						toolCount: enabledToolCount,
 						serverCount: enabledServerCount,
 						threshold: MAX_MCP_TOOLS_THRESHOLD,
 					}),
-					undefined,
-					undefined,
-					undefined,
-					undefined,
-					{ isNonInteractive: true },
-				)
+					isNonInteractive: true,
+				})
 			}
 			this.isInitialized = true
 
@@ -2064,7 +2048,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			let responseImages: string[] | undefined
 
 			if (response === "messageResponse") {
-				await this.say("user_feedback", text, images)
+				await this.say("user_feedback", { text, images })
 				responseText = text
 				responseImages = images
 			}
@@ -2533,7 +2517,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						],
 					)
 
-					await this.say("user_feedback", text, images)
+					await this.say("user_feedback", { text, images })
 				}
 
 				this.consecutiveMistakeCount = 0
@@ -2560,12 +2544,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			await this.maybeWaitForProviderRateLimit(currentItem.retryAttempt ?? 0)
 			Task.lastGlobalApiRequestTime = performance.now()
 
-			await this.say(
-				"api_req_started",
-				JSON.stringify({
+			await this.say("api_req_started", {
+				text: JSON.stringify({
 					apiProtocol,
 				}),
-			)
+			})
 
 			const {
 				ignoreMode = "both",
@@ -2792,7 +2775,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			// If we reach here without continuing, return false (will always be false for now)
 			return false
 		}
-		
+
 		// Return false if we broke out of the loop (e.g., due to abort)
 		return false
 	}
@@ -2808,12 +2791,12 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.didCompleteReadingStream = true
 		this.presentAssistantMessageLocked = false
 		this.presentAssistantMessageHasPendingUpdates = false
-		
+
 		// Clean up streaming tool call parser
 		NativeToolCallParser.clearAllStreamingToolCalls()
 		NativeToolCallParser.clearRawChunkState()
 		this.streamingToolCallIndices.clear()
-		
+
 		// Clean up StreamProcessor and StreamPostProcessor
 		if (this.streamProcessor) {
 			this.streamProcessor.removeAllListeners()
@@ -2823,7 +2806,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			this.streamPostProcessor.reset()
 			this.streamPostProcessor = undefined
 		}
-		
+
 		// Log the abort reason
 		if (streamingFailedMessage) {
 			console.error(`[Task#${this.taskId}.${this.instanceId}] Stream aborted: ${streamingFailedMessage}`)
@@ -3005,16 +2988,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			if (truncateResult.summary) {
 				const { summary, cost, prevContextTokens, newContextTokens = 0 } = truncateResult
 				const contextCondense: ContextCondense = { summary, cost, newContextTokens, prevContextTokens }
-				await this.say(
-					"condense_context",
-					undefined /* text */,
-					undefined /* images */,
-					false /* partial */,
-					undefined /* checkpoint */,
-					undefined /* progressStatus */,
-					{ isNonInteractive: true } /* options */,
+				await this.say("condense_context", {
+					partial: false,
+					isNonInteractive: true,
 					contextCondense,
-				)
+				})
 			} else if (truncateResult.truncationId) {
 				// Sliding window truncation occurred (fallback when condensing fails or is disabled)
 				const contextTruncation: ContextTruncation = {
@@ -3023,17 +3001,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					prevContextTokens: truncateResult.prevContextTokens,
 					newContextTokens: truncateResult.newContextTokensAfterTruncation ?? 0,
 				}
-				await this.say(
-					"sliding_window_truncation",
-					undefined /* text */,
-					undefined /* images */,
-					false /* partial */,
-					undefined /* checkpoint */,
-					undefined /* progressStatus */,
-					{ isNonInteractive: true } /* options */,
-					undefined /* contextCondense */,
+				await this.say("sliding_window_truncation", {
+					partial: false,
+					isNonInteractive: true,
 					contextTruncation,
-				)
+				})
 			}
 		} finally {
 			// Notify webview that context management is complete (removes in-progress spinner)
@@ -3070,11 +3042,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			for (let i = rateLimitDelay; i > 0; i--) {
 				// Send structured JSON data for i18n-safe transport
 				const delayMessage = JSON.stringify({ seconds: i })
-				await this.say("api_req_rate_limit_wait", delayMessage, undefined, true)
+				await this.say("api_req_rate_limit_wait", { text: delayMessage, partial: true })
 				await delay(1000)
 			}
 			// Finalize the partial message so the UI doesn't keep rendering an in-progress spinner.
-			await this.say("api_req_rate_limit_wait", undefined, undefined, false)
+			await this.say("api_req_rate_limit_wait", { partial: false })
 		}
 	}
 
@@ -3230,7 +3202,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					await this.overwriteApiConversationHistory(truncateResult.messages)
 				}
 				if (truncateResult.error) {
-					await this.say("condense_context_error", truncateResult.error)
+					await this.say("condense_context_error", { text: truncateResult.error })
 				}
 				if (truncateResult.summary) {
 					const { summary, cost, prevContextTokens, newContextTokens = 0, condenseId } = truncateResult
@@ -3241,16 +3213,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						prevContextTokens,
 						condenseId,
 					}
-					await this.say(
-						"condense_context",
-						undefined /* text */,
-						undefined /* images */,
-						false /* partial */,
-						undefined /* checkpoint */,
-						undefined /* progressStatus */,
-						{ isNonInteractive: true } /* options */,
+					await this.say("condense_context", {
+						partial: false,
+						isNonInteractive: true,
 						contextCondense,
-					)
+					})
 				} else if (truncateResult.truncationId) {
 					// Sliding window truncation occurred (fallback when condensing fails or is disabled)
 					const contextTruncation: ContextTruncation = {
@@ -3259,17 +3226,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						prevContextTokens: truncateResult.prevContextTokens,
 						newContextTokens: truncateResult.newContextTokensAfterTruncation ?? 0,
 					}
-					await this.say(
-						"sliding_window_truncation",
-						undefined /* text */,
-						undefined /* images */,
-						false /* partial */,
-						undefined /* checkpoint */,
-						undefined /* progressStatus */,
-						{ isNonInteractive: true } /* options */,
-						undefined /* contextCondense */,
+					await this.say("sliding_window_truncation", {
+						partial: false,
+						isNonInteractive: true,
 						contextTruncation,
-					)
+					})
 				}
 			} finally {
 				// Notify webview that context management is complete (sets isCondensing = false)
@@ -3490,8 +3451,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			updateClineMessage: async (message: ClineMessage) => {
 				await this.updateClineMessage(message)
 			},
-			say: async (type: string, text?: string, images?: string[], partial?: boolean, extra?: any) => {
-				await this.say(type as any, text, images, partial, extra)
+			say: async (type: string, options?: SayOptions) => {
+				await this.say(type as any, options)
 			},
 
 			// 流控制
@@ -3611,8 +3572,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				await this.updateClineMessage(message)
 			},
 			getClineMessage: (index: number) => this.clineMessages[index],
-			say: async (type: string, text?: string, images?: string[], partial?: boolean, extra?: any) => {
-				await this.say(type as any, text, images, partial, extra)
+			say: async (type: string, options?: SayOptions) => {
+				await this.say(type as any, options)
 			},
 
 			// 状态访问
@@ -3764,7 +3725,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 							info.inputTokens = data.inputTokens
 							info.outputTokens = data.outputTokens
 							info.totalCost = data.totalCost
-							;(apiReqMessage as any).text = JSON.stringify(info)
+								; (apiReqMessage as any).text = JSON.stringify(info)
 						} catch {
 							// Ignore parse errors
 						}
@@ -3905,11 +3866,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					throw new Error(`[Task#${this.taskId}] Aborted during retry countdown`)
 				}
 
-				await this.say("api_req_retry_delayed", `${headerText}<retry_timer>${i}</retry_timer>`, undefined, true)
+				await this.say("api_req_retry_delayed", {
+					text: `${headerText}<retry_timer>${i}</retry_timer>`,
+					partial: true,
+				})
 				await delay(1000)
 			}
 
-			await this.say("api_req_retry_delayed", headerText, undefined, false)
+			await this.say("api_req_retry_delayed", { text: headerText, partial: false })
 		} catch (err) {
 			console.error("Exponential backoff failed:", err)
 		}

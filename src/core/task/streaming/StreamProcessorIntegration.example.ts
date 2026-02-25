@@ -64,9 +64,9 @@ export class TaskWithStreamProcessor {
 				console.log("[Task] Updating cline message")
 			},
 
-			say: async (type: string, text?: string, images?: string[], partial?: boolean, extra?: any) => {
+			say: async (type: string, options?: any) => {
 				// 实现发送消息逻辑
-				console.log(`[Task] Saying ${type}:`, text?.substring(0, 50))
+				console.log(`[Task] Saying ${type}:`, options?.text?.substring(0, 50))
 			},
 
 			// 流控制

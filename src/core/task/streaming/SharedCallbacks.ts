@@ -6,6 +6,7 @@
  */
 
 import type { ClineMessage, ClineApiReqInfo, ModelInfo, ProviderSettings } from "@coder/types"
+import type { SayOptions } from "./SayOptions"
 
 /**
  * 消息操作回调
@@ -29,13 +30,7 @@ export interface MessageCallbacks {
 	/**
 	 * 发送消息到 webview
 	 */
-	say: (
-		type: string,
-		text?: string,
-		images?: string[],
-		partial?: boolean,
-		extra?: any,
-	) => Promise<void>
+	say: (type: string, options?: SayOptions) => Promise<void>
 }
 
 /**

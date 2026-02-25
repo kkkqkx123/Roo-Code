@@ -116,45 +116,154 @@ vi.mock("../../mentions/resolveImageMentions", () => ({
 }))
 
 import { resolveImageMentions } from "../../mentions/resolveImageMentions"
+import { vi, describe, beforeEach, it, expect } from "vitest"
 
-describe("webviewMessageHandler - requestLmStudioModels", () => {
+describe("webviewMessageHandler - requestOpenAiModels", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+	})
+
+	it("successfully fetches models from OpenAI-compatible endpoint", async () => {
+		// Mock global fetch
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				data: [{ id: "model-1" }, { id: "model-2" }],
+			}),
+		})
+		global.fetch = mockFetch
+
+		mockClineProvider.log = vi.fn()
 		mockClineProvider.getState = vi.fn().mockResolvedValue({
 			apiConfiguration: {
-				lmStudioModelId: "model-1",
-				lmStudioBaseUrl: "http://localhost:1234",
+				openAiModelId: "model-1",
+				openAiBaseUrl: "http://localhost:1234",
+				openAiApiKey: "test-api-key",
 			},
+		})
+		mockClineProvider.postMessageToWebview = vi.fn()
+
+		await webviewMessageHandler(mockClineProvider, {
+			type: "requestOpenAiModels",
+			values: {
+				baseUrl: "http://localhost:1234",
+				apiKey: "test-api-key",
+				openAiHeaders: {},
+			},
+		})
+
+		// Verify fetch was called with correct URL and headers
+		expect(mockFetch).toHaveBeenCalledWith(
+			"http://localhost:1234/models",
+			expect.objectContaining({
+				headers: expect.objectContaining({
+					"Authorization": "Bearer test-api-key",
+					"Content-Type": "application/json",
+				}),
+			}),
+		)
+
+		expect(mockClineProvider.postMessageToWebview).toHaveBeenCalledWith({
+			type: "openAiModels",
+			openAiModels: ["model-1", "model-2"],
 		})
 	})
 
-	it("successfully fetches models from LMStudio", async () => {
-		const mockModels: ModelRecord = {
-			"model-1": {
-				maxTokens: 4096,
-				contextWindow: 8192,
-				supportsPromptCache: false,
-				description: "Test model 1",
-			},
-			"model-2": {
-				maxTokens: 8192,
-				contextWindow: 16384,
-				supportsPromptCache: false,
-				description: "Test model 2",
-			},
-		}
-
-		mockGetModels.mockResolvedValue(mockModels)
+	it("returns empty array when baseUrl is missing", async () => {
+		mockClineProvider.log = vi.fn()
+		mockClineProvider.postMessageToWebview = vi.fn()
 
 		await webviewMessageHandler(mockClineProvider, {
-			type: "requestLmStudioModels",
+			type: "requestOpenAiModels",
+			values: {
+				baseUrl: undefined,
+				apiKey: "test-api-key",
+			},
 		})
 
-		expect(mockGetModels).toHaveBeenCalledWith({ provider: "lmstudio", baseUrl: "http://localhost:1234" })
+		expect(mockClineProvider.postMessageToWebview).toHaveBeenCalledWith({
+			type: "openAiModels",
+			openAiModels: [],
+		})
+	})
+
+	it("returns empty array when apiKey is missing", async () => {
+		mockClineProvider.log = vi.fn()
+		mockClineProvider.postMessageToWebview = vi.fn()
+
+		await webviewMessageHandler(mockClineProvider, {
+			type: "requestOpenAiModels",
+			values: {
+				baseUrl: "http://localhost:1234",
+				apiKey: undefined,
+			},
+		})
 
 		expect(mockClineProvider.postMessageToWebview).toHaveBeenCalledWith({
-			type: "lmStudioModels",
-			lmStudioModels: mockModels,
+			type: "openAiModels",
+			openAiModels: [],
+		})
+	})
+
+	it("returns empty array on fetch error", async () => {
+		const mockFetch = vi.fn().mockRejectedValue(new Error("Network error"))
+		global.fetch = mockFetch
+
+		mockClineProvider.log = vi.fn()
+		mockClineProvider.postMessageToWebview = vi.fn()
+
+		mockClineProvider.getState = vi.fn().mockResolvedValue({
+			apiConfiguration: {
+				openAiModelId: "model-1",
+				openAiBaseUrl: "http://localhost:1234",
+				openAiApiKey: "test-api-key",
+			},
+		})
+
+		await webviewMessageHandler(mockClineProvider, {
+			type: "requestOpenAiModels",
+			values: {
+				baseUrl: "http://localhost:1234",
+				apiKey: "test-api-key",
+			},
+		})
+
+		expect(mockClineProvider.postMessageToWebview).toHaveBeenCalledWith({
+			type: "openAiModels",
+			openAiModels: [],
+		})
+	})
+
+	it("returns empty array on non-OK response", async () => {
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 401,
+			statusText: "Unauthorized",
+		})
+		global.fetch = mockFetch
+
+		mockClineProvider.log = vi.fn()
+		mockClineProvider.postMessageToWebview = vi.fn()
+
+		mockClineProvider.getState = vi.fn().mockResolvedValue({
+			apiConfiguration: {
+				openAiModelId: "model-1",
+				openAiBaseUrl: "http://localhost:1234",
+				openAiApiKey: "invalid-key",
+			},
+		})
+
+		await webviewMessageHandler(mockClineProvider, {
+			type: "requestOpenAiModels",
+			values: {
+				baseUrl: "http://localhost:1234",
+				apiKey: "invalid-key",
+			},
+		})
+
+		expect(mockClineProvider.postMessageToWebview).toHaveBeenCalledWith({
+			type: "openAiModels",
+			openAiModels: [],
 		})
 	})
 })
