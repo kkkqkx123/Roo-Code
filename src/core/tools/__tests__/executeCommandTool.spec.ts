@@ -39,6 +39,7 @@ vitest.mock("../../prompts/responses")
 
 // Import the module
 import * as executeCommandModule from "../ExecuteCommandTool"
+import { vitest, describe, beforeEach, it, expect } from "vitest"
 const { executeCommandTool } = executeCommandModule
 
 describe("executeCommandTool", () => {
