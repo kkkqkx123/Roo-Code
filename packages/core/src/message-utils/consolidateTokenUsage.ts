@@ -74,40 +74,45 @@ export function consolidateTokenUsage(messages: ClineMessage[]): TokenUsage {
 	// The context tokens represent the total tokens used in the current context window.
 	// Priority order:
 	// 1. condense_context messages: Contains authoritative token count after context compression
-	// 2. api_req_started messages: Contains tokensIn + tokensOut from the most recent API request
+	// 2. api_req_started messages: Accumulate all tokensIn + tokensOut from all API requests
 	//    (tokensIn includes all input tokens: system prompt + conversation history + current message)
 	result.contextTokens = 0
 
+	// First, check for condense_context message which has authoritative token count
+	let lastCondenseTokens = 0
 	for (let i = messages.length - 1; i >= 0; i--) {
 		const message = messages[i]
 		if (!message) continue
 
 		if (message.type === "say" && message.say === "condense_context") {
-			// Condense context messages have the authoritative context token count
-			// after context compression/condensation
 			const condenseTokens = message.contextCondense?.newContextTokens ?? 0
 			if (condenseTokens > 0) {
-				result.contextTokens = condenseTokens
+				lastCondenseTokens = condenseTokens
 				break
 			}
 		}
+	}
 
-		if (message.type === "say" && message.say === "api_req_started" && message.text) {
-			try {
-				const parsedText: ParsedApiReqStartedTextType = JSON.parse(message.text)
-				const { tokensIn, tokensOut } = parsedText
+	// If we have a condense message, use its token count as the base
+	// and accumulate all api_req_started messages after it
+	if (lastCondenseTokens > 0) {
+		result.contextTokens = lastCondenseTokens
+	} else {
+		// No condense message: accumulate all api_req_started messages
+		// This handles multi-turn conversations where each API request contributes to context
+		for (const message of messages) {
+			if (message.type === "say" && message.say === "api_req_started" && message.text) {
+				try {
+					const parsedText: ParsedApiReqStartedTextType = JSON.parse(message.text)
+					const { tokensIn, tokensOut } = parsedText
 
-				// Since tokensIn now stores TOTAL input tokens (including cache tokens),
-				// we no longer need to add cacheWrites and cacheReads separately.
-				// This applies to both Anthropic and OpenAI protocols.
-				const apiTokens = (tokensIn || 0) + (tokensOut || 0)
-				if (apiTokens > 0) {
-					result.contextTokens = apiTokens
-					break
+					// Accumulate all tokens from all API requests
+					// (tokensIn now stores cumulative input tokens after fix)
+					result.contextTokens += (tokensIn || 0) + (tokensOut || 0)
+				} catch {
+					// Ignore JSON parse errors
+					continue
 				}
-			} catch {
-				// Ignore JSON parse errors
-				continue
 			}
 		}
 	}

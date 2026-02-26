@@ -2674,8 +2674,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 								cacheReadTokens,
 							)
 
-					// Note: inputTokens/outputTokens are already accumulated totals from
-					// streaming usage chunks, so we overwrite rather than accumulate here.
+					// Note: inputTokens/outputTokens are accumulated totals from
+					// streaming usage chunks. The costResult already contains the
+					// cumulative totals, so we overwrite rather than accumulate.
 					this.clineMessages[lastApiReqIndex].text = JSON.stringify({
 						...existingData,
 						tokensIn: costResult.totalInputTokens,
@@ -3307,9 +3308,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				// This handles cases where:
 				// 1. API doesn't emit usage chunks at all
 				// 2. API emits usage chunk but with outputTokens: 0 (some models/providers)
+				// 3. API returns usage data but tokens are zero while tiktoken has accumulated content
 				// The fallback is only triggered when tiktoken counting produced > 0 tokens,
 				// ensuring we don't estimate tokens for truly empty responses.
-				const isApiUsageInvalid = !hasApiUsageData || (inputTokens === 0 && outputTokens === 0)
+				const isApiUsageInvalid = !hasApiUsageData ||
+					(inputTokens === 0 && outputTokens === 0 && tokenCounter.getTotalTokens() > 0)
 
 				if (isApiUsageInvalid && tokenCounter.getTotalTokens() > 0) {
 					const tokenBreakdown = tokenCounter.getTokenBreakdown()
@@ -3327,15 +3330,17 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					if (estimatedOutputTokens > 0) {
 						// Calculate input tokens using tiktoken on the full conversation history
 						// This ensures we count all tokens sent to the API (system prompt + conversation history + current message)
-						const fullConversationContent = this.apiConversationHistory.flatMap(msg =>
-							Array.isArray(msg.content) ? msg.content : []
-						)
+						// Include current user content to handle cases where user message wasn't added to history yet
+						const fullConversationContent = [
+							...this.apiConversationHistory.flatMap(msg => Array.isArray(msg.content) ? msg.content : []),
+							...currentUserContent
+						]
 						const inputTokensEstimate = await this.api.countTokens(fullConversationContent)
 
-						// Overwrite token counts with tiktoken estimates
+						// Accumulate token counts with tiktoken estimates rather than overwriting
 						// (API did not provide valid usage data, so we use our own estimation)
-						inputTokens = inputTokensEstimate
-						outputTokens = estimatedOutputTokens
+						inputTokens += inputTokensEstimate
+						outputTokens += estimatedOutputTokens
 
 						// Calculate cost based on estimated tokens
 						const modelId = getModelId(this.apiConfiguration)

@@ -68,7 +68,7 @@ describe("consolidateTokenUsage", () => {
 	})
 
 	describe("context tokens calculation", () => {
-		it("should calculate context tokens from the last API request", () => {
+		it("should calculate context tokens by accumulating all API requests", () => {
 			const messages: ClineMessage[] = [
 				createApiReqMessage(1000, { tokensIn: 100, tokensOut: 50 }),
 				createApiReqMessage(1001, { tokensIn: 200, tokensOut: 100 }),
@@ -76,8 +76,8 @@ describe("consolidateTokenUsage", () => {
 
 			const result = consolidateTokenUsage(messages)
 
-			// Context tokens = tokensIn + tokensOut from last message
-			expect(result.contextTokens).toBe(300) // 200 + 100
+			// Context tokens = sum of all tokensIn + tokensOut (accumulated)
+			expect(result.contextTokens).toBe(450) // (100 + 50) + (200 + 100)
 		})
 
 		it("should prioritize condense_context messages for context tokens", () => {
@@ -93,6 +93,7 @@ describe("consolidateTokenUsage", () => {
 
 			const result = consolidateTokenUsage(messages)
 
+			// Condense message provides authoritative token count
 			expect(result.contextTokens).toBe(5000)
 			expect(result.totalCost).toBeCloseTo(0.05)
 		})
@@ -110,20 +111,21 @@ describe("consolidateTokenUsage", () => {
 
 			const result = consolidateTokenUsage(messages)
 
-			// Should fall back to api_req_started when condense has 0 tokens
+			// Should fall back to accumulating api_req_started when condense has 0 tokens
 			expect(result.contextTokens).toBe(150) // 100 + 50
 		})
 
-		it("should skip api_req_started messages with zero tokens", () => {
+		it("should accumulate api_req_started messages with zero tokens in between", () => {
 			const messages: ClineMessage[] = [
-				createApiReqMessage(1000, { tokensIn: 0, tokensOut: 0 }),
-				createApiReqMessage(1001, { tokensIn: 200, tokensOut: 100 }),
+				createApiReqMessage(1000, { tokensIn: 100, tokensOut: 50 }),
+				createApiReqMessage(1001, { tokensIn: 0, tokensOut: 0 }),
+				createApiReqMessage(1002, { tokensIn: 200, tokensOut: 100 }),
 			]
 
 			const result = consolidateTokenUsage(messages)
 
-			// Should skip the first message with zero tokens
-			expect(result.contextTokens).toBe(300) // 200 + 100
+			// Should accumulate all non-zero tokens
+			expect(result.contextTokens).toBe(450) // (100 + 50) + 0 + (200 + 100)
 		})
 
 		it("should return 0 when all messages have zero tokens", () => {
@@ -145,8 +147,8 @@ describe("consolidateTokenUsage", () => {
 
 			const result = consolidateTokenUsage(messages)
 
-			// Should use the last message with non-zero tokens
-			expect(result.contextTokens).toBe(200) // 200 + 0
+			// Should accumulate all tokensIn
+			expect(result.contextTokens).toBe(300) // 100 + 200
 		})
 
 		it("should handle api_req_started messages with partial data (only tokensOut)", () => {
@@ -157,8 +159,8 @@ describe("consolidateTokenUsage", () => {
 
 			const result = consolidateTokenUsage(messages)
 
-			// Should use the last message with non-zero tokens
-			expect(result.contextTokens).toBe(100) // 0 + 100
+			// Should accumulate all tokensOut
+			expect(result.contextTokens).toBe(150) // 50 + 100
 		})
 	})
 
