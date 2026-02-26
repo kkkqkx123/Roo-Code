@@ -2096,6 +2096,8 @@ export class ClineProvider
 				vectorStorageMode: codebaseIndexConfig?.vectorStorageMode ?? "auto",
 				vectorStoragePreset: codebaseIndexConfig?.vectorStoragePreset ?? "medium",
 				vectorStorageThresholds: codebaseIndexConfig?.vectorStorageThresholds,
+  				// Allowed projects configuration
+  				codebaseIndexAllowedProjects: codebaseIndexConfig?.codebaseIndexAllowedProjects ?? [],
 			},
 			// Only set mdmCompliant if there's an actual MDM policy
 			// undefined means no MDM policy, true means compliant, false means non-compliant
@@ -2233,6 +2235,8 @@ export class ClineProvider
 				vectorStorageMode: stateValues.codebaseIndexConfig?.vectorStorageMode ?? "auto",
 				vectorStoragePreset: stateValues.codebaseIndexConfig?.vectorStoragePreset ?? "medium",
 				vectorStorageThresholds: stateValues.codebaseIndexConfig?.vectorStorageThresholds,
+  				// Allowed projects configuration
+  				codebaseIndexAllowedProjects: stateValues.codebaseIndexConfig?.codebaseIndexAllowedProjects ?? [],
 			},
 			profileThresholds: stateValues.profileThresholds ?? {},
 			lockApiConfigAcrossModes: this.context.workspaceState.get("lockApiConfigAcrossModes", false),
