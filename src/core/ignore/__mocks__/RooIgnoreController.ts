@@ -1,9 +1,15 @@
 export const LOCK_TEXT_SYMBOL = "\u{1F512}"
 
+export enum IgnoreMode {
+	Gitignore = "gitignore",
+	Rooignore = "rooignore",
+	Both = "both",
+}
+
 export class RooIgnoreController {
 	rooIgnoreContent: string | undefined = undefined
 
-	constructor(_cwd: string) {
+	constructor(_cwd: string, _mode: IgnoreMode = IgnoreMode.Both) {
 		// No-op constructor
 	}
 

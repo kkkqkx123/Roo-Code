@@ -11,6 +11,7 @@ import type {
 	ClineMessage,
 	GroundingSource,
 	ModelInfo,
+	StreamingErrorType,
 } from "./types"
 import type Anthropic from "@anthropic-ai/sdk"
 import { NativeToolCallParser } from "../../assistant-message/NativeToolCallParser"
@@ -65,6 +66,12 @@ export class StreamingStateManager {
 	private abortReason?: string
 
 	// ============================================================================
+	// Error State
+	// ============================================================================
+
+	private error: StreamingErrorType | null = null
+
+	// ============================================================================
 	// Model Info Cache
 	// ============================================================================
 
@@ -96,6 +103,7 @@ export class StreamingStateManager {
 		this.aborted = false
 		this.abortReason = undefined
 		this.cachedModel = undefined
+		this.error = null
 
 		// Clear NativeToolCallParser's streaming state
 		NativeToolCallParser.clearAllStreamingToolCalls()
@@ -272,7 +280,7 @@ export class StreamingStateManager {
 	/**
 	 * Check if a tool failed in the current turn
 	 */
-	didToolFailInCurrentTurn(): boolean {
+	hasToolFailedInCurrentTurn(): boolean {
 		return this.didToolFailInCurrentTurn
 	}
 
@@ -346,6 +354,31 @@ export class StreamingStateManager {
 	 */
 	shouldAbort(): boolean {
 		return this.aborted
+	}
+
+	// ============================================================================
+	// Public API - Error State
+	// ============================================================================
+
+	/**
+	 * Set the error state
+	 */
+	setError(error: StreamingErrorType | null): void {
+		this.error = error
+	}
+
+	/**
+	 * Get the error state
+	 */
+	getError(): StreamingErrorType | null {
+		return this.error
+	}
+
+	/**
+	 * Check if there was an error
+	 */
+	hasError(): boolean {
+		return this.error !== null
 	}
 
 	// ============================================================================

@@ -1,6 +1,6 @@
 /**
  * Streaming Processor
- * 
+ *
  * Core controller for streaming processing.
  * Coordinates all handlers, manages the processing loop, and handles errors.
  */
@@ -19,8 +19,14 @@ import type {
 	StreamingResult,
 	StreamChunk,
 	ChunkHandler,
+	StreamingErrorType,
 } from "./types"
-import { StreamingRetryError } from "./types"
+import {
+	ChunkHandlerError,
+	InvalidStreamError,
+	StreamAbortedError,
+	StreamingRetryError,
+} from "@coder/types"
 
 export class StreamingProcessor {
 	private config: StreamingProcessorConfig
@@ -72,6 +78,11 @@ export class StreamingProcessor {
 		abortController?: AbortController,
 		apiConversationHistory?: any[]
 	): Promise<StreamingResult> {
+		// Validate input
+		if (!stream || typeof stream[Symbol.asyncIterator] !== 'function') {
+			throw new InvalidStreamError("Stream must be an AsyncIterable")
+		}
+
 		// Reset state
 		this.stateManager.reset()
 		this.tokenManager.reset()
@@ -97,8 +108,8 @@ export class StreamingProcessor {
 			// Finalize processing
 			await this.finalize()
 
-			// Return result
-			return this.buildResult()
+			// Return result with no error
+			return this.buildResult(null)
 		} catch (error) {
 			// Handle errors
 			return await this.handleError(error)
@@ -113,33 +124,52 @@ export class StreamingProcessor {
 	 */
 	private async processLoop(stream: AsyncIterable<StreamChunk>): Promise<void> {
 		const iterator = stream[Symbol.asyncIterator]()
-		const nextChunkWithAbort = this.createNextChunkFunction(iterator)
+		const { nextChunkWithAbort, cleanupAbortListeners } = this.createNextChunkFunction(iterator)
+		let interrupted = false
 
-		let item = await nextChunkWithAbort()
+		try {
+			while (true) {
+				const item = await nextChunkWithAbort()
+				if (item.done) {
+					break
+				}
 
-		while (!item.done) {
-			const chunk = item.value
-			item = await nextChunkWithAbort()
+				const chunk = item.value
+				if (!chunk) {
+					continue
+				}
 
-			if (!chunk) {
-				continue
+				// Process chunk
+				await this.handleChunk(chunk)
+
+				// Check abort conditions
+				if (this.stateManager.shouldAbort()) {
+					await this.abortStream()
+					interrupted = true
+					break
+				}
+
+				if (this.stateManager.didRejectTool) {
+					interrupted = true
+					break
+				}
+
+				if (this.stateManager.didAlreadyUseTool) {
+					interrupted = true
+					break
+				}
 			}
+		} finally {
+			// Cleanup abort event listeners
+			cleanupAbortListeners()
 
-			// Process chunk
-			await this.handleChunk(chunk)
-
-			// Check abort conditions
-			if (this.stateManager.shouldAbort()) {
-				await this.abortStream()
-				break
-			}
-
-			if (this.stateManager.didRejectTool) {
-				break
-			}
-
-			if (this.stateManager.didAlreadyUseTool) {
-				break
+			// Close iterator if interrupted
+			if (interrupted && iterator.return) {
+				try {
+					await iterator.return(undefined)
+				} catch (error) {
+					console.error("[StreamingProcessor] Failed to close interrupted stream iterator", error)
+				}
 			}
 		}
 	}
@@ -155,14 +185,31 @@ export class StreamingProcessor {
 			return
 		}
 
-		await handler.handle(chunk)
+		try {
+			await handler.handle(chunk)
+		} catch (error) {
+			console.error(`[StreamingProcessor] Handler error for chunk type ${chunk.type}:`, error)
+			// Create appropriate error type
+			const handlerError = new ChunkHandlerError(
+				chunk.type,
+				`Handler failed for chunk type ${chunk.type}`,
+				error instanceof Error ? error : new Error(String(error))
+			)
+			// Mark error in state manager
+			this.stateManager.setError(handlerError)
+			// Re-throw the error to stop stream processing
+			throw error
+		}
 	}
 
 	/**
 	 * Create next chunk function with abort support
+	 * Returns both the function and a cleanup function for event listeners
 	 */
 	private createNextChunkFunction(iterator: AsyncIterator<StreamChunk>) {
-		return async () => {
+		const cleanupFunctions: Array<() => void> = []
+
+		const nextChunkWithAbort = async () => {
 			const nextPromise = iterator.next()
 			const abortController = this.stateManager.getAbortController()
 
@@ -171,10 +218,19 @@ export class StreamingProcessor {
 					const signal = abortController!.signal
 
 					if (signal.aborted) {
+						this.stateManager.setAborted(true, "user_cancelled")
 						reject(new Error("Request cancelled by user"))
 					} else {
-						signal.addEventListener("abort", () => {
+						const abortHandler = () => {
+							this.stateManager.setAborted(true, "user_cancelled")
 							reject(new Error("Request cancelled by user"))
+						}
+
+						signal.addEventListener("abort", abortHandler)
+
+						// Store cleanup function
+						cleanupFunctions.push(() => {
+							signal.removeEventListener("abort", abortHandler)
 						})
 					}
 				})
@@ -184,6 +240,15 @@ export class StreamingProcessor {
 
 			return await nextPromise
 		}
+
+		const cleanupAbortListeners = () => {
+			for (const cleanup of cleanupFunctions) {
+				cleanup()
+			}
+			cleanupFunctions.length = 0
+		}
+
+		return { nextChunkWithAbort, cleanupAbortListeners }
 	}
 
 	/**
@@ -234,21 +299,57 @@ export class StreamingProcessor {
 	 * Handle errors
 	 */
 	private async handleError(error: unknown): Promise<StreamingResult> {
+		// Convert error to appropriate StreamingErrorType
+		let streamingError: StreamingErrorType
+
+		if (error instanceof StreamAbortedError || error instanceof ChunkHandlerError || error instanceof InvalidStreamError) {
+			streamingError = error
+		} else if (this.stateManager.getAbortReason()) {
+			streamingError = new StreamAbortedError(
+				this.stateManager.getAbortReason() || "unknown",
+				error instanceof Error ? { originalError: error } : { error }
+			)
+		} else {
+			// Generic error wrapper
+			streamingError = new ChunkHandlerError(
+				"unknown",
+				error instanceof Error ? error.message : String(error),
+				error instanceof Error ? error : new Error(String(error))
+			)
+		}
+
+		// Mark error in state manager
+		this.stateManager.setError(streamingError)
+
 		const result = await this.errorHandler.handleError(error)
 
 		if (result.shouldRetry) {
-			throw new StreamingRetryError(result.retryDelay || 1000)
+			throw new StreamingRetryError(result.retryDelay || 1000, error)
 		}
 
-		return this.buildResult()
+		// Return result even after error - caller can check aborted/error status
+		return this.buildResult(streamingError)
 	}
 
 	/**
 	 * Build the final result
 	 */
-	private buildResult(): StreamingResult {
+	private buildResult(error: StreamingErrorType | null = null): StreamingResult {
+		// Add interruption messages if needed
+		let assistantMessage = this.stateManager.getAssistantMessage()
+
+		if (this.stateManager.didRejectTool) {
+			assistantMessage += "\n\n[Response interrupted by user feedback]"
+		} else if (this.stateManager.didAlreadyUseTool) {
+			assistantMessage +=
+				"\n\n[Response interrupted by a tool use result. Only one tool may be used at a time and should be placed at the end of the message.]"
+		}
+
+		// Update the assistant message in state
+		this.stateManager.setAssistantMessage(assistantMessage)
+
 		return {
-			assistantMessage: this.stateManager.getAssistantMessage(),
+			assistantMessage: assistantMessage,
 			reasoningMessage: this.stateManager.getReasoningMessage(),
 			assistantMessageContent: this.stateManager.getAssistantMessageContent(),
 			userMessageContent: this.stateManager.getUserMessageContent(),
@@ -258,6 +359,7 @@ export class StreamingProcessor {
 			didRejectTool: this.stateManager.didRejectTool,
 			aborted: this.stateManager.isAborted(),
 			abortReason: this.stateManager.getAbortReason(),
+			error: error || this.stateManager.getError() || null,
 		}
 	}
 

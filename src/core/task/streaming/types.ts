@@ -1,8 +1,16 @@
 /**
  * Streaming Module Types
- * 
+ *
  * This file contains all core types and interfaces for the streaming processing system.
  * These types are used across all streaming modules to ensure type safety and consistency.
+ *
+ * Note: Many types have been migrated to packages/types/src for better reusability.
+ * This file now re-exports those types and contains only streaming-specific types
+ * that are tightly coupled to the streaming implementation.
+ *
+ * IMPORTANT: When re-exporting from @coder/types, use 'export' for classes and values,
+ * and 'export type' for type-only exports. This ensures both TypeScript type checking
+ * and runtime bundling work correctly.
  */
 
 import type { AssistantMessageContent } from "../../assistant-message/types"
@@ -10,110 +18,50 @@ import type Anthropic from "@anthropic-ai/sdk"
 import type { ModelInfo } from "../../../shared/api"
 
 // ============================================================================
-// Stream Chunk Types
+// Re-exported Types and Values from @coder/types
 // ============================================================================
 
-/**
- * Represents a chunk of data from the streaming API response
- */
-export interface StreamChunk {
-	type: "reasoning" | "usage" | "grounding" | "tool_call_partial" | "tool_call" | "text"
-	[key: string]: any
-}
+// Error types - use 'export' for classes (both type and value), 'export type' for type-only
+export type {
+	BaseError,
+	StreamingError,
+	StreamingErrorType,
+	ErrorHandlingResult,
+} from "@coder/types"
 
-/**
- * Tool call start event
- */
-export interface ToolCallStartEvent {
-	type: "tool_call_start"
-	id: string
-	name: string
-}
+export {
+	InvalidStreamError,
+	ChunkHandlerError,
+	StreamAbortedError,
+	ToolCallError,
+	TokenError,
+	UserInterruptError,
+	ToolInterruptError,
+	StreamProviderError,
+	StreamTimeoutError,
+	StateError,
+	StreamingRetryError,
+} from "@coder/types"
 
-/**
- * Tool call delta event (incremental update)
- */
-export interface ToolCallDeltaEvent {
-	type: "tool_call_delta"
-	id: string
-	delta: string
-}
+// Streaming event types - all are type-only
+export type {
+	StreamChunk,
+	ToolCallStartEvent,
+	ToolCallDeltaEvent,
+	ToolCallEndEvent,
+	ToolCallEvent,
+} from "@coder/types"
 
-/**
- * Tool call end event
- */
-export interface ToolCallEndEvent {
-	type: "tool_call_end"
-	id: string
-}
-
-/**
- * Union type for all tool call events
- */
-export type ToolCallEvent = ToolCallStartEvent | ToolCallDeltaEvent | ToolCallEndEvent
-
-// ============================================================================
-// Grounding Types
-// ============================================================================
-
-/**
- * Grounding source reference
- */
-export interface GroundingSource {
-	url: string
-	[key: string]: any
-}
+// Streaming core types - all are type-only, with aliases for backward compatibility
+export type {
+	ApiMessage,
+	StreamingTokenUsage as TokenUsage,
+	TokenBreakdown,
+	StreamingGroundingSource as GroundingSource,
+} from "@coder/types"
 
 // ============================================================================
-// Message Types
-// ============================================================================
-
-/**
- * Cline message type used in the conversation history
- */
-export interface ClineMessage {
-	type: string
-	say?: string
-	content?: string
-	partial?: boolean
-	[key: string]: any
-}
-
-/**
- * API message for conversation history
- */
-export interface ApiMessage {
-	role: "user" | "assistant"
-	content: any
-	reasoning?: string
-}
-
-// ============================================================================
-// Token Management Types
-// ============================================================================
-
-/**
- * Token usage statistics
- */
-export interface TokenUsage {
-	input: number
-	output: number
-	cacheWrite: number
-	cacheRead: number
-	totalCost: number
-}
-
-/**
- * Token breakdown by type
- */
-export interface TokenBreakdown {
-	text: number
-	reasoning: number
-	toolCalls: number
-}
-
-// ============================================================================
-// Streaming Result Types
+// Streaming Result Types (Module-specific)
 // ============================================================================
 
 /**
@@ -130,34 +78,26 @@ export interface StreamingResult {
 	didRejectTool: boolean
 	aborted: boolean
 	abortReason?: string
+	error: StreamingErrorType | null
 }
 
 // ============================================================================
-// Error Handling Types
+// Message Types (Module-specific)
 // ============================================================================
 
 /**
- * Result of error handling operation
+ * Cline message type used in the conversation history
  */
-export interface ErrorHandlingResult {
-	shouldRetry: boolean
-	retryDelay?: number
-	abortReason?: string
-	errorMessage?: string
-}
-
-/**
- * Streaming retry error type
- */
-export class StreamingRetryError extends Error {
-	constructor(public retryDelay: number) {
-		super("Stream processing failed, will retry")
-		this.name = "StreamingRetryError"
-	}
+export interface ClineMessage {
+	type: string
+	say?: string
+	content?: string
+	partial?: boolean
+	[key: string]: any
 }
 
 // ============================================================================
-// Configuration Types
+// Configuration Types (Module-specific)
 // ============================================================================
 
 /**
@@ -167,7 +107,7 @@ export interface StreamingProcessorConfig {
 	taskId: string
 	api: ApiHandler
 	diffViewProvider: DiffViewProvider
-	onSay: (type: string, content: string, ...args: any[]) => Promise<void>
+	onSay: (type: string, text?: string, images?: string[], partial?: boolean) => Promise<void>
 	onUpdateMessage: (message: ClineMessage) => Promise<void>
 	onSaveMessages: () => Promise<void>
 	onAddToHistory: (message: ApiMessage, reasoning?: string) => Promise<void>
@@ -193,7 +133,7 @@ export interface DiffViewProvider {
 }
 
 // ============================================================================
-// Handler Context Types
+// Handler Context Types (Module-specific)
 // ============================================================================
 
 /**
@@ -260,6 +200,11 @@ export interface StreamingStateManager {
 	isAborted(): boolean
 	getAbortReason(): string | undefined
 	shouldAbort(): boolean
+
+	// Error state
+	setError(error: StreamingErrorType | null): void
+	getError(): StreamingErrorType | null
+	hasError(): boolean
 
 	// Partial blocks
 	completePartialBlocks(): void

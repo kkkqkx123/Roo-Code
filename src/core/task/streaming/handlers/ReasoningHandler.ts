@@ -5,7 +5,7 @@
  * Includes dead loop detection to prevent infinite loops in reasoning.
  */
 
-import { DeadLoopDetector } from "../../../utils/deadLoopDetector"
+import { DeadLoopDetector } from "../../../../utils/deadLoopDetector"
 import { BaseChunkHandler } from "./ChunkHandler"
 import type { ChunkHandlerContext, StreamChunk } from "../types"
 
@@ -38,12 +38,15 @@ export class ReasoningHandler extends BaseChunkHandler {
 
 		// Dead loop detection
 		const detectionResult = this.deadLoopDetector.detect(
-			this.stateManager.getReasoningMessage()
+		  this.stateManager.getReasoningMessage()
 		)
 
+		console.log('[ReasoningHandler.handle] detectionResult:', detectionResult, 'reasoningLength:', this.stateManager.getReasoningMessage().length)
+
 		if (detectionResult.detected) {
-			await this.handleDeadLoop(detectionResult)
-			return
+		  console.log('[ReasoningHandler.handle] Dead loop detected!')
+		  await this.handleDeadLoop(detectionResult)
+		  return
 		}
 
 		// Display reasoning message
@@ -66,13 +69,20 @@ export class ReasoningHandler extends BaseChunkHandler {
 	 * Aborts the stream and notifies the user
 	 */
 	private async handleDeadLoop(result: { detected: boolean; details?: string }): Promise<void> {
-		const errorMessage = `检测到死循环：${result.details}。任务已终止，请尝试重新描述任务或调整提示词。`
+	  const errorMessage = `检测到死循环：${result.details}。任务已终止，请尝试重新描述任务或调整提示词。`
 
-		await this.config.onSay("error", errorMessage)
+	  console.log('[ReasoningHandler.handleDeadLoop] About to call onSay with:', errorMessage)
+	  
+	  // Display error message first
+	  await this.config.onSay("error", errorMessage)
+	  
+	  console.log('[ReasoningHandler.handleDeadLoop] onSay completed, clineMessages should have error')
 
-		this.stateManager.setAborted(true, "streaming_failed")
+	  // Set aborted state
+	  this.stateManager.setAborted(true, "streaming_failed")
 
-		throw new Error(errorMessage)
+	  // Throw error to stop stream processing
+	  throw new Error(errorMessage)
 	}
 
 	/**

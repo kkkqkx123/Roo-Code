@@ -9,7 +9,7 @@
 import { NativeToolCallParser } from "../../../assistant-message/NativeToolCallParser"
 import { BaseChunkHandler } from "./ChunkHandler"
 import type { ChunkHandlerContext, StreamChunk, ToolCallEvent } from "../types"
-import type { ToolName } from "../../../shared/tools"
+import type { ToolName } from "../../../../shared/tools"
 
 export class ToolCallHandler extends BaseChunkHandler {
 	/**

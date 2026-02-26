@@ -6,7 +6,17 @@
  */
 
 import { serializeError } from "serialize-error"
-import type { StreamingProcessorConfig, ErrorHandlingResult, ClineMessage } from "./types"
+import type {
+	StreamingProcessorConfig,
+	ErrorHandlingResult,
+	ClineMessage,
+	StreamingErrorType,
+} from "./types"
+import {
+	StreamAbortedError,
+	StreamProviderError,
+	TokenError,
+} from "./types"
 
 export class StreamingErrorHandler {
 	private config: StreamingProcessorConfig
@@ -57,19 +67,59 @@ export class StreamingErrorHandler {
 	 * Handle streaming errors
 	 */
 	async handleError(error: unknown): Promise<ErrorHandlingResult> {
+		// Check if already aborted
 		if (this.stateManager && this.stateManager.isAborted()) {
 			return {
 				shouldRetry: false,
 				abortReason: this.stateManager.getAbortReason(),
+				errorMessage: this.extractErrorMessage(error),
 			}
 		}
 
-		const cancelReason = this.stateManager?.isAborted() ? "user_cancelled" : "streaming_failed"
+		// Determine error type and handle accordingly
+		const streamingError = this.normalizeError(error)
+		let cancelReason: string
+		let shouldRetry: boolean
+
+		switch (streamingError.code) {
+			case "STREAM_ABORTED":
+				cancelReason = streamingError.reason || "user_cancelled"
+				shouldRetry = false
+				break
+
+			case "INVALID_STREAM":
+				cancelReason = "invalid_stream"
+				shouldRetry = false
+				break
+
+			case "STATE_ERROR":
+				cancelReason = "state_error"
+				shouldRetry = false
+				break
+
+			case "STREAM_TIMEOUT":
+				cancelReason = "timeout"
+				shouldRetry = true
+				break
+
+			case "TOKEN_ERROR":
+				cancelReason = "token_error"
+				shouldRetry = true
+				break
+
+			case "CHUNK_HANDLER_ERROR":
+			case "TOOL_CALL_ERROR":
+			case "STREAM_PROVIDER_ERROR":
+			default:
+				cancelReason = "streaming_failed"
+				shouldRetry = true
+				break
+		}
 
 		const rawErrorMessage = this.extractErrorMessage(error)
 		const streamingFailedMessage = this.stateManager?.isAborted()
 			? undefined
-			: `Stream terminated by provider: ${rawErrorMessage}`
+			: `Stream terminated: ${rawErrorMessage}`
 
 		await this.abortStream(cancelReason, streamingFailedMessage)
 
@@ -77,14 +127,68 @@ export class StreamingErrorHandler {
 			return {
 				shouldRetry: false,
 				abortReason: cancelReason,
+				errorMessage: streamingFailedMessage,
 			}
 		}
 
 		// Stream failed, should retry
 		return {
-			shouldRetry: true,
+			shouldRetry,
 			retryDelay: await this.calculateBackoffDelay(),
+			abortReason: cancelReason,
+			errorMessage: streamingFailedMessage,
 		}
+	}
+
+	/**
+	 * Normalize error to StreamingErrorType
+	 */
+	private normalizeError(error: unknown): StreamingErrorType {
+		// If already a StreamingErrorType, return as-is
+		if (this.isStreamingError(error)) {
+			return error
+		}
+
+		// Convert generic Error to appropriate StreamingErrorType
+		if (error instanceof Error) {
+			// Check for common error patterns
+			const message = error.message.toLowerCase()
+
+			if (message.includes("timeout") || message.includes("timed out")) {
+				return new StreamProviderError(error.message, undefined, error)
+			}
+
+			if (message.includes("aborted") || message.includes("cancelled")) {
+				return new StreamAbortedError("Stream aborted", { originalError: error })
+			}
+
+			if (message.includes("token") || message.includes("limit")) {
+				return new TokenError(error.message, { originalError: error })
+			}
+
+			// Default to StreamProviderError for unknown errors
+			return new StreamProviderError(error.message, undefined, error)
+		}
+
+		// Unknown error type
+		return new StreamProviderError(
+			typeof error === "string" ? error : "Unknown error",
+			undefined,
+			error instanceof Error ? error : new Error(String(error))
+		)
+	}
+
+	/**
+	 * Check if error is a StreamingErrorType
+	 */
+	private isStreamingError(error: unknown): error is StreamingErrorType {
+		return (
+			error !== null &&
+			typeof error === "object" &&
+			"code" in error &&
+			"name" in error &&
+			"message" in error
+		)
 	}
 
 	/**
