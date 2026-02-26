@@ -179,6 +179,38 @@ function normalizeStatus(status: string | undefined): TodoStatus {
 
 export function parseMarkdownChecklist(md: string): TodoItem[] {
 	if (typeof md !== "string") return []
+
+	// Try to parse as JSON array format first (LLMs sometimes use this format)
+	// Format: [{"id": "1", "content": "Task 1", "status": "completed"}, ...]
+	if (md.trim().startsWith("[")) {
+		try {
+			const parsed = JSON.parse(md)
+			if (Array.isArray(parsed)) {
+				const todos: TodoItem[] = []
+				for (const item of parsed) {
+					if (item && typeof item === "object" && "content" in item) {
+						const status = normalizeStatus(item.status as string | undefined)
+						todos.push({
+							id: item.id || crypto.randomUUID(),
+							content: String(item.content),
+							status,
+						})
+					}
+				}
+				if (todos.length > 0) {
+					return todos
+				}
+			}
+		} catch {
+			// Not valid JSON, fall through to markdown parsing
+		}
+	}
+
+	// Parse markdown checklist format
+	// Format:
+	// [ ] Task 1
+	// [x] Task 2 (completed)
+	// [-] Task 3 (in progress)
 	const lines = md
 		.split(/\r?\n/)
 		.map((l) => l.trim())

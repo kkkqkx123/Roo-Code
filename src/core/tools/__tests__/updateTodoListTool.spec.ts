@@ -240,4 +240,95 @@ Just some text
 			expect(result1[0]!.id).toBe(result2[0]!.id)
 		})
 	})
+
+	describe("JSON array format (LLM compatibility)", () => {
+		it("should parse JSON array format with all status types", () => {
+			const json = JSON.stringify([
+				{ id: "1", content: "Task 1", status: "pending" },
+				{ id: "2", content: "Task 2", status: "completed" },
+				{ id: "3", content: "Task 3", status: "in_progress" },
+			])
+			const result = parseMarkdownChecklist(json)
+			expect(result).toHaveLength(3)
+			expect(result[0]!.id).toBe("1")
+			expect(result[0]!.content).toBe("Task 1")
+			expect(result[0]!.status).toBe("pending")
+			expect(result[1]!.id).toBe("2")
+			expect(result[1]!.content).toBe("Task 2")
+			expect(result[1]!.status).toBe("completed")
+			expect(result[2]!.id).toBe("3")
+			expect(result[2]!.content).toBe("Task 3")
+			expect(result[2]!.status).toBe("in_progress")
+		})
+
+		it("should parse JSON array with missing IDs (generate UUID)", () => {
+			const json = JSON.stringify([
+				{ content: "Task without ID", status: "pending" },
+			])
+			const result = parseMarkdownChecklist(json)
+			expect(result).toHaveLength(1)
+			expect(result[0]!.content).toBe("Task without ID")
+			expect(result[0]!.status).toBe("pending")
+			expect(result[0]!.id).toBeDefined()
+		})
+
+		it("should parse JSON array with invalid status (normalize to pending)", () => {
+			const json = JSON.stringify([
+				{ id: "1", content: "Task 1", status: "invalid_status" },
+				{ id: "2", content: "Task 2", status: undefined },
+			])
+			const result = parseMarkdownChecklist(json)
+			expect(result).toHaveLength(2)
+			expect(result[0]!.status).toBe("pending")
+			expect(result[1]!.status).toBe("pending")
+		})
+
+		it("should handle empty JSON array", () => {
+			const json = JSON.stringify([])
+			const result = parseMarkdownChecklist(json)
+			expect(result).toEqual([])
+		})
+
+		it("should fall back to markdown parsing for invalid JSON starting with [", () => {
+			const invalidJson = "[ not valid json"
+			const result = parseMarkdownChecklist(invalidJson)
+			expect(result).toEqual([])
+		})
+
+		it("should handle JSON array with non-object items", () => {
+			const json = JSON.stringify(["string", 123, null])
+			const result = parseMarkdownChecklist(json)
+			expect(result).toEqual([])
+		})
+
+		it("should handle JSON array with partial valid objects", () => {
+			const json = JSON.stringify([
+				{ content: "Valid task", status: "completed" },
+				{ noContent: "Invalid" },
+				{ id: "2", content: "Another valid task", status: "pending" },
+			])
+			const result = parseMarkdownChecklist(json)
+			expect(result).toHaveLength(2)
+			expect(result[0]!.content).toBe("Valid task")
+			expect(result[1]!.content).toBe("Another valid task")
+		})
+
+		it("should handle the exact LLM failure case from user report", () => {
+			const json = JSON.stringify([
+				{ id: "1", content: "分析 StreamingProcessor.ts 和 types.ts 的类型错误", status: "completed" },
+				{ id: "2", content: "修复 ChunkHandlerContext 类型不匹配问题", status: "in_progress" },
+				{ id: "3", content: "修复 Boolean 类型调用错误", status: "pending" },
+				{ id: "4", content: "修复 ModelInfo 导入问题", status: "pending" },
+				{ id: "5", content: "运行类型检查验证修复", status: "pending" },
+			])
+			const result = parseMarkdownChecklist(json)
+			expect(result).toHaveLength(5)
+			expect(result[0]!.content).toBe("分析 StreamingProcessor.ts 和 types.ts 的类型错误")
+			expect(result[0]!.status).toBe("completed")
+			expect(result[1]!.content).toBe("修复 ChunkHandlerContext 类型不匹配问题")
+			expect(result[1]!.status).toBe("in_progress")
+			expect(result[2]!.content).toBe("修复 Boolean 类型调用错误")
+			expect(result[2]!.status).toBe("pending")
+		})
+	})
 })
