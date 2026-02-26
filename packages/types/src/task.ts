@@ -59,7 +59,12 @@ export interface TaskProviderLike {
 export type TaskProviderEvents = {
 	[CoderEventName.TaskCreated]: [task: TaskLike]
 	[CoderEventName.TaskStarted]: [taskId: string]
-	[CoderEventName.TaskCompleted]: [taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage]
+	[CoderEventName.TaskCompleted]: [
+		taskId: string,
+		tokenUsage: TokenUsage,
+		toolUsage: ToolUsage,
+		metadata: { isSubtask: boolean },
+	]
 	[CoderEventName.TaskAborted]: [taskId: string]
 	[CoderEventName.TaskFocused]: [taskId: string]
 	[CoderEventName.TaskUnfocused]: [taskId: string]
@@ -78,6 +83,8 @@ export type TaskProviderEvents = {
 	[CoderEventName.TaskUserMessage]: [taskId: string]
 
 	[CoderEventName.TaskTokenUsageUpdated]: [taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage]
+
+	[CoderEventName.TaskModeSwitched]: [taskId: string, mode: string]
 
 	[CoderEventName.ModeChanged]: [mode: string]
 	[CoderEventName.ProviderProfileChanged]: [config: { name: string; provider?: string }]

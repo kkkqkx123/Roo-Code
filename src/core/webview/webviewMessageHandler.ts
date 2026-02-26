@@ -10,7 +10,7 @@ import {
 	type Language,
 	type GlobalState,
 	type ClineMessage,
-	type WebviewMessage,
+	type WebviewInboundMessage,
 	type EditQueuedMessagePayload,
 	CoderSettings,
 	ExperimentId,
@@ -78,7 +78,7 @@ import {
 
 export const webviewMessageHandler = async (
 	provider: ClineProvider,
-	message: WebviewMessage,
+	message: WebviewInboundMessage,
 ) => {
 	// Utility functions provided for concise get/update of global state via contextProxy API.
 	const getGlobalState = <K extends keyof GlobalState>(key: K) => provider.contextProxy.getValue(key)
@@ -108,13 +108,27 @@ export const webviewMessageHandler = async (
 		})
 		return resolved
 	}
+	type MessageHistoryContainer = {
+		clineMessages: ClineMessage[]
+		apiConversationHistory: ApiMessage[]
+	}
+
+	const isEditQueuedMessagePayload = (payload: unknown): payload is EditQueuedMessagePayload => {
+		if (!payload || typeof payload !== "object") return false
+		const candidate = payload as Partial<EditQueuedMessagePayload>
+		if (typeof candidate.id !== "string") return false
+		if (typeof candidate.text !== "string") return false
+		if (candidate.images !== undefined && !Array.isArray(candidate.images)) return false
+		return true
+	}
+
 	/**
 	 * Shared utility to find message indices based on timestamp.
 	 * When multiple messages share the same timestamp (e.g., after condense),
 	 * this function prefers non-summary messages to ensure user operations
 	 * target the intended message rather than the summary.
 	 */
-	const findMessageIndices = (messageTs: number, currentCline: any) => {
+	const findMessageIndices = (messageTs: number, currentCline: MessageHistoryContainer) => {
 		// Find the exact message by timestamp, not the first one after a cutoff
 		const messageIndex = currentCline.clineMessages.findIndex((msg: ClineMessage) => msg.ts === messageTs)
 
@@ -134,10 +148,10 @@ export const webviewMessageHandler = async (
 	 * Fallback: find first API history index at or after a timestamp.
 	 * Used when the exact user message isn't present in apiConversationHistory (e.g., after condense).
 	 */
-	const findFirstApiIndexAtOrAfter = (ts: number, currentCline: any) => {
+	const findFirstApiIndexAtOrAfter = (ts: number, currentCline: MessageHistoryContainer) => {
 		if (typeof ts !== "number") return -1
 		return currentCline.apiConversationHistory.findIndex(
-			(msg: ApiMessage) => typeof msg?.ts === "number" && (msg.ts as number) >= ts,
+			(msg: ApiMessage) => typeof msg?.ts === "number" && msg.ts >= ts,
 		)
 	}
 
@@ -223,7 +237,7 @@ export const webviewMessageHandler = async (
 			} else {
 				// For non-checkpoint deletes, preserve checkpoint associations for remaining messages
 				// Store checkpoints from messages that will be preserved
-				const preservedCheckpoints = new Map<number, any>()
+				const preservedCheckpoints = new Map<number, ClineMessage["checkpoint"]>()
 				for (let i = 0; i < messageIndex; i++) {
 					const msg = currentCline.clineMessages[i]
 					if (msg?.checkpoint && msg.ts) {
@@ -397,7 +411,7 @@ export const webviewMessageHandler = async (
 			}
 
 			// Store checkpoints from messages that will be preserved
-			const preservedCheckpoints = new Map<number, any>()
+			const preservedCheckpoints = new Map<number, ClineMessage["checkpoint"]>()
 			for (let i = 0; i < deleteFromMessageIndex; i++) {
 				const msg = currentCline.clineMessages[i]
 				if (msg?.checkpoint && msg.ts) {
@@ -521,7 +535,7 @@ export const webviewMessageHandler = async (
 							await updateGlobalState("currentApiConfigName", name)
 
 							if (name) {
-								await provider.activateProviderProfile({ name })
+								await provider.configurationService.activateProviderProfile({ name })
 								return
 							}
 						}
@@ -560,7 +574,7 @@ export const webviewMessageHandler = async (
 			}
 			break
 		case "customInstructions":
-			await provider.updateCustomInstructions(message.text)
+			await provider.configurationService.updateCustomInstructions(message.text)
 			break
 
 		case "askResponse":
@@ -1176,22 +1190,29 @@ export const webviewMessageHandler = async (
 						console.log("[TTS] Handler: ttsStart callback called")
 						try {
 							provider.postMessageToWebview({ type: "ttsStart", text: message.text })
-						} catch (postError: any) {
-							console.error("[TTS] Handler: Failed to post ttsStart message: " + postError.message)
+						} catch (postError: unknown) {
+							console.error(
+								"[TTS] Handler: Failed to post ttsStart message: " +
+								(postError instanceof Error ? postError.message : String(postError)),
+							)
 						}
 					},
 					onStop: () => {
 						console.log("[TTS] Handler: ttsStop callback called")
 						try {
 							provider.postMessageToWebview({ type: "ttsStop", text: message.text })
-						} catch (postError: any) {
-							console.error("[TTS] Handler: Failed to post ttsStop message: " + postError.message)
+						} catch (postError: unknown) {
+							console.error(
+								"[TTS] Handler: Failed to post ttsStop message: " +
+								(postError instanceof Error ? postError.message : String(postError)),
+							)
 						}
 					},
 				})
-			} catch (error: any) {
-				console.error("[TTS] Handler: Unexpected error in playTts handler: " + error.message)
-				console.error("[TTS] Handler: Stack trace: " + error.stack)
+			} catch (error: unknown) {
+				const err = error instanceof Error ? error : new Error(String(error))
+				console.error("[TTS] Handler: Unexpected error in playTts handler: " + err.message)
+				console.error("[TTS] Handler: Stack trace: " + err.stack)
 			}
 
 			break
@@ -1199,8 +1220,11 @@ export const webviewMessageHandler = async (
 			console.log("[TTS] Handler: stopTts message received")
 			try {
 				stopTts()
-			} catch (error: any) {
-				console.error("[TTS] Handler: Error executing stopTts: " + error.message)
+			} catch (error: unknown) {
+				console.error(
+					"[TTS] Handler: Error executing stopTts: " +
+					(error instanceof Error ? error.message : String(error)),
+				)
 			}
 			break
 
@@ -1479,8 +1503,7 @@ export const webviewMessageHandler = async (
 			break
 		}
 		case "updateTodoList": {
-			const payload = message.payload as { todos?: any[] }
-			const todos = payload?.todos
+			const todos = message.payload && "todos" in message.payload ? message.payload.todos : undefined
 			if (Array.isArray(todos)) {
 				await setPendingTodoList(todos)
 			}
@@ -1521,13 +1544,13 @@ export const webviewMessageHandler = async (
 			break
 		case "upsertApiConfiguration":
 			if (message.text && message.apiConfiguration) {
-				await provider.upsertProviderProfile(message.text, message.apiConfiguration)
+				await provider.configurationService.upsertProviderProfile(message.text, message.apiConfiguration)
 			}
 			break
 		case "renameApiConfiguration":
 			if (message.values && message.apiConfiguration) {
 				try {
-					const { oldName, newName } = message.values
+					const { oldName, newName } = message.values as { oldName: string; newName: string }
 
 					if (oldName === newName) {
 						break
@@ -1544,7 +1567,7 @@ export const webviewMessageHandler = async (
 
 					// Re-activate to update the global settings related to the
 					// currently activated provider profile.
-					await provider.activateProviderProfile({ name: newName })
+					await provider.configurationService.activateProviderProfile({ name: newName })
 				} catch (error) {
 					provider.log(
 						`Error rename api configuration: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
@@ -1557,7 +1580,7 @@ export const webviewMessageHandler = async (
 		case "loadApiConfiguration":
 			if (message.text) {
 				try {
-					await provider.activateProviderProfile({ name: message.text })
+					await provider.configurationService.activateProviderProfile({ name: message.text })
 				} catch (error) {
 					provider.log(
 						`Error load api configuration: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
@@ -1569,7 +1592,7 @@ export const webviewMessageHandler = async (
 		case "loadApiConfigurationById":
 			if (message.text) {
 				try {
-					await provider.activateProviderProfile({ id: message.text })
+					await provider.configurationService.activateProviderProfile({ id: message.text })
 				} catch (error) {
 					provider.log(
 						`Error load api configuration by ID: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
@@ -1603,7 +1626,7 @@ export const webviewMessageHandler = async (
 
 				try {
 					await provider.providerSettingsManager.deleteConfig(oldName)
-					await provider.activateProviderProfile({ name: newName })
+					await provider.configurationService.activateProviderProfile({ name: newName })
 				} catch (error) {
 					provider.log(
 						`Error delete api configuration: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
@@ -1951,7 +1974,7 @@ export const webviewMessageHandler = async (
 				break
 			}
 
-			const settings = message.codeIndexSettings as any
+			const settings = message.codeIndexSettings
 
 			try {
 				provider.log("[saveCodeIndexSettingsAtomic] Starting to save code index settings")
@@ -2202,15 +2225,7 @@ export const webviewMessageHandler = async (
 
 				if (!isFeatureConfigured) {
 					provider.log("[startIndexing] Configuration is incomplete. Checking config details...")
-					// Try to get config manager reference to log details
-					const configManager = (manager as any)._configManager
-					if (configManager) {
-						provider.log(`[startIndexing]   embedderProvider: ${(configManager as any).embedderProvider}`)
-						provider.log(`[startIndexing]   qdrantUrl: ${(configManager as any).qdrantUrl || "undefined"}`)
-						provider.log(`[startIndexing]   openAiKey: !!${(configManager as any).openAiOptions?.openAiNativeApiKey}`)
-						provider.log(`[startIndexing]   openAiCompatibleBaseUrl: !!${(configManager as any).openAiCompatibleOptions?.baseUrl}`)
-						provider.log(`[startIndexing]   geminiApiKey: !!${(configManager as any).geminiOptions?.apiKey}`)
-					}
+					provider.log("[startIndexing] Detailed config inspection skipped (internal config manager is not public).")
 				}
 
 				// After initialization, check if feature is enabled and configured
@@ -2369,20 +2384,34 @@ export const webviewMessageHandler = async (
 			if (baseUrl && apiKey) {
 				try {
 					// Trim trailing slash from baseUrl if present
-					const trimmedBaseUrl = baseUrl.replace(/\/$/, "")
+					const trimmedBaseUrl = (baseUrl as string).replace(/\/$/, "")
 					const modelsUrl = `${trimmedBaseUrl}/models`
 
 					const response = await fetch(modelsUrl, {
 						headers: {
 							"Authorization": `Bearer ${apiKey}`,
 							"Content-Type": "application/json",
-							...openAiHeaders,
+							...(openAiHeaders as Record<string, string>),
 						},
 					})
 
 					if (response.ok) {
 						const data = await response.json()
-						const modelsArray = data.data?.map((model: any) => model.id) || []
+						const modelsArray = Array.isArray(data?.data)
+							? data.data
+								.map((model: unknown) => {
+									if (
+										model &&
+										typeof model === "object" &&
+										"id" in model &&
+										typeof (model as { id?: unknown }).id === "string"
+									) {
+										return (model as { id: string }).id
+									}
+									return undefined
+								})
+								.filter((id: string | undefined): id is string => typeof id === "string")
+							: []
 						// Remove duplicates and return
 						const uniqueModels = [...new Set<string>(modelsArray)]
 						await provider.postMessageToWebview({
@@ -2649,8 +2678,8 @@ export const webviewMessageHandler = async (
 			break
 		}
 		case "editQueuedMessage": {
-			if (message.payload) {
-				const { id, text, images } = message.payload as EditQueuedMessagePayload
+			if (isEditQueuedMessagePayload(message.payload)) {
+				const { id, text, images } = message.payload
 				provider.getCurrentTask()?.messageQueueService.updateMessage(id, text, images)
 			}
 

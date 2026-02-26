@@ -481,11 +481,11 @@ export class API extends EventEmitter<CoderEvents> implements CoderAPI {
 	// Provider Profile Management
 
 	public getProfiles(): string[] {
-		return this.sidebarProvider.getProviderProfileEntries().map(({ name }) => name)
+		return this.sidebarProvider.configurationService.getProviderProfileEntries().map(({ name }) => name)
 	}
 
 	public getProfileEntry(name: string): ProviderSettingsEntry | undefined {
-		return this.sidebarProvider.getProviderProfileEntry(name)
+		return this.sidebarProvider.configurationService.getProviderProfileEntry(name)
 	}
 
 	public async createProfile(name: string, profile?: ProviderSettings, activate: boolean = true) {
@@ -495,7 +495,7 @@ export class API extends EventEmitter<CoderEvents> implements CoderAPI {
 			throw new Error(`Profile with name "${name}" already exists`)
 		}
 
-		const id = await this.sidebarProvider.upsertProviderProfile(name, profile ?? {}, activate)
+		const id = await this.sidebarProvider.configurationService.upsertProviderProfile(name, profile ?? {}, activate)
 
 		if (!id) {
 			throw new Error(`Failed to create profile with name "${name}"`)
@@ -515,7 +515,7 @@ export class API extends EventEmitter<CoderEvents> implements CoderAPI {
 			throw new Error(`Profile with name "${name}" does not exist`)
 		}
 
-		const id = await this.sidebarProvider.upsertProviderProfile(name, profile, activate)
+		const id = await this.sidebarProvider.configurationService.upsertProviderProfile(name, profile, activate)
 
 		if (!id) {
 			throw new Error(`Failed to update profile with name "${name}"`)
@@ -529,7 +529,7 @@ export class API extends EventEmitter<CoderEvents> implements CoderAPI {
 		profile: ProviderSettings,
 		activate: boolean = true,
 	): Promise<string | undefined> {
-		const id = await this.sidebarProvider.upsertProviderProfile(name, profile, activate)
+		const id = await this.sidebarProvider.configurationService.upsertProviderProfile(name, profile, activate)
 
 		if (!id) {
 			throw new Error(`Failed to upsert profile with name "${name}"`)
@@ -545,7 +545,7 @@ export class API extends EventEmitter<CoderEvents> implements CoderAPI {
 			throw new Error(`Profile with name "${name}" does not exist`)
 		}
 
-		await this.sidebarProvider.deleteProviderProfile(entry)
+		await this.sidebarProvider.configurationService.deleteProviderProfile(entry)
 	}
 
 	public getActiveProfile(): string | undefined {
@@ -559,7 +559,7 @@ export class API extends EventEmitter<CoderEvents> implements CoderAPI {
 			throw new Error(`Profile with name "${name}" does not exist`)
 		}
 
-		await this.sidebarProvider.activateProviderProfile({ name })
+		await this.sidebarProvider.configurationService.activateProviderProfile({ name })
 		return this.getActiveProfile()
 	}
 }

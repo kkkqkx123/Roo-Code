@@ -17,7 +17,7 @@ import type { WorktreeIncludeStatus } from "./worktree.js"
  * ExtensionMessage
  * Extension -> Webview | CLI
  */
-export interface ExtensionMessage {
+export interface ExtensionMessageBase {
 	type:
 	| "action"
 	| "state"
@@ -85,7 +85,7 @@ export interface ExtensionMessage {
 	| "skills"
 	| "disabledSkills"
 	text?: string
-	payload?: any // eslint-disable-line @typescript-eslint/no-explicit-any
+	payload?: unknown
 	checkpointWarning?: {
 		type: "WAIT_TIMEOUT" | "INIT_TIMEOUT"
 		timeout: number
@@ -121,8 +121,7 @@ export interface ExtensionMessage {
 	slug?: string
 	success?: boolean
 	/** Generic payload for extension messages that use `values` */
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	values?: Record<string, any>
+	values?: Record<string, unknown>
 	requestId?: string
 	promptText?: string
 	results?:
@@ -130,11 +129,11 @@ export interface ExtensionMessage {
 	| { name: string; description?: string; argumentHint?: string; source: "global" | "project" | "built-in" }[]
 	error?: string
 	setting?: string
-	value?: any // eslint-disable-line @typescript-eslint/no-explicit-any
+	value?: unknown
 	hasContent?: boolean
 	tab?: string
 	rulesFolderPath?: string
-	settings?: any // eslint-disable-line @typescript-eslint/no-explicit-any
+	settings?: unknown
 	messageTs?: number
 	hasCheckpoint?: boolean
 	context?: string
@@ -203,6 +202,12 @@ export interface ExtensionMessage {
 	// folderSelected
 	path?: string
 }
+
+export type ExtensionMessageType = ExtensionMessageBase["type"]
+
+export type ExtensionMessage = {
+	[K in ExtensionMessageType]: Omit<ExtensionMessageBase, "type"> & { type: K }
+}[ExtensionMessageType]
 
 export type ExtensionState = Pick<
 	GlobalSettings,
@@ -345,13 +350,12 @@ export type ClineAskResponse = "yesButtonClicked" | "noButtonClicked" | "message
 export type AudioType = "notification" | "celebration" | "progress_loop"
 
 export interface UpdateTodoListPayload {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	todos: any[]
+	todos: TodoItem[]
 }
 
 export type EditQueuedMessagePayload = Pick<QueuedMessage, "id" | "text" | "images">
 
-export interface WebviewMessage {
+export interface WebviewMessageBase {
 	type:
 	| "updateTodoList"
 	| "deleteMultipleTasksWithIds"
@@ -531,8 +535,7 @@ export interface WebviewMessage {
 	customPrompt?: PromptComponent
 	dataUrls?: string[]
 	/** Generic payload for webview messages that use `values` */
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	values?: Record<string, any>
+	values?: Record<string, unknown>
 	query?: string
 	setting?: string
 	slug?: string
@@ -557,11 +560,9 @@ export interface WebviewMessage {
 	restoreCheckpoint?: boolean
 	historyPreviewCollapsed?: boolean
 	filters?: { type?: string; search?: string; tags?: string[] }
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	settings?: any
+	settings?: unknown
 	url?: string // For openExternal
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	config?: Record<string, any> // Add config to the payload
+	config?: Record<string, unknown> // Add config to the payload
 	hasContent?: boolean // For checkRulesDirectoryResult
 	checkOnly?: boolean // For deleteCustomMode check
 	upsellId?: string // For dismissUpsell
@@ -577,6 +578,10 @@ export interface WebviewMessage {
 		codebaseIndexOpenAiCompatibleBaseUrl?: string
 		codebaseIndexSearchMaxResults?: number
 		codebaseIndexSearchMinScore?: number
+		// Indexing behavior settings
+		manualIndexingOnly?: boolean
+		autoUpdateIndex?: boolean
+		codebaseIndexAllowedProjects?: string[]
 		// Vector storage configuration
 		vectorStorageMode?: "auto" | "tiny" | "small" | "medium" | "large"
 		vectorStoragePreset?: "tiny" | "small" | "medium" | "large"
@@ -603,6 +608,43 @@ export interface WebviewMessage {
 	worktreeNewWindow?: boolean
 	worktreeIncludeContent?: string
 }
+
+export type WebviewMessageType = WebviewMessageBase["type"]
+
+export type WebviewMessage = {
+	[K in WebviewMessageType]: Omit<WebviewMessageBase, "type"> & { type: K }
+}[WebviewMessageType]
+
+// Messages intentionally handled in webviewMessageHandler switch as inbound requests.
+export type WebviewInboundMessageType = Exclude<
+	WebviewMessageType,
+	| "checkRulesDirectoryResult"
+	| "codebaseIndexEnabled"
+	| "currentApiConfigName"
+	| "draggedImages"
+	| "enabledSkills"
+	| "enhancedPrompt"
+	| "exportModeResult"
+	| "imageGenerationSettings"
+	| "importModeResult"
+	| "indexCleared"
+	| "indexingStatusUpdate"
+	| "playSound"
+	| "setApiConfigPassword"
+	| "setAutoEnableDefault"
+	| "setopenAiCustomModelInfo"
+	| "shareTaskSuccess"
+	| "switchMode"
+	| "systemPrompt"
+	| "toggleWorkspaceIndexing"
+	| "updateCondensingPrompt"
+	| "vsCodeSetting"
+>
+
+export type WebviewOutboundMirrorMessageType = Exclude<WebviewMessageType, WebviewInboundMessageType>
+
+export type WebviewInboundMessage = Extract<WebviewMessage, { type: WebviewInboundMessageType }>
+export type WebviewOutboundMirrorMessage = Extract<WebviewMessage, { type: WebviewOutboundMirrorMessageType }>
 
 export const checkoutDiffPayloadSchema = z.object({
 	ts: z.number().optional(),

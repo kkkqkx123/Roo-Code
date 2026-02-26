@@ -82,6 +82,34 @@ export const codebaseIndexConfigSchema = z.object({
 export type CodebaseIndexConfig = z.infer<typeof codebaseIndexConfigSchema>
 
 /**
+ * Helper function to create a complete CodebaseIndexConfig with defaults.
+ * This ensures all fields are present and prevents missing fields in state synchronization.
+ *
+ * @param partial - Optional partial configuration to override defaults
+ * @returns Complete CodebaseIndexConfig with all fields populated
+ */
+export const createCodebaseIndexConfig = (
+	partial?: Partial<CodebaseIndexConfig>
+): CodebaseIndexConfig => ({
+	codebaseIndexEnabled: partial?.codebaseIndexEnabled ?? false,
+	codebaseIndexQdrantUrl: partial?.codebaseIndexQdrantUrl ?? "http://localhost:6333",
+	codebaseIndexEmbedderProvider: partial?.codebaseIndexEmbedderProvider ?? "openai",
+	codebaseIndexEmbedderBaseUrl: partial?.codebaseIndexEmbedderBaseUrl ?? "",
+	codebaseIndexEmbedderModelId: partial?.codebaseIndexEmbedderModelId ?? "",
+	codebaseIndexEmbedderModelDimension: partial?.codebaseIndexEmbedderModelDimension ?? 1536,
+	codebaseIndexSearchMaxResults: partial?.codebaseIndexSearchMaxResults,
+	codebaseIndexSearchMinScore: partial?.codebaseIndexSearchMinScore,
+	codebaseIndexOpenAiCompatibleBaseUrl: partial?.codebaseIndexOpenAiCompatibleBaseUrl ?? "",
+	codebaseIndexOpenAiCompatibleModelDimension: partial?.codebaseIndexOpenAiCompatibleModelDimension,
+	manualIndexingOnly: partial?.manualIndexingOnly ?? false,
+	autoUpdateIndex: partial?.autoUpdateIndex ?? true,
+	codebaseIndexAllowedProjects: partial?.codebaseIndexAllowedProjects ?? [],
+	vectorStorageMode: partial?.vectorStorageMode ?? "auto",
+	vectorStoragePreset: partial?.vectorStoragePreset ?? "medium",
+	vectorStorageThresholds: partial?.vectorStorageThresholds,
+})
+
+/**
  * CodebaseIndexModels
  */
 

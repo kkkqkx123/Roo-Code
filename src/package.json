@@ -3,7 +3,7 @@
 	"displayName": "%extension.displayName%",
 	"description": "%extension.description%",
 	"publisher": "kkkqkx",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"type": "commonjs",
 	"icon": "assets/icons/icon.png",
 	"galleryBanner": {
