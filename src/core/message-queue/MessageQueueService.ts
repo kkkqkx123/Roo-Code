@@ -14,13 +14,38 @@ export interface QueueEvents {
 	stateChanged: [messages: QueuedMessage[]]
 }
 
+/**
+ * Handler for processing dequeued messages
+ * The handler is called when a message is dequeued and should handle submission
+ */
+export type QueuedMessageHandler = (message: QueuedMessage) => Promise<void>
+
 export class MessageQueueService extends EventEmitter<QueueEvents> {
 	private _messages: QueuedMessage[]
+	private _messageHandler?: QueuedMessageHandler
 
 	constructor() {
 		super()
 
 		this._messages = []
+	}
+
+	/**
+	 * Register a handler to process dequeued messages.
+	 * The handler will be called automatically when dequeueMessage() is called
+	 * and a message is available.
+	 *
+	 * @param handler - The function to handle dequeued messages
+	 */
+	public setMessageHandler(handler: QueuedMessageHandler): void {
+		this._messageHandler = handler
+	}
+
+	/**
+	 * Clear the registered message handler
+	 */
+	public clearMessageHandler(): void {
+		this._messageHandler = undefined
 	}
 
 	private findMessage(id: string) {
@@ -77,9 +102,31 @@ export class MessageQueueService extends EventEmitter<QueueEvents> {
 		return true
 	}
 
-	public dequeueMessage(): QueuedMessage | undefined {
+	/**
+	 * Dequeue a message and optionally process it with the registered handler.
+	 *
+	 * If a message handler is registered and a message is available:
+	 * 1. The message is removed from the queue
+	 * 2. The handler is called to process the message (asynchronously)
+	 * 3. Errors from the handler are logged but don't throw
+	 *
+	 * @param shouldProcess - Whether to automatically invoke the handler if registered (default: true)
+	 * @returns The dequeued message (if not auto-processing) or undefined
+	 */
+	public dequeueMessage(shouldProcess = true): QueuedMessage | undefined {
 		const message = this._messages.shift()
 		this.emit("stateChanged", this._messages)
+
+		// If a handler is registered and auto-processing is enabled, invoke it asynchronously
+		if (message && shouldProcess && this._messageHandler) {
+			// Use setTimeout to ensure async processing doesn't block the caller
+			setTimeout(() => {
+				this._messageHandler?.(message).catch((err) => {
+					console.error("[MessageQueueService] Handler error:", err)
+				})
+			}, 0)
+		}
+
 		return message
 	}
 

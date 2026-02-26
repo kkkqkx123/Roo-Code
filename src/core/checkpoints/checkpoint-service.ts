@@ -1,5 +1,6 @@
 import pWaitFor from "p-wait-for"
 import * as vscode from "vscode"
+import type { ClineApiReqInfo } from "@coder/types"
 
 import { Task } from "../task/Task"
 
@@ -8,6 +9,12 @@ import { checkGitInstalled } from "../../utils/git"
 import { t } from "../../i18n"
 
 import { CheckpointServiceOptions, RepoPerTaskCheckpointService } from "../../services/checkpoints"
+import { DIFF_VIEW_URI_SCHEME } from "../../integrations/editor/DiffViewProvider"
+import { getApiMetrics } from "../../shared/getApiMetrics"
+
+// Re-export types for public API
+export type { CheckpointRestoreOptions } from "./checkpoint-restore"
+export type { CheckpointDiffOptions } from "./checkpoint-diff"
 
 const WARNING_THRESHOLD_MS = 5000
 
@@ -237,4 +244,183 @@ export async function checkpointSave(task: Task, force = false, suppressMessage 
 			console.error("[Task#checkpointSave] caught unexpected error, disabling checkpoints", err)
 			task.enableCheckpoints = false
 		})
+}
+
+/**
+ * Restore a checkpoint for the current task
+ *
+ * This function:
+ * 1. Restores the workspace files to the checkpoint state
+ * 2. Truncates API conversation history to remove deleted messages from prompt context
+ * 3. Truncates clineMessages using MessageManager (handles context-management cleanup)
+ * 4. Reports deleted API request metrics
+ * 5. Cancels the current task to trigger reinitialization
+ *
+ * @param task - The task to restore checkpoint for
+ * @param options - Restore options including timestamp, commit hash, mode, and operation type
+ */
+export async function checkpointRestore(
+	task: Task,
+	{ ts, commitHash, mode, operation = "delete" }: { ts: number; commitHash: string; mode: "preview" | "restore"; operation?: "delete" | "edit" },
+) {
+	const service = await getCheckpointService(task)
+
+	if (!service) {
+		return
+	}
+
+	const index = task.clineMessages.findIndex((m) => m.ts === ts)
+
+	if (index === -1) {
+		return
+	}
+
+	const provider = task.providerRef.deref()
+
+	try {
+		await service.restoreCheckpoint(commitHash)
+		await provider?.postMessageToWebview({ type: "currentCheckpointUpdated", text: commitHash })
+
+		if (mode === "restore") {
+			// Calculate metrics from messages that will be deleted (must be done before rewind)
+			const deletedMessages = task.clineMessages.slice(index + 1)
+
+			const { totalTokensIn, totalTokensOut, totalCacheWrites, totalCacheReads, totalCost } = getApiMetrics(
+				deletedMessages,
+			)
+
+			// Explicitly truncate API conversation history to ensure prompt context is properly rewound.
+			// This is critical for checkpoint restore to correctly remove deleted messages from the
+			// API context, not just from clineMessages.
+			//
+			// For both "delete" and "edit" operations: keep messages [0, apiIndex) - exclude the target message
+			// The edit operation will later re-add the edited message via pending edit processing
+			const apiIndex = task.apiConversationHistory.findIndex((m) => m.ts === ts)
+			if (apiIndex !== -1) {
+				await task.overwriteApiConversationHistory(task.apiConversationHistory.slice(0, apiIndex))
+			}
+
+			// Use MessageManager to properly handle context-management events
+			// This ensures orphaned Summary messages and truncation markers are cleaned up
+			await task.messageManager.rewindToTimestamp(ts, {
+				includeTargetMessage: operation === "edit",
+			})
+
+			// Report the deleted API request metrics
+			await task.say(
+				"api_req_deleted",
+				JSON.stringify({
+					tokensIn: totalTokensIn,
+					tokensOut: totalTokensOut,
+					cacheWrites: totalCacheWrites,
+					cacheReads: totalCacheReads,
+					cost: totalCost,
+				} satisfies ClineApiReqInfo),
+			)
+		}
+
+		// The task is already cancelled by the provider beforehand, but we
+		// need to re-init to get the updated messages.
+		//
+		// This was taken from Cline's implementation of the checkpoints
+		// feature. The task instance will hang if we don't cancel twice,
+		// so this is currently necessary, but it seems like a complicated
+		// and hacky solution to a problem that I don't fully understand.
+		// I'd like to revisit this in the future and try to improve the
+		// task flow and the communication between the webview and the
+		// `Task` instance.
+		provider?.cancelTask()
+	} catch (err) {
+		provider?.log("[checkpointRestore] disabling checkpoints for this task")
+		task.enableCheckpoints = false
+	}
+}
+
+/**
+ * Show diff for a checkpoint
+ *
+ * @param task - The task to show diff for
+ * @param options - Diff options including commit hash and mode
+ */
+export async function checkpointDiff(
+	task: Task,
+	{
+		ts,
+		previousCommitHash,
+		commitHash,
+		mode,
+	}: { ts?: number; previousCommitHash?: string; commitHash: string; mode: "from-init" | "checkpoint" | "to-current" | "full" },
+) {
+	const service = await getCheckpointService(task)
+
+	if (!service) {
+		return
+	}
+
+	let fromHash: string | undefined
+	let toHash: string | undefined
+	let title: string
+
+	const checkpoints = task.clineMessages.filter(({ say }) => say === "checkpoint_saved").map(({ text }) => text!)
+
+	if (["from-init", "full"].includes(mode) && checkpoints.length < 1) {
+		vscode.window.showInformationMessage(t("common:errors.checkpoint_no_first"))
+		return
+	}
+
+	const idx = checkpoints.indexOf(commitHash)
+	switch (mode) {
+		case "checkpoint":
+			fromHash = commitHash
+			toHash = idx !== -1 && idx < checkpoints.length - 1 ? checkpoints[idx + 1] : undefined
+			title = t("common:errors.checkpoint_diff_with_next")
+			break
+		case "from-init":
+			fromHash = checkpoints[0]
+			toHash = commitHash
+			title = t("common:errors.checkpoint_diff_since_first")
+			break
+		case "to-current":
+			fromHash = commitHash
+			toHash = undefined
+			title = t("common:errors.checkpoint_diff_to_current")
+			break
+		case "full":
+			fromHash = checkpoints[0]
+			toHash = undefined
+			title = t("common:errors.checkpoint_diff_since_first")
+			break
+	}
+
+	if (!fromHash) {
+		vscode.window.showInformationMessage(t("common:errors.checkpoint_no_previous"))
+		return
+	}
+
+	try {
+		const changes = await service.getDiff({ from: fromHash, to: toHash })
+
+		if (!changes?.length) {
+			vscode.window.showInformationMessage(t("common:errors.checkpoint_no_changes"))
+			return
+		}
+
+		await vscode.commands.executeCommand(
+			"vscode.changes",
+			title,
+			changes.map((change) => [
+				vscode.Uri.file(change.paths.absolute),
+				vscode.Uri.parse(`${DIFF_VIEW_URI_SCHEME}:${change.paths.relative}`).with({
+					query: Buffer.from(change.content.before ?? "").toString("base64"),
+				}),
+				vscode.Uri.parse(`${DIFF_VIEW_URI_SCHEME}:${change.paths.relative}`).with({
+					query: Buffer.from(change.content.after ?? "").toString("base64"),
+				}),
+			]),
+		)
+	} catch (err) {
+		const provider = task.providerRef.deref()
+		provider?.log("[checkpointDiff] disabling checkpoints for this task")
+		task.enableCheckpoints = false
+	}
 }

@@ -9,7 +9,6 @@ import { AskIgnoredError } from "./AskIgnoredError"
 
 import { Anthropic } from "@anthropic-ai/sdk"
 import OpenAI from "openai"
-import debounce from "lodash.debounce"
 import delay from "delay"
 import pWaitFor from "p-wait-for"
 import { serializeError } from "serialize-error"
@@ -59,10 +58,7 @@ import { maybeRemoveImageBlocks } from "../../api/transform/image-cleaning"
 
 // shared
 import { findLastIndex } from "../../shared/array"
-import { combineApiRequests } from "../../shared/combineApiRequests"
-import { combineCommandSequences } from "../../shared/combineCommandSequences"
 import { t } from "../../i18n"
-import { getApiMetrics, hasTokenUsageChanged, hasToolUsageChanged } from "../../shared/getApiMetrics"
 import { ClineAskResponse } from "../../shared/WebviewMessage"
 import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
 import { DiffStrategy, type ToolUse, type ToolParamName, toolParamNames } from "../../shared/tools"
@@ -129,6 +125,7 @@ import { AutoApprovalHandler, checkAutoApproval } from "../auto-approval"
 import { MessageManager } from "../message-manager"
 import { validateAndFixToolResultIds } from "./validateToolResultIds"
 import { mergeConsecutiveApiMessages } from "./mergeConsecutiveApiMessages"
+import { MetricsService } from "../metrics/MetricsService"
 
 const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
 const DEFAULT_USAGE_COLLECTION_TIMEOUT_MS = 5000 // 5 seconds
@@ -321,7 +318,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	consecutiveMistakeCountForEditFile: Map<string, number> = new Map()
 	consecutiveNoToolUseCount: number = 0
 	consecutiveNoAssistantMessagesCount: number = 0
-	toolUsage: ToolUsage = {}
+
+	// Metrics Service
+	public readonly metricsService: MetricsService
 
 	// Checkpoints
 	enableCheckpoints: boolean
@@ -397,17 +396,6 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	// Cached model info for current streaming session (set at start of each API request)
 	// This prevents excessive getModel() calls during tool execution
 	cachedStreamingModel?: { id: string; info: ModelInfo }
-
-	// Token Usage Cache
-	private tokenUsageSnapshot?: TokenUsage
-	private tokenUsageSnapshotAt?: number
-
-	// Tool Usage Cache
-	private toolUsageSnapshot?: ToolUsage
-
-	// Token Usage Throttling - Debounced emit function
-	private readonly TOKEN_USAGE_EMIT_INTERVAL_MS = 2000 // 2 seconds
-	private debouncedEmitTokenUsage: ReturnType<typeof debounce>
 
 	// Initial status for the task's history item (set at creation time to avoid race conditions)
 	private readonly initialStatus?: "active" | "delegated" | "completed"
@@ -525,6 +513,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 		this.messageQueueService.on("stateChanged", this.messageQueueStateChangedHandler)
 
+		// Register message handler to automatically process dequeued messages
+		this.messageQueueService.setMessageHandler(async (message) => {
+			await this.submitUserMessage(message.text, message.images)
+		})
+
 		// Listen for provider profile changes to update parser state
 		this.setupProviderProfileChangeListener(provider)
 
@@ -538,27 +531,16 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			this.todoList = initialTodos
 		}
 
-		// Initialize debounced token usage emit function
-		// Uses debounce with maxWait to achieve throttle-like behavior:
-		// - leading: true  - Emit immediately on first call
-		// - trailing: true - Emit final state when updates stop
-		// - maxWait        - Ensures at most one emit per interval during rapid updates (throttle behavior)
-		this.debouncedEmitTokenUsage = debounce(
-			(tokenUsage: TokenUsage, toolUsage: ToolUsage) => {
-				const tokenChanged = hasTokenUsageChanged(tokenUsage, this.tokenUsageSnapshot)
-				const toolChanged = hasToolUsageChanged(toolUsage, this.toolUsageSnapshot)
+		// Initialize metrics service with token usage throttling
+		this.metricsService = new MetricsService(this.taskId, (tokenUsage, toolUsage) => {
+			this.emit(CoderEventName.TaskTokenUsageUpdated, this.taskId, tokenUsage, toolUsage)
+			this.metricsService.updateTokenUsageSnapshot(this.clineMessages.slice(1))
+		})
 
-				if (tokenChanged || toolChanged) {
-					this.emit(CoderEventName.TaskTokenUsageUpdated, this.taskId, tokenUsage, toolUsage)
-					this.tokenUsageSnapshot = tokenUsage
-					this.tokenUsageSnapshotAt = this.clineMessages.at(-1)?.ts
-					// Deep copy tool usage for snapshot
-					this.toolUsageSnapshot = JSON.parse(JSON.stringify(toolUsage))
-				}
-			},
-			this.TOKEN_USAGE_EMIT_INTERVAL_MS,
-			{ leading: true, trailing: true, maxWait: this.TOKEN_USAGE_EMIT_INTERVAL_MS },
-		)
+		// Forward tool failure events from metrics service to task
+		this.metricsService.on("toolFailed", (taskId, toolName, error) => {
+			this.emit(CoderEventName.TaskToolFailed, taskId, toolName, error)
+		})
 
 		onCreated?.(this)
 
@@ -1210,12 +1192,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				initialStatus: this.initialStatus,
 			})
 
-			// Emit token/tool usage updates using debounced function
-			// The debounce with maxWait ensures:
-			// - Immediate first emit (leading: true)
-			// - At most one emit per interval during rapid updates (maxWait)
-			// - Final state is emitted when updates stop (trailing: true)
-			this.debouncedEmitTokenUsage(tokenUsage, this.toolUsage)
+			// Emit token/tool usage updates using metrics service throttling
+			this.metricsService.emitTokenUsageUpdate(tokenUsage, this.metricsService.getToolUsage())
 
 			await this.providerRef.deref()?.updateTaskHistory(historyItem)
 			return true
@@ -1638,7 +1616,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		const customCondensingPrompt = state?.customSupportPrompts?.CONDENSE
 		const { mode, apiConfiguration } = state ?? {}
 
-		const { contextTokens: prevContextTokens } = this.getTokenUsage()
+		const { contextTokens: prevContextTokens } = this.metricsService.getTokenUsage(this.clineMessages.slice(1))
 
 		// Build tools for condensing metadata (same tools used for normal API calls)
 		const provider = this.providerRef.deref()
@@ -2229,12 +2207,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	/**
 	 * Force emit a final token usage update, ignoring throttle.
 	 * Called before task completion or abort to ensure final stats are captured.
-	 * Triggers the debounce with current values and immediately flushes to ensure emit.
+	 * Delegates to MetricsService for throttling and emission.
 	 */
 	public emitFinalTokenUsageUpdate(): void {
-		const tokenUsage = this.getTokenUsage()
-		this.debouncedEmitTokenUsage(tokenUsage, this.toolUsage)
-		this.debouncedEmitTokenUsage.flush()
+		const tokenUsage = this.metricsService.getTokenUsage(this.clineMessages.slice(1))
+		this.metricsService.emitFinalTokenUsageUpdate(tokenUsage, this.metricsService.getToolUsage())
 	}
 
 	public async abortTask(isAbandoned = false) {
@@ -2304,6 +2281,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			this.messageQueueService.dispose()
 		} catch (error) {
 			console.error("Error disposing message queue:", error)
+		}
+
+		// Dispose metrics service to cancel pending debounced emits
+		try {
+			this.metricsService.dispose()
+		} catch (error) {
+			console.error("Error disposing metrics service:", error)
 		}
 
 		// Remove all event listeners to prevent memory leaks.
@@ -3925,7 +3909,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		const state = await this.providerRef.deref()?.getState()
 		const { profileThresholds = {}, mode, apiConfiguration } = state ?? {}
 
-		const { contextTokens } = this.getTokenUsage()
+		const { contextTokens } = this.metricsService.getTokenUsage(this.clineMessages.slice(1))
 		const modelInfo = this.api.getModel().info
 
 		const maxTokens = getModelMaxOutputTokens({
@@ -4114,7 +4098,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		Task.lastGlobalApiRequestTime = performance.now()
 
 		const systemPrompt = await this.getSystemPrompt()
-		const { contextTokens } = this.getTokenUsage()
+		const { contextTokens } = this.metricsService.getTokenUsage(this.clineMessages.slice(1))
 
 		if (contextTokens) {
 			const modelInfo = this.api.getModel().info
@@ -4300,7 +4284,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// Check auto-approval limits
 		const approvalResult = await this.autoApprovalHandler.checkAutoApprovalLimits(
 			state,
-			this.combineMessages(this.clineMessages.slice(1)),
+			this.metricsService.combineMessages(this.clineMessages.slice(1)),
 			async (type, data) => this.ask(type, data),
 		)
 
@@ -4704,36 +4688,6 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		return checkpointDiff(this, options)
 	}
 
-	// Metrics
-
-	public combineMessages(messages: ClineMessage[]) {
-		return combineApiRequests(combineCommandSequences(messages))
-	}
-
-	public getTokenUsage(): TokenUsage {
-		return getApiMetrics(this.combineMessages(this.clineMessages.slice(1)))
-	}
-
-	public recordToolUsage(toolName: ToolName) {
-		if (!this.toolUsage[toolName]) {
-			this.toolUsage[toolName] = { attempts: 0, failures: 0 }
-		}
-
-		this.toolUsage[toolName].attempts++
-	}
-
-	public recordToolError(toolName: ToolName, error?: string) {
-		if (!this.toolUsage[toolName]) {
-			this.toolUsage[toolName] = { attempts: 0, failures: 0 }
-		}
-
-		this.toolUsage[toolName].failures++
-
-		if (error) {
-			this.emit(CoderEventName.TaskToolFailed, this.taskId, toolName, error)
-		}
-	}
-
 	// Getters
 
 	public get taskStatus(): TaskStatus {
@@ -4761,14 +4715,16 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	public get tokenUsage(): TokenUsage | undefined {
-		if (this.tokenUsageSnapshot && this.tokenUsageSnapshotAt) {
-			return this.tokenUsageSnapshot
+		// First try to get the cached snapshot from MetricsService
+		const snapshot = this.metricsService.getTokenUsageSnapshot()
+		if (snapshot) {
+			return snapshot
 		}
 
-		this.tokenUsageSnapshot = this.getTokenUsage()
-		this.tokenUsageSnapshotAt = this.clineMessages.at(-1)?.ts
-
-		return this.tokenUsageSnapshot
+		// If no snapshot exists, calculate and cache token usage
+		const tokenUsage = this.metricsService.getTokenUsage(this.clineMessages.slice(1))
+		this.metricsService.updateTokenUsageSnapshot(this.clineMessages.slice(1))
+		return tokenUsage
 	}
 
 	public get cwd() {
@@ -4809,19 +4765,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 * This ensures that queued user messages are sent when appropriate,
 	 * preventing them from getting stuck in the queue.
 	 *
-	 * @param context - Context string for logging (e.g., the calling tool name)
+	 * The actual message submission is handled by the MessageQueueService's
+	 * registered handler (see constructor).
 	 */
 	public processQueuedMessages(): void {
 		try {
 			if (!this.messageQueueService.isEmpty()) {
-				const queued = this.messageQueueService.dequeueMessage()
-				if (queued) {
-					setTimeout(() => {
-						this.submitUserMessage(queued.text, queued.images).catch((err) =>
-							console.error(`[Task] Failed to submit queued message:`, err),
-						)
-					}, 0)
-				}
+				// Dequeue and automatically process via the registered handler
+				this.messageQueueService.dequeueMessage()
 			}
 		} catch (e) {
 			console.error(`[Task] Queue processing error:`, e)

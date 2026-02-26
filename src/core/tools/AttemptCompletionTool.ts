@@ -56,7 +56,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 
 		if (preventCompletionWithOpenTodos && hasIncompleteTodos) {
 			task.consecutiveMistakeCount++
-			task.recordToolError("attempt_completion")
+			task.metricsService.recordToolError("attempt_completion")
 
 			pushToolResult(
 				formatResponse.toolError(
@@ -70,7 +70,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 		try {
 			if (!result) {
 				task.consecutiveMistakeCount++
-				task.recordToolError("attempt_completion")
+				task.metricsService.recordToolError("attempt_completion")
 				pushToolResult(await task.sayAndCreateMissingParamError("attempt_completion", "result"))
 				return
 			}
@@ -84,7 +84,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 			// and properly updates the snapshot to prevent redundant emissions
 			task.emitFinalTokenUsageUpdate()
 
-			task.emit(CoderEventName.TaskCompleted, task.taskId, task.getTokenUsage(), task.toolUsage)
+			task.emit(CoderEventName.TaskCompleted, task.taskId, task.metricsService.getTokenUsage(task.clineMessages.slice(1)), task.metricsService.getToolUsage())
 
 			// Check for subtask using parentTaskId (metadata-driven delegation)
 			if (task.parentTaskId) {
@@ -192,7 +192,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 				// Force final token usage update before emitting TaskCompleted for consistency
 				task.emitFinalTokenUsageUpdate()
 
-				task.emit(CoderEventName.TaskCompleted, task.taskId, task.getTokenUsage(), task.toolUsage)
+				task.emit(CoderEventName.TaskCompleted, task.taskId, task.metricsService.getTokenUsage(task.clineMessages.slice(1)), task.metricsService.getToolUsage())
 
 				await task.ask("command", command ?? "", block.partial).catch(() => { })
 			}
