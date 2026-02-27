@@ -15,6 +15,8 @@
  * HunkLine := (" " | "-" | "+") text NEWLINE
  */
 
+import { ParseError, PatchErrorCode } from "./errors"
+
 const BEGIN_PATCH_MARKER = "*** Begin Patch"
 const END_PATCH_MARKER = "*** End Patch"
 const ADD_FILE_MARKER = "*** Add File: "
@@ -24,19 +26,6 @@ const MOVE_TO_MARKER = "*** Move to: "
 const EOF_MARKER = "*** End of File"
 const CHANGE_CONTEXT_MARKER = "@@ "
 const EMPTY_CHANGE_CONTEXT_MARKER = "@@"
-
-/**
- * Represents an error during patch parsing.
- */
-export class ParseError extends Error {
-	constructor(
-		message: string,
-		public lineNumber?: number,
-	) {
-		super(lineNumber !== undefined ? `Line ${lineNumber}: ${message}` : message)
-		this.name = "ParseError"
-	}
-}
 
 /**
  * A chunk within an UpdateFile hunk.
@@ -81,28 +70,78 @@ export interface ApplyPatchArgs {
 }
 
 /**
+ * Validate a file path for security and correctness.
+ * @throws ParseError if the path is invalid
+ */
+function validatePath(path: string, lineNumber: number): void {
+	if (!path || path.trim().length === 0) {
+		throw new ParseError("Empty file path", lineNumber, PatchErrorCode.INVALID_PATH)
+	}
+
+	const trimmedPath = path.trim()
+
+	// Check for absolute paths
+	if (trimmedPath.startsWith("/") || /^[A-Za-z]:/.test(trimmedPath)) {
+		throw new ParseError(
+			`Absolute path not allowed: '${path}'. Use relative paths only.`,
+			lineNumber,
+			PatchErrorCode.ABSOLUTE_PATH_NOT_ALLOWED,
+		)
+	}
+
+	// Check for path traversal
+	if (trimmedPath.includes("..")) {
+		throw new ParseError(
+			`Path traversal detected: '${path}'. Relative paths only.`,
+			lineNumber,
+			PatchErrorCode.PATH_TRAVERSAL_DETECTED,
+		)
+	}
+
+	// Check for invalid characters (basic check)
+	const invalidChars = /[<>:"|?*]/g
+	if (invalidChars.test(trimmedPath)) {
+		throw new ParseError(
+			`Invalid characters in path: '${path}'`,
+			lineNumber,
+			PatchErrorCode.INVALID_FILENAME_CHARACTERS,
+		)
+	}
+}
+
+/**
  * Check if lines start and end with correct patch markers.
+ * @throws ParseError if markers are missing
  */
 function checkPatchBoundaries(lines: string[]): void {
 	if (lines.length === 0) {
-		throw new ParseError("Empty patch")
+		throw new ParseError("Empty patch", undefined, PatchErrorCode.INVALID_FORMAT)
 	}
 
 	const firstLine = lines[0]?.trim()
 	const lastLine = lines[lines.length - 1]?.trim()
 
 	if (firstLine !== BEGIN_PATCH_MARKER) {
-		throw new ParseError("The first line of the patch must be '*** Begin Patch'")
+		throw new ParseError(
+			"The first line of the patch must be '*** Begin Patch'",
+			1,
+			PatchErrorCode.MISSING_BEGIN_MARKER,
+		)
 	}
 
 	if (lastLine !== END_PATCH_MARKER) {
-		throw new ParseError("The last line of the patch must be '*** End Patch'")
+		throw new ParseError(
+			"The last line of the patch must be '*** End Patch'",
+			lines.length,
+			PatchErrorCode.MISSING_END_MARKER,
+		)
 	}
 }
 
 /**
  * Parse a single UpdateFileChunk from lines.
  * Returns the parsed chunk and number of lines consumed.
+ * @throws ParseError if the chunk is invalid
  */
 function parseUpdateFileChunk(
 	lines: string[],
@@ -110,7 +149,7 @@ function parseUpdateFileChunk(
 	allowMissingContext: boolean,
 ): { chunk: UpdateFileChunk; linesConsumed: number } {
 	if (lines.length === 0) {
-		throw new ParseError("Update hunk does not contain any lines", lineNumber)
+		throw new ParseError("Update hunk does not contain any lines", lineNumber, PatchErrorCode.INVALID_HUNK_FORMAT)
 	}
 
 	let changeContext: string | null = null
@@ -124,11 +163,15 @@ function parseUpdateFileChunk(
 		changeContext = lines[0].substring(CHANGE_CONTEXT_MARKER.length)
 		startIndex = 1
 	} else if (!allowMissingContext) {
-		throw new ParseError(`Expected update hunk to start with a @@ context marker, got: '${lines[0]}'`, lineNumber)
+		throw new ParseError(
+			`Expected update hunk to start with a @@ context marker, got: '${lines[0]}'`,
+			lineNumber,
+			PatchErrorCode.INVALID_HUNK_FORMAT,
+		)
 	}
 
 	if (startIndex >= lines.length) {
-		throw new ParseError("Update hunk does not contain any lines", lineNumber + 1)
+		throw new ParseError("Update hunk does not contain any lines", lineNumber + 1, PatchErrorCode.INVALID_HUNK_FORMAT)
 	}
 
 	const chunk: UpdateFileChunk = {
@@ -145,7 +188,7 @@ function parseUpdateFileChunk(
 
 		if (line === EOF_MARKER) {
 			if (parsedLines === 0) {
-				throw new ParseError("Update hunk does not contain any lines", lineNumber + 1)
+				throw new ParseError("Update hunk does not contain any lines", lineNumber + 1, PatchErrorCode.INVALID_HUNK_FORMAT)
 			}
 			chunk.isEndOfFile = true
 			parsedLines++
@@ -185,6 +228,7 @@ function parseUpdateFileChunk(
 					throw new ParseError(
 						`Unexpected line found in update hunk: '${line}'. Every line should start with ' ' (context line), '+' (added line), or '-' (removed line)`,
 						lineNumber + 1,
+						PatchErrorCode.INVALID_HUNK_FORMAT,
 					)
 				}
 				// Otherwise, assume this is the start of the next hunk
@@ -198,6 +242,7 @@ function parseUpdateFileChunk(
 /**
  * Parse a single hunk (file operation) from lines.
  * Returns the parsed hunk and number of lines consumed.
+ * @throws ParseError if the hunk is invalid
  */
 function parseOneHunk(lines: string[], lineNumber: number): { hunk: Hunk; linesConsumed: number } {
 	const firstLine = lines[0]?.trim()
@@ -205,6 +250,8 @@ function parseOneHunk(lines: string[], lineNumber: number): { hunk: Hunk; linesC
 	// Add File
 	if (firstLine?.startsWith(ADD_FILE_MARKER)) {
 		const path = firstLine.substring(ADD_FILE_MARKER.length)
+		validatePath(path, lineNumber)
+		
 		let contents = ""
 		let parsedLines = 1
 
@@ -213,6 +260,14 @@ function parseOneHunk(lines: string[], lineNumber: number): { hunk: Hunk; linesC
 			if (line?.startsWith("+")) {
 				contents += line.substring(1) + "\n"
 				parsedLines++
+			} else if (line?.trim() !== "" && !line.startsWith("***")) {
+				// Non-empty line that doesn't start with + is invalid in Add File section
+				// Unless it's a new file operation marker
+				throw new ParseError(
+					`Add File section: expected line starting with '+', got: '${line}'`,
+					lineNumber + i,
+					PatchErrorCode.INVALID_ADD_FILE_CONTENT,
+				)
 			} else {
 				break
 			}
@@ -227,6 +282,8 @@ function parseOneHunk(lines: string[], lineNumber: number): { hunk: Hunk; linesC
 	// Delete File
 	if (firstLine?.startsWith(DELETE_FILE_MARKER)) {
 		const path = firstLine.substring(DELETE_FILE_MARKER.length)
+		validatePath(path, lineNumber)
+		
 		return {
 			hunk: { type: "DeleteFile", path },
 			linesConsumed: 1,
@@ -236,6 +293,8 @@ function parseOneHunk(lines: string[], lineNumber: number): { hunk: Hunk; linesC
 	// Update File
 	if (firstLine?.startsWith(UPDATE_FILE_MARKER)) {
 		const path = firstLine.substring(UPDATE_FILE_MARKER.length)
+		validatePath(path, lineNumber)
+		
 		let remainingLines = lines.slice(1)
 		let parsedLines = 1
 
@@ -243,6 +302,7 @@ function parseOneHunk(lines: string[], lineNumber: number): { hunk: Hunk; linesC
 		let movePath: string | null = null
 		if (remainingLines[0]?.startsWith(MOVE_TO_MARKER)) {
 			movePath = remainingLines[0].substring(MOVE_TO_MARKER.length)
+			validatePath(movePath, lineNumber + parsedLines)
 			remainingLines = remainingLines.slice(1)
 			parsedLines++
 		}
@@ -273,7 +333,11 @@ function parseOneHunk(lines: string[], lineNumber: number): { hunk: Hunk; linesC
 		}
 
 		if (chunks.length === 0) {
-			throw new ParseError(`Update file hunk for path '${path}' is empty`, lineNumber)
+			throw new ParseError(
+				`Update file hunk for path '${path}' is empty`,
+				lineNumber,
+				PatchErrorCode.EMPTY_UPDATE_FILE,
+			)
 		}
 
 		return {
@@ -285,6 +349,7 @@ function parseOneHunk(lines: string[], lineNumber: number): { hunk: Hunk; linesC
 	throw new ParseError(
 		`'${firstLine}' is not a valid hunk header. Valid hunk headers: '*** Add File: {path}', '*** Delete File: {path}', '*** Update File: {path}'`,
 		lineNumber,
+		PatchErrorCode.INVALID_FILE_HEADER,
 	)
 }
 

@@ -10,5 +10,14 @@ export type { Hunk, UpdateFileChunk, ApplyPatchArgs } from "./parser"
 
 export { seekSequence } from "./seek-sequence"
 
-export { applyChunksToContent, processHunk, processAllHunks, ApplyPatchError } from "./apply"
+export { applyChunksToContent, processHunk, processAllHunks, ApplyError } from "./apply"
 export type { ApplyPatchFileChange } from "./apply"
+
+export {
+	PatchError,
+	PatchErrorCode,
+	ValidationError,
+	PermissionError,
+	PatchErrors,
+} from "./errors"
+export type { ApplyPatchResult, ApplyPatchSummary } from "./types"

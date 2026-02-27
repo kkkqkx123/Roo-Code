@@ -3,7 +3,7 @@ import { useAppTranslation } from "@/i18n/TranslationContext"
 
 import type { Language } from "@coder/types"
 
-import { LANGUAGES } from "@coder/language"
+import { LANGUAGES } from "@coder/types"
 
 import { cn } from "@src/lib/utils"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@src/components/ui"
@@ -38,7 +38,7 @@ export const LanguageSettings = ({ language, setCachedStateField, className, ...
 						</SelectTrigger>
 						<SelectContent>
 							<SelectGroup>
-								{Object.entries(LANGUAGES).map(([code, name]) => (
+								{Object.entries(LANGUAGES).map(([code, name]: [Language, string]) => (
 									<SelectItem key={code} value={code}>
 										{name}
 										<span className="text-muted-foreground">({code})</span>

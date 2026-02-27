@@ -8,7 +8,6 @@ import {
 	type ModelInfo,
 	type ReasoningEffort,
 	type ExtensionMessage,
-	openAiModelInfoSaneDefaults,
 } from "@coder/types"
 
 import { useAppTranslation } from "@src/i18n/TranslationContext"
@@ -109,7 +108,7 @@ export const OpenAICompatible = ({
 		switch (message.type) {
 			case "openAiModels": {
 				const updatedModels = message.openAiModels ?? []
-				setOpenAiModels(Object.fromEntries(updatedModels.map((item) => [item, openAiModelInfoSaneDefaults])))
+				setOpenAiModels(Object.fromEntries(updatedModels.map((item) => [item, undefined])))
 				break
 			}
 		}
@@ -210,7 +209,7 @@ export const OpenAICompatible = ({
 
 						if (!checked) {
 							const { reasoningEffort: _, ...openAiCustomModelInfo } =
-								apiConfiguration.openAiCustomModelInfo || openAiModelInfoSaneDefaults
+								apiConfiguration.openAiCustomModelInfo || undefined
 
 							setApiConfigurationField("openAiCustomModelInfo", openAiCustomModelInfo)
 						}
@@ -226,7 +225,7 @@ export const OpenAICompatible = ({
 						setApiConfigurationField={(field, value) => {
 							if (field === "reasoningEffort") {
 								const openAiCustomModelInfo =
-									apiConfiguration.openAiCustomModelInfo || openAiModelInfoSaneDefaults
+									apiConfiguration.openAiCustomModelInfo || undefined
 
 								setApiConfigurationField("openAiCustomModelInfo", {
 									...openAiCustomModelInfo,
@@ -235,7 +234,7 @@ export const OpenAICompatible = ({
 							}
 						}}
 						modelInfo={{
-							...(apiConfiguration.openAiCustomModelInfo || openAiModelInfoSaneDefaults),
+							...(apiConfiguration.openAiCustomModelInfo || undefined),
 							supportsReasoningEffort: ["low", "medium", "high", "xhigh"],
 						}}
 					/>
@@ -250,7 +249,6 @@ export const OpenAICompatible = ({
 					<VSCodeTextField
 						value={
 							apiConfiguration?.openAiCustomModelInfo?.maxTokens?.toString() ||
-							openAiModelInfoSaneDefaults.maxTokens?.toString() ||
 							""
 						}
 						type="text"
@@ -269,7 +267,7 @@ export const OpenAICompatible = ({
 							const value = parseInt((e.target as HTMLInputElement).value)
 
 							return {
-								...(apiConfiguration?.openAiCustomModelInfo || openAiModelInfoSaneDefaults),
+								...(apiConfiguration?.openAiCustomModelInfo || undefined),
 								maxTokens: isNaN(value) ? undefined : value,
 							}
 						})}
@@ -288,7 +286,6 @@ export const OpenAICompatible = ({
 					<VSCodeTextField
 						value={
 							apiConfiguration?.openAiCustomModelInfo?.contextWindow?.toString() ||
-							openAiModelInfoSaneDefaults.contextWindow?.toString() ||
 							""
 						}
 						type="text"
@@ -308,8 +305,8 @@ export const OpenAICompatible = ({
 							const parsed = parseInt(value)
 
 							return {
-								...(apiConfiguration?.openAiCustomModelInfo || openAiModelInfoSaneDefaults),
-								contextWindow: isNaN(parsed) ? openAiModelInfoSaneDefaults.contextWindow : parsed,
+								...(apiConfiguration?.openAiCustomModelInfo || undefined),
+								contextWindow: parsed,
 							}
 						})}
 						placeholder={t("settings:placeholders.numbers.contextWindow")}
@@ -328,11 +325,11 @@ export const OpenAICompatible = ({
 						<Checkbox
 							checked={
 								apiConfiguration?.openAiCustomModelInfo?.supportsImages ??
-								openAiModelInfoSaneDefaults.supportsImages
+								false
 							}
 							onChange={handleInputChange("openAiCustomModelInfo", (checked) => {
 								return {
-									...(apiConfiguration?.openAiCustomModelInfo || openAiModelInfoSaneDefaults),
+									...(apiConfiguration?.openAiCustomModelInfo || undefined),
 									supportsImages: checked,
 								}
 							})}>
@@ -358,7 +355,7 @@ export const OpenAICompatible = ({
 							checked={apiConfiguration?.openAiCustomModelInfo?.supportsPromptCache ?? false}
 							onChange={handleInputChange("openAiCustomModelInfo", (checked) => {
 								return {
-									...(apiConfiguration?.openAiCustomModelInfo || openAiModelInfoSaneDefaults),
+									...(apiConfiguration?.openAiCustomModelInfo || undefined),
 									supportsPromptCache: checked,
 								}
 							})}>
@@ -380,7 +377,7 @@ export const OpenAICompatible = ({
 					<VSCodeTextField
 						value={
 							apiConfiguration?.openAiCustomModelInfo?.inputPrice?.toString() ??
-							openAiModelInfoSaneDefaults.inputPrice?.toString() ??
+							
 							""
 						}
 						type="text"
@@ -400,8 +397,8 @@ export const OpenAICompatible = ({
 							const parsed = parseFloat(value)
 
 							return {
-								...(apiConfiguration?.openAiCustomModelInfo ?? openAiModelInfoSaneDefaults),
-								inputPrice: isNaN(parsed) ? openAiModelInfoSaneDefaults.inputPrice : parsed,
+								...(apiConfiguration?.openAiCustomModelInfo ?? undefined),
+								inputPrice: parsed,
 							}
 						})}
 						placeholder={t("settings:placeholders.numbers.inputPrice")}
@@ -424,7 +421,7 @@ export const OpenAICompatible = ({
 					<VSCodeTextField
 						value={
 							apiConfiguration?.openAiCustomModelInfo?.outputPrice?.toString() ||
-							openAiModelInfoSaneDefaults.outputPrice?.toString() ||
+							
 							""
 						}
 						type="text"
@@ -444,8 +441,8 @@ export const OpenAICompatible = ({
 							const parsed = parseFloat(value)
 
 							return {
-								...(apiConfiguration?.openAiCustomModelInfo || openAiModelInfoSaneDefaults),
-								outputPrice: isNaN(parsed) ? openAiModelInfoSaneDefaults.outputPrice : parsed,
+								...(apiConfiguration?.openAiCustomModelInfo || undefined),
+								outputPrice: parsed,
 							}
 						})}
 						placeholder={t("settings:placeholders.numbers.outputPrice")}
@@ -488,7 +485,7 @@ export const OpenAICompatible = ({
 									const parsed = parseFloat(value)
 
 									return {
-										...(apiConfiguration?.openAiCustomModelInfo ?? openAiModelInfoSaneDefaults),
+										...(apiConfiguration?.openAiCustomModelInfo ?? undefined),
 										cacheReadsPrice: isNaN(parsed) ? 0 : parsed,
 									}
 								})}
@@ -530,7 +527,7 @@ export const OpenAICompatible = ({
 									const parsed = parseFloat(value)
 
 									return {
-										...(apiConfiguration?.openAiCustomModelInfo ?? openAiModelInfoSaneDefaults),
+										...(apiConfiguration?.openAiCustomModelInfo ?? undefined),
 										cacheWritesPrice: isNaN(parsed) ? 0 : parsed,
 									}
 								})}
@@ -555,7 +552,7 @@ export const OpenAICompatible = ({
 
 				<Button
 					variant="secondary"
-					onClick={() => setApiConfigurationField("openAiCustomModelInfo", openAiModelInfoSaneDefaults)}>
+					onClick={() => setApiConfigurationField("openAiCustomModelInfo", undefined)}>
 					{t("settings:providers.customModel.resetDefaults")}
 				</Button>
 			</div>

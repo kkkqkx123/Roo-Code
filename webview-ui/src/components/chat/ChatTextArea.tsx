@@ -6,8 +6,8 @@ import { unstable_batchedUpdates } from "react-dom"
 
 import type { ExtensionMessage } from "@coder/types"
 
-import { mentionRegex, unescapeSpaces } from "@coder/context-mentions"
-import { WebviewMessage } from "@coder/WebviewMessage"
+import { mentionRegex, unescapeSpaces } from "@coder/types"
+import { WebviewMessage } from "@coder/types"
 import { Mode, getAllModes } from "@coder/modes"
 
 import { vscode } from "@src/utils/vscode"

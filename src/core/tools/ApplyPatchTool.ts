@@ -13,11 +13,20 @@ import { EXPERIMENT_IDS, experiments } from "../../shared/experiments"
 import { sanitizeUnifiedDiff, computeDiffStats } from "../diff/stats"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 import type { ToolUse } from "../../shared/tools"
-import { parsePatch, ParseError, processAllHunks } from "./apply-patch"
-import type { ApplyPatchFileChange } from "./apply-patch"
+import {
+	parsePatch,
+	ParseError,
+	processAllHunks,
+	PatchError,
+	PatchErrorCode,
+	PatchErrors,
+	PatchError as PatchErrorType,
+} from "./apply-patch"
+import type { ApplyPatchFileChange, ApplyPatchResult, ApplyPatchFileResult, ApplyPatchSummary } from "./apply-patch"
 
 interface ApplyPatchParams {
 	patch: string
+	workdir?: string | null
 }
 
 export class ApplyPatchTool extends BaseTool<"apply_patch"> {
@@ -52,16 +61,67 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		return undefined
 	}
 
+	/**
+	 * Create a structured result object.
+	 */
+	private createResult(
+		success: boolean,
+		results: ApplyPatchFileResult[],
+		error?: string,
+	): ApplyPatchResult {
+		const summary: ApplyPatchSummary = {
+			total: results.length,
+			succeeded: results.filter((r) => r.success).length,
+			failed: results.filter((r) => !r.success).length,
+		}
+
+		return {
+			success,
+			results,
+			summary,
+			error,
+		}
+	}
+
+	/**
+	 * Create a file result object.
+	 */
+	private createFileResult(
+		path: string,
+		operation: "add" | "delete" | "update" | "rename",
+		success: boolean,
+		error?: string,
+		errorCode?: PatchErrorCode,
+		oldPath?: string,
+		newPath?: string,
+		diffStats?: { additions: number; deletions: number },
+	): ApplyPatchFileResult {
+		return {
+			path,
+			operation,
+			success,
+			error,
+			errorCode,
+			oldPath,
+			newPath,
+			diffStats,
+		}
+	}
+
 	async execute(params: ApplyPatchParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
-		const { patch } = params
+		const { patch, workdir } = params
 		const { askApproval, handleError, pushToolResult } = callbacks
+
+		// Use provided workdir or default to task.cwd
+		const cwd = workdir && workdir.trim() !== "" ? path.resolve(task.cwd, workdir) : task.cwd
 
 		try {
 			// Validate required parameters
 			if (!patch) {
 				task.consecutiveMistakeCount++
 				task.recordToolError("apply_patch")
-				pushToolResult(await task.sayAndCreateMissingParamError("apply_patch", "patch"))
+				const result = this.createResult(false, [], "Missing required parameter: patch")
+				pushToolResult(JSON.stringify(result))
 				return
 			}
 
@@ -72,22 +132,32 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			} catch (error) {
 				task.consecutiveMistakeCount++
 				task.recordToolError("apply_patch")
+				const errorCode = error instanceof PatchErrorType ? error.code : PatchErrorCode.INVALID_FORMAT
 				const errorMessage =
-					error instanceof ParseError
+					error instanceof PatchErrorType
 						? `Invalid patch format: ${error.message}`
 						: `Failed to parse patch: ${error instanceof Error ? error.message : String(error)}`
-				pushToolResult(formatResponse.toolError(errorMessage))
+				const result = this.createResult(
+					false,
+					[this.createFileResult("patch", "update", false, errorMessage, errorCode)],
+				)
+				pushToolResult(JSON.stringify(result))
 				return
 			}
 
 			if (parsedPatch.hunks.length === 0) {
-				pushToolResult("No file operations found in patch.")
+				const result = this.createResult(
+					true,
+					[],
+					"No file operations found in patch.",
+				)
+				pushToolResult(JSON.stringify(result))
 				return
 			}
 
 			// Process each hunk
 			const readFile = async (filePath: string): Promise<string> => {
-				const absolutePath = path.resolve(task.cwd, filePath)
+				const absolutePath = path.resolve(cwd, filePath)
 				return await fs.readFile(absolutePath, "utf8")
 			}
 
@@ -97,42 +167,103 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			} catch (error) {
 				task.consecutiveMistakeCount++
 				task.recordToolError("apply_patch")
+				const errorCode = error instanceof PatchErrorType ? error.code : PatchErrorCode.HUNK_APPLY_FAILED
 				const errorMessage = `Failed to process patch: ${error instanceof Error ? error.message : String(error)}`
-				pushToolResult(formatResponse.toolError(errorMessage))
+				const result = this.createResult(
+					false,
+					[this.createFileResult("patch", "update", false, errorMessage, errorCode)],
+					undefined,
+				)
+				pushToolResult(JSON.stringify(result))
 				return
 			}
 
 			// Process each file change
+			const results: ApplyPatchFileResult[] = []
+
 			for (const change of changes) {
 				const relPath = change.path
-				const absolutePath = path.resolve(task.cwd, relPath)
+				const absolutePath = path.resolve(cwd, relPath)
 
-				// Check access permissions
-				const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
-				if (!accessAllowed) {
-					await task.say("rooignore_error", relPath)
-					pushToolResult(formatResponse.rooIgnoreError(relPath))
-					return
-				}
+				try {
+					// Check access permissions
+					const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
+					if (!accessAllowed) {
+						await task.say("rooignore_error", relPath)
+						const result = this.createResult(
+							false,
+							[this.createFileResult(relPath, change.type, false, undefined, PatchErrorCode.ROOIGNORE_VIOLATION)],
+						)
+						pushToolResult(JSON.stringify(result))
+						return
+					}
 
-				// Check if file is write-protected
-				const isWriteProtected = task.rooProtectedController?.isWriteProtected(relPath) || false
+					// Check if file is write-protected
+					const isWriteProtected = task.rooProtectedController?.isWriteProtected(relPath) || false
 
-				if (change.type === "add") {
-					// Create new file
-					await this.handleAddFile(change, absolutePath, relPath, task, callbacks, isWriteProtected)
-				} else if (change.type === "delete") {
-					// Delete file
-					await this.handleDeleteFile(absolutePath, relPath, task, callbacks, isWriteProtected)
-				} else if (change.type === "update") {
-					// Update file
-					await this.handleUpdateFile(change, absolutePath, relPath, task, callbacks, isWriteProtected)
+					if (change.type === "add") {
+						const result = await this.handleAddFile(
+							change,
+							absolutePath,
+							relPath,
+							task,
+							callbacks,
+							isWriteProtected,
+							cwd,
+						)
+						results.push(result)
+					} else if (change.type === "delete") {
+						const result = await this.handleDeleteFile(
+							absolutePath,
+							relPath,
+							task,
+							callbacks,
+							isWriteProtected,
+						)
+						results.push(result)
+					} else if (change.type === "update") {
+						const result = await this.handleUpdateFile(
+							change,
+							absolutePath,
+							relPath,
+							task,
+							callbacks,
+							isWriteProtected,
+							cwd,
+						)
+						results.push(result)
+					}
+				} catch (error) {
+					// Capture error for this specific file
+					const errorCode = error instanceof PatchErrorType ? error.code : PatchErrorCode.UNEXPECTED_ERROR
+					const errorMessage = error instanceof Error ? error.message : String(error)
+					results.push(
+						this.createFileResult(relPath, change.type, false, errorMessage, errorCode),
+					)
 				}
 			}
 
-			task.consecutiveMistakeCount = 0
-			task.recordToolUsage("apply_patch")
+			// Check if all operations succeeded
+			const allSucceeded = results.every((r) => r.success)
+			task.consecutiveMistakeCount = allSucceeded ? 0 : task.consecutiveMistakeCount + 1
+			
+			if (!allSucceeded) {
+				task.recordToolError("apply_patch")
+			} else {
+				task.recordToolUsage("apply_patch")
+			}
+
+			const result = this.createResult(allSucceeded, results, undefined, validate_only)
+			pushToolResult(JSON.stringify(result))
 		} catch (error) {
+			// Handle unexpected errors
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			const result = this.createResult(
+				false,
+				[this.createFileResult("unknown", "update", false, errorMessage)],
+				errorMessage,
+			)
+			pushToolResult(JSON.stringify(result))
 			await handleError("apply patch", error as Error)
 			await task.diffViewProvider.reset()
 		}
@@ -145,31 +276,40 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		task: Task,
 		callbacks: ToolCallbacks,
 		isWriteProtected: boolean,
-	): Promise<void> {
+		cwd: string,
+	): Promise<ApplyPatchFileResult> {
 		const { askApproval, pushToolResult } = callbacks
 
 		// Check if file already exists
 		const fileExists = await fileExistsAtPath(absolutePath)
 		if (fileExists) {
 			task.consecutiveMistakeCount++
-			task.recordToolError("apply_patch")
 			const errorMessage = `File already exists: ${relPath}. Use Update File instead.`
 			await task.say("error", errorMessage)
-			pushToolResult(formatResponse.toolError(errorMessage))
-			return
+			return this.createFileResult(
+				relPath,
+				"add",
+				false,
+				errorMessage,
+				PatchErrorCode.FILE_ALREADY_EXISTS,
+			)
 		}
 
 		// Create parent directories if they don't exist
 		try {
-			await createDirectoriesForFile(absolutePath, task.cwd)
+			await createDirectoriesForFile(absolutePath, cwd)
 		} catch (error) {
 			task.consecutiveMistakeCount++
-			task.recordToolError("apply_patch")
 			const errorDetails = error instanceof Error ? error.message : String(error)
 			const errorMessage = `Failed to create directories for file: ${relPath}\n\n<error_details>\n${errorDetails}\n</error_details>`
 			await task.say("error", errorMessage)
-			pushToolResult(formatResponse.toolError(errorMessage))
-			return
+			return this.createFileResult(
+				relPath,
+				"add",
+				false,
+				errorMessage,
+				PatchErrorCode.PARENT_DIR_CREATE_FAILED,
+			)
 		}
 
 		const newContent = change.newContent || ""
@@ -196,7 +336,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 
 		const sharedMessageProps: ClineSayTool = {
 			tool: "appliedDiff",
-			path: getReadablePath(task.cwd, relPath),
+			path: getReadablePath(cwd, relPath),
 			diff: sanitizedDiff,
 			isOutsideWorkspace,
 		}
@@ -221,9 +361,8 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			if (!isPreventFocusDisruptionEnabled) {
 				await task.diffViewProvider.revertChanges()
 			}
-			pushToolResult("Changes were rejected by the user.")
 			await task.diffViewProvider.reset()
-			return
+			return this.createFileResult(relPath, "add", false, "Changes were rejected by the user.")
 		}
 
 		// Save the changes
@@ -237,10 +376,11 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		await task.fileContextTracker.trackFileContext(relPath, "roo_edited" as RecordSource)
 		task.didEditFile = true
 
-		const message = await task.diffViewProvider.pushToolWriteResult(task, task.cwd, true)
-		pushToolResult(message)
+		const message = await task.diffViewProvider.pushToolWriteResult(task, cwd, true)
 		await task.diffViewProvider.reset()
 		task.processQueuedMessages()
+
+		return this.createFileResult(relPath, "add", true, undefined, undefined, undefined, undefined, diffStats)
 	}
 
 	private async handleDeleteFile(
@@ -249,18 +389,22 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		task: Task,
 		callbacks: ToolCallbacks,
 		isWriteProtected: boolean,
-	): Promise<void> {
-		const { askApproval, pushToolResult } = callbacks
+	): Promise<ApplyPatchFileResult> {
+		const { askApproval } = callbacks
 
 		// Check if file exists
 		const fileExists = await fileExistsAtPath(absolutePath)
 		if (!fileExists) {
 			task.consecutiveMistakeCount++
-			task.recordToolError("apply_patch")
 			const errorMessage = `File not found: ${relPath}. Cannot delete a non-existent file.`
 			await task.say("error", errorMessage)
-			pushToolResult(formatResponse.toolError(errorMessage))
-			return
+			return this.createFileResult(
+				relPath,
+				"delete",
+				false,
+				errorMessage,
+				PatchErrorCode.FILE_NOT_FOUND,
+			)
 		}
 
 		const isOutsideWorkspace = isPathOutsideWorkspace(absolutePath)
@@ -281,8 +425,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		const didApprove = await askApproval("tool", completeMessage, undefined, isWriteProtected)
 
 		if (!didApprove) {
-			pushToolResult("Delete operation was rejected by the user.")
-			return
+			return this.createFileResult(relPath, "delete", false, "Delete operation was rejected by the user.")
 		}
 
 		// Delete the file
@@ -291,13 +434,18 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		} catch (error) {
 			const errorMessage = `Failed to delete file '${relPath}': ${error instanceof Error ? error.message : String(error)}`
 			await task.say("error", errorMessage)
-			pushToolResult(formatResponse.toolError(errorMessage))
-			return
+			return this.createFileResult(
+				relPath,
+				"delete",
+				false,
+				errorMessage,
+				PatchErrorCode.DELETE_FAILED,
+			)
 		}
 
 		task.didEditFile = true
-		pushToolResult(`Successfully deleted ${relPath}`)
 		task.processQueuedMessages()
+		return this.createFileResult(relPath, "delete", true)
 	}
 
 	private async handleUpdateFile(
@@ -307,18 +455,23 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		task: Task,
 		callbacks: ToolCallbacks,
 		isWriteProtected: boolean,
-	): Promise<void> {
-		const { askApproval, pushToolResult } = callbacks
+		cwd: string,
+	): Promise<ApplyPatchFileResult> {
+		const { askApproval } = callbacks
 
 		// Check if file exists
 		const fileExists = await fileExistsAtPath(absolutePath)
 		if (!fileExists) {
 			task.consecutiveMistakeCount++
-			task.recordToolError("apply_patch")
 			const errorMessage = `File not found: ${relPath}. Cannot update a non-existent file.`
 			await task.say("error", errorMessage)
-			pushToolResult(formatResponse.toolError(errorMessage))
-			return
+			return this.createFileResult(
+				relPath,
+				"update",
+				false,
+				errorMessage,
+				PatchErrorCode.FILE_NOT_FOUND,
+			)
 		}
 
 		const originalContent = change.originalContent || ""
@@ -332,9 +485,8 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		// Generate and validate diff
 		const diff = formatResponse.createPrettyPatch(relPath, originalContent, newContent)
 		if (!diff) {
-			pushToolResult(`No changes needed for '${relPath}'`)
 			await task.diffViewProvider.reset()
-			return
+			return this.createFileResult(relPath, "update", true, undefined, undefined, undefined, undefined, { additions: 0, deletions: 0 })
 		}
 
 		// Check experiment settings
@@ -352,7 +504,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 
 		const sharedMessageProps: ClineSayTool = {
 			tool: "appliedDiff",
-			path: getReadablePath(task.cwd, relPath),
+			path: getReadablePath(cwd, relPath),
 			diff: sanitizedDiff,
 			isOutsideWorkspace,
 		}
@@ -377,22 +529,45 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			if (!isPreventFocusDisruptionEnabled) {
 				await task.diffViewProvider.revertChanges()
 			}
-			pushToolResult("Changes were rejected by the user.")
 			await task.diffViewProvider.reset()
-			return
+			return this.createFileResult(relPath, "update", false, "Changes were rejected by the user.")
 		}
 
 		// Handle file move if specified
 		if (change.movePath) {
-			const moveAbsolutePath = path.resolve(task.cwd, change.movePath)
+			const moveAbsolutePath = path.resolve(cwd, change.movePath)
+
+			// Validate: destination doesn't already exist
+			const destinationExists = await fileExistsAtPath(moveAbsolutePath)
+			if (destinationExists) {
+				const errorMessage = `Cannot rename: destination path already exists: ${change.movePath}`
+				await task.say("error", errorMessage)
+				await task.diffViewProvider.reset()
+				return this.createFileResult(
+					relPath,
+					"rename",
+					false,
+					errorMessage,
+					PatchErrorCode.DESTINATION_EXISTS,
+					relPath,
+					change.movePath,
+				)
+			}
 
 			// Validate destination path access permissions
 			const moveAccessAllowed = task.rooIgnoreController?.validateAccess(change.movePath)
 			if (!moveAccessAllowed) {
 				await task.say("rooignore_error", change.movePath)
-				pushToolResult(formatResponse.rooIgnoreError(change.movePath))
 				await task.diffViewProvider.reset()
-				return
+				return this.createFileResult(
+					relPath,
+					"rename",
+					false,
+					undefined,
+					PatchErrorCode.ROOIGNORE_VIOLATION,
+					relPath,
+					change.movePath,
+				)
 			}
 
 			// Check if destination path is write-protected
@@ -402,9 +577,16 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 				task.recordToolError("apply_patch")
 				const errorMessage = `Cannot move file to write-protected path: ${change.movePath}`
 				await task.say("error", errorMessage)
-				pushToolResult(formatResponse.toolError(errorMessage))
 				await task.diffViewProvider.reset()
-				return
+				return this.createFileResult(
+					relPath,
+					"rename",
+					false,
+					errorMessage,
+					PatchErrorCode.WRITE_PROTECTED,
+					relPath,
+					change.movePath,
+				)
 			}
 
 			// Check if destination path is outside workspace
@@ -414,9 +596,16 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 				task.recordToolError("apply_patch")
 				const errorMessage = `Cannot move file to path outside workspace: ${change.movePath}`
 				await task.say("error", errorMessage)
-				pushToolResult(formatResponse.toolError(errorMessage))
 				await task.diffViewProvider.reset()
-				return
+				return this.createFileResult(
+					relPath,
+					"rename",
+					false,
+					errorMessage,
+					PatchErrorCode.PERMISSION_DENIED,
+					relPath,
+					change.movePath,
+				)
 			}
 
 			// Save new content to the new path
@@ -443,6 +632,19 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			}
 
 			await task.fileContextTracker.trackFileContext(change.movePath, "roo_edited" as RecordSource)
+
+			await task.diffViewProvider.reset()
+			task.processQueuedMessages()
+			return this.createFileResult(
+				relPath,
+				"rename",
+				true,
+				undefined,
+				undefined,
+				relPath,
+				change.movePath,
+				diffStats,
+			)
 		} else {
 			// Save changes to the same file
 			if (isPreventFocusDisruptionEnabled) {
@@ -452,14 +654,14 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			}
 
 			await task.fileContextTracker.trackFileContext(relPath, "roo_edited" as RecordSource)
+
+			task.didEditFile = true
+
+			const message = await task.diffViewProvider.pushToolWriteResult(task, cwd, false)
+			await task.diffViewProvider.reset()
+			task.processQueuedMessages()
+			return this.createFileResult(relPath, "update", true, undefined, undefined, undefined, undefined, diffStats)
 		}
-
-		task.didEditFile = true
-
-		const message = await task.diffViewProvider.pushToolWriteResult(task, task.cwd, false)
-		pushToolResult(message)
-		await task.diffViewProvider.reset()
-		task.processQueuedMessages()
 	}
 
 	override async handlePartial(task: Task, block: ToolUse<"apply_patch">): Promise<void> {
@@ -484,7 +686,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			isOutsideWorkspace: isPathOutsideWorkspace(absolutePath),
 		}
 
-		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(() => { })
+		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(() => {})
 	}
 }
 

@@ -4,7 +4,6 @@ import { CacheControlEphemeral } from "@anthropic-ai/sdk/resources"
 
 import {
 	type ModelInfo,
-	ANTHROPIC_DEFAULT_MAX_TOKENS,
 } from "@coder/types"
 
 import type { ApiHandlerOptions } from "../../shared/api"
@@ -96,7 +95,7 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 			stream = await this.client.messages.create(
 				{
 					model: modelId,
-					max_tokens: maxTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS,
+					max_tokens: maxTokens ?? 4096,
 					temperature,
 					thinking,
 					// Setting cache breakpoint for system prompt so new tasks can reuse it.
@@ -125,7 +124,7 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 		} else {
 			stream = (await this.client.messages.create({
 				model: modelId,
-				max_tokens: maxTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS,
+				max_tokens: maxTokens ?? 4096,
 				temperature,
 				system: [{ text: systemPrompt, type: "text" }],
 				messages: sanitizedMessages,
@@ -306,7 +305,7 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 
 		message = await this.client.messages.create({
 			model,
-			max_tokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
+			max_tokens: 4096,
 			thinking: undefined,
 			temperature,
 			messages: [{ role: "user", content: prompt }],

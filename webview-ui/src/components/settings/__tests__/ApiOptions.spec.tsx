@@ -3,7 +3,7 @@
 import { render, screen, fireEvent } from "@/utils/test-utils"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
-import { type ModelInfo, type ProviderSettings, openAiModelInfoSaneDefaults } from "@coder/types"
+import { type ModelInfo, type ProviderSettings, undefined } from "@coder/types"
 
 import * as ExtensionStateContext from "@src/context/ExtensionStateContext"
 const { ExtensionStateContextProvider } = ExtensionStateContext
@@ -356,7 +356,7 @@ describe("ApiOptions", () => {
 				apiProvider: "openai" as const,
 				enableReasoningEffort: true,
 				openAiCustomModelInfo: {
-					...openAiModelInfoSaneDefaults, // Start with defaults
+					...undefined, // Start with defaults
 					reasoningEffort: "low" as const, // Set an initial value
 				},
 				// Add other necessary default fields for openai provider if needed
@@ -390,7 +390,7 @@ describe("ApiOptions", () => {
 			expect(updatedInfo).not.toHaveProperty("reasoningEffort")
 
 			// Optional: Check if other properties were preserved (example)
-			expect(updatedInfo).toHaveProperty("contextWindow", openAiModelInfoSaneDefaults.contextWindow)
+			expect(updatedInfo).toHaveProperty("contextWindow", undefined.contextWindow)
 		})
 
 		it("does not render ReasoningEffort component when initially disabled", () => {
@@ -399,7 +399,7 @@ describe("ApiOptions", () => {
 				apiProvider: "openai" as const,
 				enableReasoningEffort: false, // Initially disabled
 				openAiCustomModelInfo: {
-					...openAiModelInfoSaneDefaults,
+					...undefined,
 				},
 			}
 
@@ -418,7 +418,7 @@ describe("ApiOptions", () => {
 				apiProvider: "openai" as const,
 				enableReasoningEffort: false, // Initially disabled
 				openAiCustomModelInfo: {
-					...openAiModelInfoSaneDefaults,
+					...undefined,
 				},
 			}
 
@@ -446,7 +446,7 @@ describe("ApiOptions", () => {
 				apiProvider: "openai" as const,
 				enableReasoningEffort: true, // Initially enabled
 				openAiCustomModelInfo: {
-					...openAiModelInfoSaneDefaults,
+					...undefined,
 					reasoningEffort: "low" as const,
 				},
 			}
@@ -480,7 +480,7 @@ describe("ApiOptions", () => {
 			expect(mockSetApiConfigurationField).toHaveBeenCalledWith(
 				"openAiCustomModelInfo",
 				expect.objectContaining({
-					contextWindow: openAiModelInfoSaneDefaults.contextWindow,
+					contextWindow: undefined.contextWindow,
 				}),
 			)
 		})

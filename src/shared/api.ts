@@ -1,4 +1,4 @@
-import { type ModelInfo, type ProviderSettings, ANTHROPIC_DEFAULT_MAX_TOKENS } from "@coder/types"
+import { type ModelInfo, type ProviderSettings } from "@coder/types"
 
 export { ModelInfo }
 
@@ -113,12 +113,12 @@ export const getModelMaxOutputTokens = ({
 
 	// For "Hybrid" reasoning models, discard the model's actual maxTokens for Anthropic contexts
 	if (model.supportsReasoningBudget && isAnthropicContext) {
-		return ANTHROPIC_DEFAULT_MAX_TOKENS
+		return Math.ceil(model.contextWindow * 0.2)
 	}
 
 	// For Anthropic contexts, always ensure a maxTokens value is set
 	if (isAnthropicContext && (!model.maxTokens || model.maxTokens === 0)) {
-		return ANTHROPIC_DEFAULT_MAX_TOKENS
+		return Math.ceil(model.contextWindow * 0.2)
 	}
 
 	// If model has explicit maxTokens, clamp it to 20% of the context window
@@ -142,7 +142,7 @@ export const getModelMaxOutputTokens = ({
 	}
 
 	// Default fallback
-	return ANTHROPIC_DEFAULT_MAX_TOKENS
+	return Math.ceil(model.contextWindow * 0.2)
 }
 
 // GetModelsOptions

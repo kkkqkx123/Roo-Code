@@ -16,9 +16,9 @@ import type { ClineAsk, ClineSayTool, ClineMessage, ExtensionMessage, AudioType 
 
 import { findLast } from "@coder/array"
 import { SuggestionItem } from "@coder/types"
-import { combineApiRequests } from "@coder/combineApiRequests"
-import { combineCommandSequences } from "@coder/combineCommandSequences"
-import { getApiMetrics } from "@coder/getApiMetrics"
+import { combineApiRequests } from "@coder/core/browser"
+import { combineCommandSequences } from "@coder/core/browser"
+import { getApiMetrics } from "@coder/core/browser"
 import { getAllModes } from "@coder/modes"
 import { ProfileValidator } from "@coder/ProfileValidator"
 import { getLatestTodo } from "@coder/todo"
@@ -937,7 +937,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 	const visibleMessages = useMemo(() => {
 		// Pre-compute checkpoint hashes that have associated user messages for O(1) lookup
 		const userMessageCheckpointHashes = new Set<string>()
-		modifiedMessages.forEach((msg) => {
+		modifiedMessages.forEach((msg: ClineMessage) => {
 			if (
 				msg.say === "user_feedback" &&
 				msg.checkpoint &&
@@ -950,7 +950,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 
 		// Remove the 500-message limit to prevent array index shifting
 		// Virtuoso is designed to efficiently handle large lists through virtualization
-		const newVisibleMessages = modifiedMessages.filter((message) => {
+		const newVisibleMessages = modifiedMessages.filter((message: ClineMessage) => {
 			// Filter out checkpoint_saved messages that should be suppressed
 			if (message.say === "checkpoint_saved") {
 				// Check if this checkpoint has the suppressMessage flag set
@@ -1381,7 +1381,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 
 	const itemContent = useCallback(
 		(index: number, messageOrGroup: ClineMessage) => {
-			const hasCheckpoint = modifiedMessages.some((message) => message.say === "checkpoint_saved")
+			const hasCheckpoint = modifiedMessages.some((message: ClineMessage) => message.say === "checkpoint_saved")
 
 			// regular message
 			return (

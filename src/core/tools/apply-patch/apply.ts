@@ -5,16 +5,7 @@
 
 import type { Hunk, UpdateFileChunk } from "./parser"
 import { seekSequence } from "./seek-sequence"
-
-/**
- * Error during patch application.
- */
-export class ApplyPatchError extends Error {
-	constructor(message: string) {
-		super(message)
-		this.name = "ApplyPatchError"
-	}
-}
+import { ApplyError, PatchErrorCode, PatchErrors } from "./errors"
 
 /**
  * Result of applying a patch to a file.
@@ -48,7 +39,7 @@ function computeReplacements(
 		if (chunk.changeContext !== null) {
 			const idx = seekSequence(originalLines, [chunk.changeContext], lineIndex, false)
 			if (idx === null) {
-				throw new ApplyPatchError(`Failed to find context '${chunk.changeContext}' in ${filePath}`)
+				throw PatchErrors.contextNotFound(chunk.changeContext, filePath)
 			}
 			lineIndex = idx + 1
 		}
@@ -82,9 +73,7 @@ function computeReplacements(
 			replacements.push([found, pattern.length, newSlice])
 			lineIndex = found + pattern.length
 		} else {
-			throw new ApplyPatchError(
-				`Failed to find expected lines in ${filePath}:\n${chunk.oldLines.join("\n").substring(0, 200)}${chunk.oldLines.join("\n").length > 200 ? "..." : ""}`,
-			)
+			throw PatchErrors.oldLinesNotFound(filePath, chunk.oldLines.join("\n"))
 		}
 	}
 
@@ -95,7 +84,7 @@ function computeReplacements(
 }
 
 /**
- * Apply replacements to the original lines, returning the modified content.
+ * Apply replacements to the original lines, returning the new content.
  * Replacements must be applied in reverse order to preserve indices.
  */
 function applyReplacements(lines: string[], replacements: Array<[number, number, string[]]>): string[] {
@@ -119,6 +108,7 @@ function applyReplacements(lines: string[], replacements: Array<[number, number,
  * @param filePath - The file path (for error messages)
  * @param chunks - The update chunks to apply
  * @returns The new file content
+ * @throws ApplyError if the patch cannot be applied
  */
 export function applyChunksToContent(originalContent: string, filePath: string, chunks: UpdateFileChunk[]): string {
 	// Split content into lines
@@ -147,6 +137,7 @@ export function applyChunksToContent(originalContent: string, filePath: string, 
  * @param hunk - The hunk to process
  * @param readFile - Function to read file contents
  * @returns The file change result
+ * @throws ApplyError if the hunk cannot be processed
  */
 export async function processHunk(
 	hunk: Hunk,
@@ -189,6 +180,7 @@ export async function processHunk(
  * @param hunks - The hunks to process
  * @param readFile - Function to read file contents
  * @returns Array of file changes
+ * @throws ApplyError if any hunk cannot be processed
  */
 export async function processAllHunks(
 	hunks: Hunk[],

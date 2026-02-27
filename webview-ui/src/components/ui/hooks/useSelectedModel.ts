@@ -2,7 +2,6 @@ import {
 	type ProviderName,
 	type ProviderSettings,
 	type ModelInfo,
-	openAiModelInfoSaneDefaults,
 } from "@coder/types"
 
 
@@ -37,24 +36,24 @@ function getSelectedModel({
 	switch (provider) {
 		case "gemini": {
 			const id = apiConfiguration.apiModelId ?? ""
-			const info = apiConfiguration.geminiCustomModelInfo
+			const info = apiConfiguration.undefined
 			return { id, info }
 		}
 		case "openai-native": {
 			const id = apiConfiguration.apiModelId ?? ""
-			const info = apiConfiguration.openAiNativeCustomModelInfo
+			const info = apiConfiguration.undefined
 			return { id, info }
 		}
 		case "openai": {
 			const id = apiConfiguration.openAiModelId ?? ""
 			const customInfo = apiConfiguration?.openAiCustomModelInfo
-			const info = customInfo ?? openAiModelInfoSaneDefaults
+			const info = customInfo ?? undefined
 			return { id, info }
 		}
 		default: {
 			provider satisfies "anthropic" | "gemini-cli" | "fake-ai"
 			const id = apiConfiguration.apiModelId ?? ""
-			const info = apiConfiguration.anthropicCustomModelInfo
+			const info = apiConfiguration.undefined
 			return { id, info }
 		}
 	}
