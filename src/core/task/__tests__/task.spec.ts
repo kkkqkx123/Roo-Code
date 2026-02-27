@@ -1408,6 +1408,20 @@ describe("Cline", () => {
                     const config = {
                         apiProvider: "openai" as const,
                         openAiModelId: modelId,
+                        openAiBaseUrl: "https://api.openai.com/v1",
+                        openAiApiKey: "test-key",
+                        openAiCustomModelInfo: {
+                            id: modelId,
+                            name: modelId,
+                            description: "Test model",
+                            maxTokens: 4096,
+                            contextWindow: 8192,
+                            supportsImages: false,
+                            supportsComputerUse: false,
+                            supportsPromptCache: false,
+                            inputPrice: 0.01,
+                            outputPrice: 0.02,
+                        },
                     }
                     const task = new Task({
                         provider: mockProvider,
@@ -1436,6 +1450,21 @@ describe("Cline", () => {
                 // Test with no model ID
                 const noModelConfig = {
                     apiProvider: "openai" as const,
+                    openAiBaseUrl: "https://api.openai.com/v1",
+                    openAiApiKey: "test-key",
+                    openAiModelId: "gpt-4",
+                    openAiCustomModelInfo: {
+                        id: "gpt-4",
+                        name: "GPT-4",
+                        description: "Test model",
+                        maxTokens: 4096,
+                        contextWindow: 8192,
+                        supportsImages: false,
+                        supportsComputerUse: false,
+                        supportsPromptCache: false,
+                        inputPrice: 0.01,
+                        outputPrice: 0.02,
+                    },
                 }
                 const noModelTask = new Task({
                     provider: mockProvider,

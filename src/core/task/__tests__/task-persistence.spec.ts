@@ -348,7 +348,18 @@ describe("Task persistence", () => {
             // The messages passed should be a COPY, not the live reference
             expect(callArgs?.messages).not.toBe(task.apiConversationHistory)
             // But the content should be the same
-            expect(callArgs?.messages).toEqual(task.apiConversationHistory)
+            // The saved messages should include system prompt + user message
+            expect(callArgs?.messages).toHaveLength(2)
+            expect(callArgs?.messages[0]).toMatchObject({
+                role: "system",
+                isSystemPrompt: true,
+            })
+            // The user message should be a copy, not the original reference
+            expect(callArgs?.messages[1]).not.toBe(originalMsg)
+            expect(callArgs?.messages[1]).toMatchObject({
+                role: "user",
+                content: [{ type: "text", text: "snapshot test" }],
+            })
         })
     })
 

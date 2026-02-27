@@ -127,6 +127,55 @@ export abstract class BaseOpenAiCompatibleProvider<ModelName extends string>
 
 		let lastUsage: OpenAI.CompletionUsage | undefined
 		const activeToolCallIds = new Set<string>()
+		const toolCallIndexById = new Map<string, number>()
+		const fallbackIndexByPosition = new Map<number, number>()
+		let nextSyntheticToolCallIndex = 0
+
+		const normalizeToolCallArguments = (value: unknown): string | undefined => {
+			if (value === undefined || value === null) {
+				return undefined
+			}
+			if (typeof value === "string") {
+				return value
+			}
+			try {
+				return JSON.stringify(value)
+			} catch {
+				return String(value)
+			}
+		}
+
+		const resolveToolCallIndex = (toolCall: any, position: number, callId?: string): number => {
+			const rawIndex = toolCall?.index
+			if (typeof rawIndex === "number" && Number.isFinite(rawIndex)) {
+				if (callId) {
+					toolCallIndexById.set(callId, rawIndex)
+				}
+				return rawIndex
+			}
+
+			if (callId) {
+				const known = toolCallIndexById.get(callId)
+				if (known !== undefined) {
+					return known
+				}
+			}
+
+			const fallback = fallbackIndexByPosition.get(position)
+			if (fallback !== undefined) {
+				if (callId) {
+					toolCallIndexById.set(callId, fallback)
+				}
+				return fallback
+			}
+
+			const synthetic = nextSyntheticToolCallIndex++
+			fallbackIndexByPosition.set(position, synthetic)
+			if (callId) {
+				toolCallIndexById.set(callId, synthetic)
+			}
+			return synthetic
+		}
 
 		for await (const chunk of stream) {
 			// Check for provider-specific error responses (e.g., MiniMax base_resp)
@@ -160,16 +209,25 @@ export abstract class BaseOpenAiCompatibleProvider<ModelName extends string>
 
 			// Emit raw tool call chunks - NativeToolCallParser handles state management
 			if (delta?.tool_calls) {
-				for (const toolCall of delta.tool_calls) {
-					if (toolCall.id) {
-						activeToolCallIds.add(toolCall.id)
+				for (const [position, toolCall] of delta.tool_calls.entries()) {
+					const callId = typeof toolCall.id === "string" && toolCall.id.length > 0 ? toolCall.id : undefined
+					if (callId) {
+						activeToolCallIds.add(callId)
 					}
+
+					const index = resolveToolCallIndex(toolCall, position, callId)
+					const name =
+						typeof toolCall.function?.name === "string" && toolCall.function.name.length > 0
+							? toolCall.function.name
+							: undefined
+					const args = normalizeToolCallArguments(toolCall.function?.arguments)
+
 					yield {
 						type: "tool_call_partial",
-						index: toolCall.index,
-						id: toolCall.id,
-						name: toolCall.function?.name,
-						arguments: toolCall.function?.arguments,
+						index,
+						id: callId,
+						name,
+						arguments: args,
 					}
 				}
 			}

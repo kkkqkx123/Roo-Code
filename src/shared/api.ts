@@ -11,6 +11,14 @@ export type ApiHandlerOptions = Omit<ProviderSettings, "apiProvider"> & {
 	 * and surface them). Defaults to true; set to false to disable summaries.
 	 */
 	enableResponsesReasoningSummary?: boolean
+	/**
+	 * OpenAI Native 供应商的 originator 标识
+	 */
+	originator?: string
+	/**
+	 * OpenAI Native 供应商的自定义 Headers
+	 */
+	openAiNativeHeaders?: Record<string, string>
 }
 
 // RouterName

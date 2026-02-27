@@ -33,7 +33,6 @@ export type OpenAiNativeModel = ReturnType<OpenAiNativeHandler["getModel"]>
 export class OpenAiNativeHandler extends BaseProvider implements SingleCompletionHandler {
 	protected options: ApiHandlerOptions
 	private client: OpenAI
-	private readonly providerName = "OpenAI Native"
 	// Session ID for request tracking (persists for the lifetime of the handler)
 	private readonly sessionId: string
 	/**
@@ -43,6 +42,18 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 	 */
 	private pendingToolCallId: string | undefined
 	private pendingToolCallName: string | undefined
+	/**
+	 * Provider streams may omit tool call indices on delta/done events.
+	 * Keep a stable synthetic index per call id so downstream chunk tracking
+	 * does not collapse multiple calls into one.
+	 */
+	private pendingToolCallIndices = new Map<string, number>()
+	private nextSyntheticToolCallIndex = 0
+	/**
+	 * Track which calls have streamed at least one delta chunk.
+	 * If no delta was seen, we can safely emit a fallback chunk on *.done.
+	 */
+	private toolCallDeltasSeen = new Set<string>()
 	// Resolved service tier from Responses API (actual tier used by OpenAI)
 	private lastServiceTier: ServiceTier | undefined
 	// Complete response output array (includes reasoning items with encrypted_content)
@@ -88,7 +99,8 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			baseURL: this.options.openAiNativeBaseUrl || undefined,
 			apiKey,
 			defaultHeaders: {
-				originator: "coder",
+				...this.options.openAiNativeHeaders,
+				...(this.options.originator ? { originator: this.options.originator } : {}),
 				session_id: this.sessionId,
 				"User-Agent": userAgent,
 			},
@@ -182,6 +194,9 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		// Reset pending tool identity for this request
 		this.pendingToolCallId = undefined
 		this.pendingToolCallName = undefined
+		this.pendingToolCallIndices.clear()
+		this.toolCallDeltasSeen.clear()
+		this.nextSyntheticToolCallIndex = 0
 
 		// Use Responses API for ALL models
 		const { verbosity, reasoning } = this.getModel()
@@ -401,7 +416,8 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		const taskId = metadata?.taskId
 		const userAgent = `coder/${Package.version} (${os.platform()} ${os.release()}; ${os.arch()}) node/${process.version.slice(1)}`
 		const requestHeaders: Record<string, string> = {
-			originator: "coder",
+			...this.options.openAiNativeHeaders,
+			...(this.options.originator ? { originator: this.options.originator } : {}),
 			session_id: taskId || this.sessionId,
 			"User-Agent": userAgent,
 		}
@@ -555,7 +571,8 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 				headers: {
 					"Content-Type": "application/json",
 					Authorization: `Bearer ${apiKey}`,
-					originator: "coder",
+					...this.options.openAiNativeHeaders,
+					...(this.options.originator ? { originator: this.options.originator } : {}),
 					session_id: taskId || this.sessionId,
 					"User-Agent": userAgent,
 				},
@@ -1178,9 +1195,14 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			// Avoid emitting incomplete tool_call_partial chunks; the downstream
 			// NativeToolCallParser needs a name to start a call.
 			if (typeof name === "string" && name.length > 0 && typeof callId === "string" && callId.length > 0) {
+				const index = this.getToolCallIndex(event, callId)
+				if (index === undefined) {
+					return
+				}
+				this.toolCallDeltasSeen.add(callId)
 				yield {
 					type: "tool_call_partial",
-					index: event.index ?? 0,
+					index,
 					id: callId,
 					name,
 					arguments: args,
@@ -1194,7 +1216,36 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			event?.type === "response.tool_call_arguments.done" ||
 			event?.type === "response.function_call_arguments.done"
 		) {
-			// Tool call complete - no action needed, NativeToolCallParser handles completion
+			// Some providers emit only *.done with full arguments and no preceding delta.
+			// Emit a fallback raw tool chunk so the downstream parser can still execute the call.
+			const callId = event.call_id || event.tool_call_id || event.id || this.pendingToolCallId || undefined
+			const name = event.name || event.function_name || this.pendingToolCallName || undefined
+			const hasDelta = typeof callId === "string" && this.toolCallDeltasSeen.has(callId)
+			const rawArgs = event.arguments
+
+			if (
+				!hasDelta &&
+				typeof name === "string" &&
+				name.length > 0 &&
+				typeof callId === "string" &&
+				callId.length > 0 &&
+				rawArgs !== undefined
+			) {
+				const index = this.getToolCallIndex(event, callId)
+				if (index !== undefined) {
+					const argumentsText = typeof rawArgs === "string" ? rawArgs : JSON.stringify(rawArgs)
+					yield {
+						type: "tool_call_partial",
+						index,
+						id: callId,
+						name,
+						arguments: argumentsText,
+					}
+				}
+			}
+
+			// Tool call complete - no explicit end event needed here.
+			// NativeToolCallParser finalization handles completion at stream end.
 			return
 		}
 
@@ -1209,6 +1260,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 					if (typeof callId === "string" && callId.length > 0) {
 						this.pendingToolCallId = callId
 						this.pendingToolCallName = typeof name === "string" ? name : undefined
+						void this.getToolCallIndex(item, callId)
 					}
 				}
 
@@ -1262,6 +1314,26 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 				yield usageData
 			}
 		}
+	}
+
+	/**
+	 * Resolve a stable tool-call index for providers that omit index fields.
+	 */
+	private getToolCallIndex(event: any, callId: string): number | undefined {
+		const rawIndex = event?.index ?? event?.output_index ?? event?.item_index
+		if (typeof rawIndex === "number" && Number.isFinite(rawIndex)) {
+			this.pendingToolCallIndices.set(callId, rawIndex)
+			return rawIndex
+		}
+
+		const existing = this.pendingToolCallIndices.get(callId)
+		if (existing !== undefined) {
+			return existing
+		}
+
+		const synthetic = this.nextSyntheticToolCallIndex++
+		this.pendingToolCallIndices.set(callId, synthetic)
+		return synthetic
 	}
 
 	private getReasoningEffort(model: OpenAiNativeModel): ReasoningEffortExtended | undefined {

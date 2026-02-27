@@ -106,6 +106,17 @@ export async function presentAssistantMessage(cline: Task) {
 			// their original name in API history
 			const mcpBlock = block as McpToolUse
 
+			// Defer execution of complete tool calls until the stream finishes.
+			// Running tools during active streaming can supersede pending asks and
+			// leave tool calls unprocessed when additional chunks arrive.
+			if (cline.isStreaming === true && cline.didCompleteReadingStream !== true && !mcpBlock.partial) {
+				cline.presentAssistantMessageLocked = false
+				if (cline.presentAssistantMessageHasPendingUpdates) {
+					presentAssistantMessage(cline)
+				}
+				return
+			}
+
 			if (cline.didRejectTool) {
 				// For native protocol, we must send a tool_result for every tool_use to avoid API errors
 				const toolCallId = mcpBlock.id
@@ -315,6 +326,17 @@ export async function presentAssistantMessage(cline: Task) {
 				cline.userMessageContent.push({ type: "text", text: errorMessage })
 				cline.didAlreadyUseTool = true
 				break
+			}
+
+			// Defer execution of complete tool calls until the stream finishes.
+			// Running tools during active streaming can supersede pending asks and
+			// leave tool calls unprocessed when additional chunks arrive.
+			if (cline.isStreaming === true && cline.didCompleteReadingStream !== true && !block.partial) {
+				cline.presentAssistantMessageLocked = false
+				if (cline.presentAssistantMessageHasPendingUpdates) {
+					presentAssistantMessage(cline)
+				}
+				return
 			}
 
 			// Fetch state early so it's available for toolDescription and validation

@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from "vitest"
 import { NativeToolCallParser } from "../NativeToolCallParser"
 
 describe("NativeToolCallParser", () => {
@@ -341,6 +342,55 @@ describe("NativeToolCallParser", () => {
 					expect(nativeArgs.limit).toBe(10)
 				}
 			})
+		})
+	})
+
+	describe("processRawChunk", () => {
+		it("should buffer arguments until id arrives for the same index", () => {
+			const firstEvents = NativeToolCallParser.processRawChunk({
+				index: 0,
+				name: "read_file",
+				arguments: '{"path":"src/',
+			})
+
+			// No id yet, so the parser must not start the call.
+			expect(firstEvents).toEqual([])
+
+			const secondEvents = NativeToolCallParser.processRawChunk({
+				index: 0,
+				id: "call_late_id",
+				arguments: 'index.ts"}',
+			})
+
+			expect(secondEvents).toEqual([
+				{ type: "tool_call_start", id: "call_late_id", name: "read_file" },
+				{ type: "tool_call_delta", id: "call_late_id", delta: '{"path":"src/' },
+				{ type: "tool_call_delta", id: "call_late_id", delta: 'index.ts"}' },
+			])
+
+			const finalizeEvents = NativeToolCallParser.finalizeRawChunks()
+			expect(finalizeEvents).toEqual([{ type: "tool_call_end", id: "call_late_id" }])
+		})
+
+		it("should normalize non-string argument chunks from provider", () => {
+			const events = NativeToolCallParser.processRawChunk({
+				index: 1,
+				id: "call_object_chunk",
+				name: "search_files",
+				arguments: { path: ".", regex: "global-agent" },
+			})
+
+			expect(events).toHaveLength(2)
+			expect(events[0]).toEqual({
+				type: "tool_call_start",
+				id: "call_object_chunk",
+				name: "search_files",
+			})
+			expect(events[1]?.type).toBe("tool_call_delta")
+			if (events[1]?.type === "tool_call_delta") {
+				expect(events[1].delta).toContain("\"path\":\".\"")
+				expect(events[1].delta).toContain("\"regex\":\"global-agent\"")
+			}
 		})
 	})
 })

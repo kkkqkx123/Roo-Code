@@ -169,7 +169,6 @@ export class ClineProvider
 		ClineProvider.activeInstances.add(this)
 
 		this.mdmService = mdmService
-		this.updateGlobalState("codebaseIndexModels", EMBEDDING_MODEL_PROFILES)
 
 		// Initialize the per-task file-based history store.
 		// The globalState write-through is debounced separately (not on every mutation)
@@ -202,6 +201,9 @@ export class ClineProvider
 			this.taskHistoryStore,
 			this.createConfigurationServiceCallbacks(),
 		)
+
+		// Now that configurationService is initialized, we can update global state
+		this.updateGlobalState("codebaseIndexModels", EMBEDDING_MODEL_PROFILES)
 
 		// Initialize MCP Hub through the singleton manager
 		McpServerManager.getInstance(this.context, this)

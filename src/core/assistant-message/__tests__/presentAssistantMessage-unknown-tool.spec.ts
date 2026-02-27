@@ -24,6 +24,7 @@ describe("presentAssistantMessage - Unknown Tool Handling", () => {
 			assistantMessageContent: [],
 			userMessageContent: [],
 			didCompleteReadingStream: false,
+			isStreaming: false,
 			didRejectTool: false,
 			didAlreadyUseTool: false,
 			consecutiveMistakeCount: 0,
@@ -229,5 +230,40 @@ describe("presentAssistantMessage - Unknown Tool Handling", () => {
 		expect(toolResult).toBeDefined()
 		expect(toolResult.is_error).toBe(true)
 		expect(toolResult.content).toContain("due to user rejecting a previous tool")
+	})
+
+	it("should defer complete tool execution until stream completion", async () => {
+		const toolCallId = "tool_call_deferred_test"
+		mockTask.assistantMessageContent = [
+			{
+				type: "tool_use",
+				id: toolCallId,
+				name: "unknown_tool",
+				params: {},
+				partial: false,
+			},
+		]
+		mockTask.isStreaming = true
+		mockTask.didCompleteReadingStream = false
+		mockTask.userMessageContentReady = false
+
+		await presentAssistantMessage(mockTask)
+
+		// While streaming is still active, complete tool execution is deferred.
+		expect(mockTask.userMessageContent).toHaveLength(0)
+		expect(mockTask.currentStreamingContentIndex).toBe(0)
+		expect(mockTask.userMessageContentReady).toBe(false)
+
+		// Once stream completes, the same block should execute normally.
+		mockTask.didCompleteReadingStream = true
+		await presentAssistantMessage(mockTask)
+
+		const toolResult = mockTask.userMessageContent.find(
+			(item: any) => item.type === "tool_result" && item.tool_use_id === toolCallId,
+		)
+
+		expect(toolResult).toBeDefined()
+		expect(mockTask.currentStreamingContentIndex).toBe(1)
+		expect(mockTask.userMessageContentReady).toBe(true)
 	})
 })

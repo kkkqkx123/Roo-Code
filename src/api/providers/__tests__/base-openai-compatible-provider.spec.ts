@@ -6,6 +6,7 @@ import OpenAI from "openai"
 import type { ModelInfo } from "@coder/types"
 
 import { BaseOpenAiCompatibleProvider } from "../base-openai-compatible-provider"
+import { vi, describe, beforeEach, afterEach, it, expect } from "vitest"
 
 // Create mock functions
 const mockCreate = vi.fn()
@@ -543,6 +544,109 @@ describe("BaseOpenAiCompatibleProvider", () => {
 
 			const endChunks = chunks.filter((chunk) => chunk.type === "tool_call_end")
 			expect(endChunks).toHaveLength(0)
+		})
+
+		it("should assign a stable synthetic index when provider omits tool_call.index", async () => {
+			mockCreate.mockImplementationOnce(() => {
+				return {
+					[Symbol.asyncIterator]: () => ({
+						next: vi
+							.fn()
+							.mockResolvedValueOnce({
+								done: false,
+								value: {
+									choices: [
+										{
+											delta: {
+												tool_calls: [
+													{
+														id: "call_missing_index",
+														function: { name: "test_tool", arguments: '{"a":' },
+													},
+												],
+											},
+										},
+									],
+								},
+							})
+							.mockResolvedValueOnce({
+								done: false,
+								value: {
+									choices: [
+										{
+											delta: {
+												tool_calls: [
+													{
+														id: "call_missing_index",
+														function: { arguments: '"b"}' },
+													},
+												],
+											},
+											finish_reason: "tool_calls",
+										},
+									],
+								},
+							})
+							.mockResolvedValueOnce({ done: true }),
+					}),
+				}
+			})
+
+			const stream = handler.createMessage("system prompt", [])
+			const chunks = []
+			for await (const chunk of stream) {
+				chunks.push(chunk)
+			}
+
+			const partialChunks = chunks.filter((chunk) => chunk.type === "tool_call_partial")
+			expect(partialChunks).toHaveLength(2)
+			expect(typeof partialChunks[0]?.index).toBe("number")
+			expect(partialChunks[0]?.index).toBe(partialChunks[1]?.index)
+		})
+
+		it("should normalize object tool_call arguments to JSON string", async () => {
+			mockCreate.mockImplementationOnce(() => {
+				return {
+					[Symbol.asyncIterator]: () => ({
+						next: vi
+							.fn()
+							.mockResolvedValueOnce({
+								done: false,
+								value: {
+									choices: [
+										{
+											delta: {
+												tool_calls: [
+													{
+														index: 0,
+														id: "call_object_args",
+														function: {
+															name: "test_tool",
+															arguments: { path: "src/a.ts", mode: "slice" },
+														},
+													},
+												],
+											},
+											finish_reason: "tool_calls",
+										},
+									],
+								},
+							})
+							.mockResolvedValueOnce({ done: true }),
+					}),
+				}
+			})
+
+			const stream = handler.createMessage("system prompt", [])
+			const chunks = []
+			for await (const chunk of stream) {
+				chunks.push(chunk)
+			}
+
+			const partialChunk = chunks.find((chunk) => chunk.type === "tool_call_partial") as any
+			expect(partialChunk).toBeDefined()
+			expect(typeof partialChunk.arguments).toBe("string")
+			expect(partialChunk.arguments).toContain("\"path\":\"src/a.ts\"")
 		})
 	})
 })

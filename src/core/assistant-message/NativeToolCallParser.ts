@@ -66,7 +66,7 @@ export class NativeToolCallParser {
 	private static rawChunkTracker = new Map<
 		number,
 		{
-			id: string
+			id?: string
 			name: string
 			hasStarted: boolean
 			deltaBuffer: string[]
@@ -100,17 +100,18 @@ export class NativeToolCallParser {
 		index: number
 		id?: string
 		name?: string
-		arguments?: string
+		arguments?: unknown
 	}): ToolCallStreamEvent[] {
 		const events: ToolCallStreamEvent[] = []
 		const { index, id, name, arguments: args } = chunk
 
 		let tracked = this.rawChunkTracker.get(index)
 
-		// Initialize new tool call tracking when we receive an id
-		if (id && !tracked) {
+		// Initialize tracking for this index even if id is missing.
+		// Some OpenAI-compatible endpoints stream arguments first and provide id later.
+		if (!tracked) {
 			tracked = {
-				id,
+				id: typeof id === "string" && id.length > 0 ? id : undefined,
 				name: name || "",
 				hasStarted: false,
 				deltaBuffer: [],
@@ -118,8 +119,9 @@ export class NativeToolCallParser {
 			this.rawChunkTracker.set(index, tracked)
 		}
 
-		if (!tracked) {
-			return events
+		// Update id if it arrives later and we haven't started yet.
+		if (id && !tracked.hasStarted) {
+			tracked.id = id
 		}
 
 		// Update name if present in chunk and not yet set
@@ -127,8 +129,10 @@ export class NativeToolCallParser {
 			tracked.name = name
 		}
 
-		// Emit start event when we have the name
-		if (!tracked.hasStarted && tracked.name) {
+		const argumentsChunk = this.normalizeArgumentsChunk(args)
+
+		// Emit start event when both id and name are available
+		if (!tracked.hasStarted && tracked.id && tracked.name) {
 			events.push({
 				type: "tool_call_start",
 				id: tracked.id,
@@ -148,15 +152,15 @@ export class NativeToolCallParser {
 		}
 
 		// Emit delta event for argument chunks
-		if (args) {
-			if (tracked.hasStarted) {
+		if (argumentsChunk) {
+			if (tracked.hasStarted && tracked.id) {
 				events.push({
 					type: "tool_call_delta",
 					id: tracked.id,
-					delta: args,
+					delta: argumentsChunk,
 				})
 			} else {
-				tracked.deltaBuffer.push(args)
+				tracked.deltaBuffer.push(argumentsChunk)
 			}
 		}
 
@@ -172,10 +176,13 @@ export class NativeToolCallParser {
 
 		if (finishReason === "tool_calls" && this.rawChunkTracker.size > 0) {
 			for (const [, tracked] of this.rawChunkTracker.entries()) {
-				events.push({
-					type: "tool_call_end",
-					id: tracked.id,
-				})
+				this.emitLateStartEvents(tracked, events)
+				if (tracked.hasStarted && tracked.id) {
+					events.push({
+						type: "tool_call_end",
+						id: tracked.id,
+					})
+				}
 			}
 		}
 
@@ -191,7 +198,8 @@ export class NativeToolCallParser {
 
 		if (this.rawChunkTracker.size > 0) {
 			for (const [, tracked] of this.rawChunkTracker.entries()) {
-				if (tracked.hasStarted) {
+				this.emitLateStartEvents(tracked, events)
+				if (tracked.hasStarted && tracked.id) {
 					events.push({
 						type: "tool_call_end",
 						id: tracked.id,
@@ -210,6 +218,45 @@ export class NativeToolCallParser {
 	 */
 	public static clearRawChunkState(): void {
 		this.rawChunkTracker.clear()
+	}
+
+	private static normalizeArgumentsChunk(args: unknown): string | undefined {
+		if (args === undefined || args === null) {
+			return undefined
+		}
+		if (typeof args === "string") {
+			return args
+		}
+		try {
+			return JSON.stringify(args)
+		} catch {
+			return String(args)
+		}
+	}
+
+	private static emitLateStartEvents(
+		tracked: { id?: string; name: string; hasStarted: boolean; deltaBuffer: string[] },
+		events: ToolCallStreamEvent[],
+	): void {
+		if (tracked.hasStarted || !tracked.id || !tracked.name) {
+			return
+		}
+
+		events.push({
+			type: "tool_call_start",
+			id: tracked.id,
+			name: tracked.name,
+		})
+		tracked.hasStarted = true
+
+		for (const bufferedDelta of tracked.deltaBuffer) {
+			events.push({
+				type: "tool_call_delta",
+				id: tracked.id,
+				delta: bufferedDelta,
+			})
+		}
+		tracked.deltaBuffer = []
 	}
 
 	/**
