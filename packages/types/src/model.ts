@@ -71,9 +71,9 @@ export const isModelParameter = (value: string): value is ModelParameter =>
 export const modelInfoSchema = z.object({
 	maxTokens: z.number().nullish(),
 	maxThinkingTokens: z.number().nullish(),
-	contextWindow: z.number(),
+	contextWindow: z.number().optional(),
 	supportsImages: z.boolean().optional(),
-	supportsPromptCache: z.boolean(),
+	supportsPromptCache: z.boolean().optional(),
 	// Optional default prompt cache retention policy for providers that support it.
 	// When set to "24h", extended prompt caching will be requested; when omitted
 	// or set to "in_memory", the default in‑memory cache is used.

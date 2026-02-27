@@ -17,6 +17,7 @@ import { convertNewFileToUnifiedDiff, computeDiffStats, sanitizeUnifiedDiff } fr
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { MissingParameterError, RooIgnoreViolationError } from "../errors/tools/index.js"
 
 interface WriteToFileParams {
 	path: string
@@ -31,27 +32,33 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 		const relPath = params.path
 		let newContent = params.content
 
+		// Validate required parameters using structured errors
 		if (!relPath) {
 			task.consecutiveMistakeCount++
-			task.recordToolError("write_to_file")
-			pushToolResult(await task.sayAndCreateMissingParamError("write_to_file", "path"))
+			const error = new MissingParameterError("write_to_file", "path")
+			task.recordToolError("write_to_file", error.toLogEntry())
+			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 			await task.diffViewProvider.reset()
 			return
 		}
 
 		if (newContent === undefined) {
 			task.consecutiveMistakeCount++
-			task.recordToolError("write_to_file")
-			pushToolResult(await task.sayAndCreateMissingParamError("write_to_file", "content"))
+			const error = new MissingParameterError("write_to_file", "content")
+			task.recordToolError("write_to_file", error.toLogEntry())
+			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 			await task.diffViewProvider.reset()
 			return
 		}
 
+		// Check .rooignore access
 		const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
 
 		if (!accessAllowed) {
+			const error = new RooIgnoreViolationError("write_to_file", relPath)
 			await task.say("rooignore_error", relPath)
-			pushToolResult(formatResponse.rooIgnoreError(relPath))
+			task.recordToolError("write_to_file", error.toLogEntry())
+			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 			return
 		}
 

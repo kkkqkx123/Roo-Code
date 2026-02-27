@@ -14,6 +14,14 @@ import { sanitizeUnifiedDiff, computeDiffStats } from "../diff/stats"
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
+import {
+	MissingParameterError,
+	RooIgnoreViolationError,
+	FileNotFoundToolError,
+	ContentNotFoundError,
+	DuplicateMatchError,
+	InvalidParameterError,
+} from "../errors/tools/index.js"
 
 interface EditFileParams {
 	file_path: string
@@ -180,12 +188,13 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 		}
 
 		try {
-			// Validate required parameters
+			// Validate required parameters using structured errors
 			if (!file_path) {
 				task.consecutiveMistakeCount++
-				task.recordToolError("edit_file")
+				const error = new MissingParameterError("edit_file", "file_path")
+				task.recordToolError("edit_file", error.toLogEntry())
 				task.didToolFailInCurrentTurn = true
-				pushToolResult(await task.sayAndCreateMissingParamError("edit_file", "file_path"))
+				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 				return
 			}
 
@@ -206,14 +215,17 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 						return `replacing: "${preview}"`
 					})()
 
+			// Check .rooignore access
 			const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
 
 			if (!accessAllowed) {
 				// Finalize the partial tool preview before emitting any say() messages.
 				await finalizePartialToolAskIfNeeded(relPath)
+				const error = new RooIgnoreViolationError("edit_file", relPath)
 				task.didToolFailInCurrentTurn = true
 				await task.say("rooignore_error", relPath)
-				pushToolResult(formatResponse.rooIgnoreError(relPath))
+				task.recordToolError("edit_file", error.toLogEntry())
+				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 				return
 			}
 
@@ -334,11 +346,11 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 							if (!anyMatches) {
 								task.consecutiveMistakeCount++
 								task.didToolFailInCurrentTurn = true
-								const formattedError = `No match found in file: ${absolutePath}\n\n<error_details>\nThe provided old_string could not be found using exact, whitespace-tolerant, or token-based matching.\n\nRecovery suggestions:\n1. Use read_file to confirm the file's current contents\n2. Ensure old_string matches exactly (including whitespace/indentation and line endings)\n3. Provide more surrounding context in old_string to make the match unique\n4. If the file has changed since you constructed old_string, re-read and retry\n</error_details>`
+								const error = new ContentNotFoundError("edit_file", relPath, old_string)
 								await finalizePartialToolAskIfNeeded(relPath)
-								await recordFailureForPathAndMaybeEscalate(relPath, formattedError)
-								task.recordToolError("edit_file", formattedError)
-								pushToolResult(formattedError)
+								await recordFailureForPathAndMaybeEscalate(relPath, error.message)
+								task.recordToolError("edit_file", error.toLogEntry())
+								pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 								return
 							}
 

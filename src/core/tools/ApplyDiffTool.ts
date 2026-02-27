@@ -14,6 +14,12 @@ import { computeDiffStats, sanitizeUnifiedDiff } from "../diff/stats"
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
+import {
+	MissingParameterError,
+	RooIgnoreViolationError,
+	FileNotFoundToolError,
+	DiffApplyFailedError,
+} from "../errors/tools/index.js"
 
 interface ApplyDiffParams {
 	path: string
@@ -32,25 +38,31 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 		}
 
 		try {
+			// Validate required parameters using structured errors
 			if (!relPath) {
 				task.consecutiveMistakeCount++
-				task.recordToolError("apply_diff")
-				pushToolResult(await task.sayAndCreateMissingParamError("apply_diff", "path"))
+				const error = new MissingParameterError("apply_diff", "path")
+				task.recordToolError("apply_diff", error.toLogEntry())
+				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 				return
 			}
 
 			if (!diffContent) {
 				task.consecutiveMistakeCount++
-				task.recordToolError("apply_diff")
-				pushToolResult(await task.sayAndCreateMissingParamError("apply_diff", "diff"))
+				const error = new MissingParameterError("apply_diff", "diff")
+				task.recordToolError("apply_diff", error.toLogEntry())
+				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 				return
 			}
 
+			// Check .rooignore access
 			const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
 
 			if (!accessAllowed) {
+				const error = new RooIgnoreViolationError("apply_diff", relPath)
 				await task.say("rooignore_error", relPath)
-				pushToolResult(formatResponse.rooIgnoreError(relPath))
+				task.recordToolError("apply_diff", error.toLogEntry())
+				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 				return
 			}
 
@@ -59,11 +71,11 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 
 			if (!fileExists) {
 				task.consecutiveMistakeCount++
-				task.recordToolError("apply_diff")
-				const formattedError = `File does not exist at path: ${absolutePath}\n\n<error_details>\nThe specified file could not be found. Please verify the file path and try again.\n</error_details>`
-				await task.say("error", formattedError)
+				const error = new FileNotFoundToolError("apply_diff", relPath)
+				task.recordToolError("apply_diff", error.toLogEntry())
 				task.didToolFailInCurrentTurn = true
-				pushToolResult(formattedError)
+				await task.say("error", error.message)
+				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 				return
 			}
 
@@ -83,33 +95,16 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 				task.consecutiveMistakeCount++
 				const currentCount = (task.consecutiveMistakeCountForApplyDiff.get(relPath) || 0) + 1
 				task.consecutiveMistakeCountForApplyDiff.set(relPath, currentCount)
-				let formattedError = ""
 
-				if (diffResult.failParts && diffResult.failParts.length > 0) {
-					for (const failPart of diffResult.failParts) {
-						if (failPart.success) {
-							continue
-						}
-
-						const errorDetails = failPart.details ? JSON.stringify(failPart.details, null, 2) : ""
-
-						formattedError = `<error_details>\n${failPart.error
-							}${errorDetails ? `\n\nDetails:\n${errorDetails}` : ""}\n</error_details>`
-					}
-				} else {
-					const errorDetails = diffResult.details ? JSON.stringify(diffResult.details, null, 2) : ""
-
-					formattedError = `Unable to apply diff to file: ${absolutePath}\n\n<error_details>\n${diffResult.error
-						}${errorDetails ? `\n\nDetails:\n${errorDetails}` : ""}\n</error_details>`
-				}
+				const errorReason = diffResult.failParts?.[0]?.error ?? diffResult.error ?? "Unknown diff apply error"
+				const error = new DiffApplyFailedError("apply_diff", relPath, errorReason)
 
 				if (currentCount >= 2) {
-					await task.say("diff_error", formattedError)
+					await task.say("diff_error", error.message)
 				}
 
-				task.recordToolError("apply_diff", formattedError)
-
-				pushToolResult(formattedError)
+				task.recordToolError("apply_diff", error.toLogEntry())
+				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 				return
 			}
 

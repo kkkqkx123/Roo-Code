@@ -20,8 +20,7 @@ import { t } from "../../i18n"
 import { getTaskDirectoryPath } from "../../utils/storage"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 import { parseCdCommand, removeCdFromCommand } from "../../utils/path"
-
-class ShellIntegrationError extends Error { }
+import { MissingParameterError, CommandTimeoutError, ShellIntegrationError as ShellIntegrationErrorType } from "../errors/tools/index.js"
 
 interface ExecuteCommandParams {
 	command: string
@@ -36,10 +35,12 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 		const { handleError, pushToolResult, askApproval } = callbacks
 
 		try {
+			// Validate required parameters using structured errors
 			if (!command) {
 				task.consecutiveMistakeCount++
-				task.recordToolError("execute_command")
-				pushToolResult(await task.sayAndCreateMissingParamError("execute_command", "command"))
+				const error = new MissingParameterError("execute_command", "command")
+				task.recordToolError("execute_command", error.toLogEntry())
+				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 				return
 			}
 
@@ -366,13 +367,17 @@ export async function executeCommandInTerminal(
 			if (isTimedOut) {
 				const status: CommandExecutionStatus = { executionId, status: "timeout" }
 				provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
+				
+				const errorInstance = new CommandTimeoutError("execute_command", commandToExecute, commandExecutionTimeout)
+				task.recordToolError("execute_command", errorInstance.toLogEntry())
+				
 				await task.say("error", t("common:errors:command_timeout", { seconds: commandExecutionTimeoutSeconds }))
 				task.didToolFailInCurrentTurn = true
 				task.terminalProcess = undefined
 
 				return [
 					false,
-					`The command was terminated after exceeding a user-configured ${commandExecutionTimeoutSeconds}s timeout. Do not try to re-run the command.`,
+					formatResponse.toolErrorFromInstance(errorInstance.toLLMMessage()),
 				]
 			}
 			throw error

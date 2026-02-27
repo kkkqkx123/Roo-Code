@@ -30,6 +30,29 @@ export const formatResponse = {
 			error,
 		}),
 
+	/**
+	 * Format tool error with actionable guidance for LLM.
+	 * @param error - The error message
+	 * @param suggestion - Actionable guidance for the LLM on how to recover
+	 */
+	toolErrorWithGuidance: (error?: string, suggestion?: string) =>
+		JSON.stringify({
+			status: "error",
+			message: "The tool execution failed",
+			error,
+			suggestion,
+		}),
+
+	/**
+	 * Format tool error from a ToolError instance.
+	 * @param llmPayload - The LLM error payload from ToolError.toLLMMessage()
+	 */
+	toolErrorFromInstance: (llmPayload: Record<string, unknown>) =>
+		JSON.stringify({
+			status: "error",
+			...llmPayload,
+		}),
+
 	rooIgnoreError: (path: string) =>
 		JSON.stringify({
 			status: "error",

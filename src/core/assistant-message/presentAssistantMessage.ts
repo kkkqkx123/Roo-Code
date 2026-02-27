@@ -234,12 +234,17 @@ export async function presentAssistantMessage(cline: Task) {
 				if (error instanceof AskIgnoredError) {
 					return
 				}
-				const errorString = `Error ${action}: ${JSON.stringify(serializeError(error))}`
-				await cline.say(
-					"error",
-					`Error ${action}:\n${error.message ?? JSON.stringify(serializeError(error), null, 2)}`,
-				)
-				pushToolResult(formatResponse.toolError(errorString))
+
+				// Check if this is a structured ValidationError with LLM guidance
+				if ("toLLMMessage" in error && typeof error.toLLMMessage === "function") {
+					// Structured error - use the LLM payload for better guidance
+					const llmPayload = (error as any).toLLMMessage()
+					pushToolResult(formatResponse.toolErrorFromInstance(llmPayload))
+				} else {
+					// Generic error - fallback to original behavior
+					const errorString = `Error ${action}: ${JSON.stringify(serializeError(error))}`
+					pushToolResult(formatResponse.toolError(errorString))
+				}
 			}
 
 			if (!mcpBlock.partial) {
@@ -561,14 +566,17 @@ export async function presentAssistantMessage(cline: Task) {
 				if (error instanceof AskIgnoredError) {
 					return
 				}
-				const errorString = `Error ${action}: ${JSON.stringify(serializeError(error))}`
 
-				await cline.say(
-					"error",
-					`Error ${action}:\n${error.message ?? JSON.stringify(serializeError(error), null, 2)}`,
-				)
-
-				pushToolResult(formatResponse.toolError(errorString))
+				// Check if this is a structured ValidationError with LLM guidance
+				if ("toLLMMessage" in error && typeof error.toLLMMessage === "function") {
+					// Structured error - use the LLM payload for better guidance
+					const llmPayload = (error as any).toLLMMessage()
+					pushToolResult(formatResponse.toolErrorFromInstance(llmPayload))
+				} else {
+					// Generic error - fallback to original behavior
+					const errorString = `Error ${action}: ${JSON.stringify(serializeError(error))}`
+					pushToolResult(formatResponse.toolError(errorString))
+				}
 			}
 
 			if (!block.partial) {

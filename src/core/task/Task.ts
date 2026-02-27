@@ -97,13 +97,9 @@ import { manageContext, willManageContext } from "../context/management"
 import { ClineProvider } from "../webview/ClineProvider"
 import { MultiSearchReplaceDiffStrategy } from "../diff/strategies/multi-search-replace"
 import {
-	type ApiMessage,
-	readApiMessages,
-	saveApiMessages,
-	readTaskMessages,
-	saveTaskMessages,
-	taskMetadata,
-} from "../task-persistence"
+	type LogEntry,
+	MissingParameterError,
+} from "../errors/tools/index.js"
 import { getEnvironmentDetails } from "../environment/getEnvironmentDetails"
 import { checkContextWindowExceededError } from "../context/management/error-handling"
 import {
@@ -1827,13 +1823,18 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		}
 	}
 
+	/**
+	 * Create and record a missing parameter error using structured error types.
+	 * @param toolName - The name of the tool
+	 * @param paramName - The missing parameter name
+	 * @param relPath - Optional file path context
+	 * @returns Formatted tool error response for LLM
+	 */
 	async sayAndCreateMissingParamError(toolName: ToolName, paramName: string, relPath?: string) {
-		await this.say(
-			"error",
-			`Roo tried to use ${toolName}${relPath ? ` for '${relPath.toPosix()}'` : ""
-			} without value for required parameter '${paramName}'. Retrying...`,
-		)
-		return formatResponse.toolError(formatResponse.missingToolParameterError(paramName))
+		const error = new MissingParameterError(toolName, paramName)
+		await this.say("error", error.message)
+		this.recordToolError(toolName, error.toLogEntry())
+		return formatResponse.toolErrorFromInstance(error.toLLMMessage())
 	}
 
 	// Lifecycle
@@ -4216,8 +4217,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	/**
 	 * Record a tool execution failure.
 	 * Delegates to the metricsService.
+	 * @param toolName - The name of the tool that failed
+	 * @param error - Either an error message string or a structured LogEntry from ToolError
 	 */
-	public recordToolError(toolName: ToolName, error?: string): void {
+	public recordToolError(toolName: ToolName, error?: string | LogEntry): void {
 		this.metricsService.recordToolError(toolName, error)
 	}
 }

@@ -36,25 +36,21 @@ function getSelectedModel({
 	switch (provider) {
 		case "gemini": {
 			const id = apiConfiguration.apiModelId ?? ""
-			const info = apiConfiguration.undefined
-			return { id, info }
+			return { id, info: undefined }
 		}
 		case "openai-native": {
 			const id = apiConfiguration.apiModelId ?? ""
-			const info = apiConfiguration.undefined
-			return { id, info }
+			return { id, info: undefined }
 		}
 		case "openai": {
 			const id = apiConfiguration.openAiModelId ?? ""
-			const customInfo = apiConfiguration?.openAiCustomModelInfo
-			const info = customInfo ?? undefined
+			const info = apiConfiguration?.openAiCustomModelInfo ?? undefined
 			return { id, info }
 		}
 		default: {
 			provider satisfies "anthropic" | "gemini-cli" | "fake-ai"
 			const id = apiConfiguration.apiModelId ?? ""
-			const info = apiConfiguration.undefined
-			return { id, info }
+			return { id, info: undefined }
 		}
 	}
 }

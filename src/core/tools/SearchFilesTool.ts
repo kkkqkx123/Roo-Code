@@ -3,12 +3,14 @@ import path from "path"
 import { type ClineSayTool } from "@coder/types"
 
 import { Task } from "../task/Task"
+import { formatResponse } from "../prompts/responses"
 import { getReadablePath } from "../../utils/path"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { regexSearchFiles } from "../../services/ripgrep"
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { MissingParameterError } from "../errors/tools/index.js"
 
 interface SearchFilesParams {
 	path: string
@@ -26,19 +28,22 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 		const regex = params.regex
 		const filePattern = params.file_pattern || undefined
 
+		// Validate required parameters using structured errors
 		if (!relDirPath) {
 			task.consecutiveMistakeCount++
-			task.recordToolError("search_files")
+			const error = new MissingParameterError("search_files", "path")
+			task.recordToolError("search_files", error.toLogEntry())
 			task.didToolFailInCurrentTurn = true
-			pushToolResult(await task.sayAndCreateMissingParamError("search_files", "path"))
+			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 			return
 		}
 
 		if (!regex) {
 			task.consecutiveMistakeCount++
-			task.recordToolError("search_files")
+			const error = new MissingParameterError("search_files", "regex")
+			task.recordToolError("search_files", error.toLogEntry())
 			task.didToolFailInCurrentTurn = true
-			pushToolResult(await task.sayAndCreateMissingParamError("search_files", "regex"))
+			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 			return
 		}
 

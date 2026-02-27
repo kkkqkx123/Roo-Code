@@ -9,6 +9,7 @@ import { VectorStoreSearchResult } from "../../services/code-index/interfaces"
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { MissingParameterError } from "../errors/tools/index.js"
 
 interface CodebaseSearchParams {
 	query: string
@@ -32,7 +33,9 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 		if (!query) {
 			task.consecutiveMistakeCount++
 			task.didToolFailInCurrentTurn = true
-			pushToolResult(await task.sayAndCreateMissingParamError("codebase_search", "query"))
+			const error = new MissingParameterError("codebase_search", "query")
+			task.recordToolError("codebase_search", error.toLogEntry())
+			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 			return
 		}
 

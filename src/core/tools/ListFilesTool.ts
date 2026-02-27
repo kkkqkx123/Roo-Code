@@ -10,6 +10,7 @@ import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { MissingParameterError, DirectoryNotFoundToolError } from "../errors/tools/index.js"
 
 interface ListFilesParams {
 	path: string
@@ -24,11 +25,13 @@ export class ListFilesTool extends BaseTool<"list_files"> {
 		const { askApproval, handleError, pushToolResult } = callbacks
 
 		try {
+			// Validate required parameters using structured errors
 			if (!relDirPath) {
 				task.consecutiveMistakeCount++
-				task.recordToolError("list_files")
+				const error = new MissingParameterError("list_files", "path")
+				task.recordToolError("list_files", error.toLogEntry())
 				task.didToolFailInCurrentTurn = true
-				pushToolResult(await task.sayAndCreateMissingParamError("list_files", "path"))
+				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 				return
 			}
 

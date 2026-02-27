@@ -3,8 +3,10 @@ import * as path from "path"
 
 import { Task } from "../task/Task"
 import { getTaskDirectoryPath } from "../../utils/storage"
+import { formatResponse } from "../prompts/responses"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { MissingParameterError } from "../errors/tools/index.js"
 
 /** Default byte limit for read operations (40KB) */
 const DEFAULT_LIMIT = 40 * 1024 // 40KB default limit
@@ -99,13 +101,13 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 		const { pushToolResult } = callbacks
 		const { artifact_id, search, offset = 0, limit = DEFAULT_LIMIT } = params
 
-		// Validate required parameters
+		// Validate required parameters using structured errors
 		if (!artifact_id) {
 			task.consecutiveMistakeCount++
-			task.recordToolError("read_command_output")
+			const error = new MissingParameterError("read_command_output", "artifact_id")
+			task.recordToolError("read_command_output", error.toLogEntry())
 			task.didToolFailInCurrentTurn = true
-			const errorMsg = await task.sayAndCreateMissingParamError("read_command_output", "artifact_id")
-			pushToolResult(`Error: ${errorMsg}`)
+			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 			return
 		}
 

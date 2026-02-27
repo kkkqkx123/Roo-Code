@@ -113,11 +113,13 @@ export const getModelMaxOutputTokens = ({
 
 	// For "Hybrid" reasoning models, discard the model's actual maxTokens for Anthropic contexts
 	if (model.supportsReasoningBudget && isAnthropicContext) {
+		if (!model.contextWindow) return undefined
 		return Math.ceil(model.contextWindow * 0.2)
 	}
 
 	// For Anthropic contexts, always ensure a maxTokens value is set
 	if (isAnthropicContext && (!model.maxTokens || model.maxTokens === 0)) {
+		if (!model.contextWindow) return undefined
 		return Math.ceil(model.contextWindow * 0.2)
 	}
 
@@ -133,6 +135,7 @@ export const getModelMaxOutputTokens = ({
 		}
 
 		// All other models are clamped to 20% of context window
+		if (!model.contextWindow) return model.maxTokens
 		return Math.min(model.maxTokens, Math.ceil(model.contextWindow * 0.2))
 	}
 
@@ -142,6 +145,7 @@ export const getModelMaxOutputTokens = ({
 	}
 
 	// Default fallback
+	if (!model.contextWindow) return undefined
 	return Math.ceil(model.contextWindow * 0.2)
 }
 

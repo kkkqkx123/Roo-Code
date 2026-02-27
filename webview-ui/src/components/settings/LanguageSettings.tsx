@@ -38,7 +38,9 @@ export const LanguageSettings = ({ language, setCachedStateField, className, ...
 						</SelectTrigger>
 						<SelectContent>
 							<SelectGroup>
-								{Object.entries(LANGUAGES).map(([code, name]: [Language, string]) => (
+								{(
+									Object.entries(LANGUAGES) as Array<[Language, string]>
+								).map(([code, name]) => (
 									<SelectItem key={code} value={code}>
 										{name}
 										<span className="text-muted-foreground">({code})</span>

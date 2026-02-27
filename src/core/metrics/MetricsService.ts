@@ -2,9 +2,10 @@ import { type ToolName, type TokenUsage, type ToolUsage, type ClineMessage } fro
 import { consolidateApiRequests as combineApiRequests, consolidateCommands as combineCommandSequences, consolidateTokenUsage as getApiMetrics } from "@coder/core/browser"
 import EventEmitter from "events"
 import debounce from "lodash.debounce"
+import type { LogEntry } from "../errors/tools/validation-errors.js"
 
 export interface MetricsServiceEvents {
-	toolFailed: [taskId: string, toolName: ToolName, error: string]
+	toolFailed: [taskId: string, toolName: ToolName, error: string | LogEntry]
 	tokenUsageUpdated: [taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage]
 }
 
@@ -131,8 +132,10 @@ export class MetricsService extends EventEmitter<MetricsServiceEvents> {
 	 * Record a tool execution failure.
 	 * Initializes tool usage entry if it doesn't exist.
 	 * Emits a failure event if error message is provided.
+	 * @param toolName - The name of the tool that failed
+	 * @param error - Either an error message string or a structured LogEntry
 	 */
-	public recordToolError(toolName: ToolName, error?: string): void {
+	public recordToolError(toolName: ToolName, error?: string | LogEntry): void {
 		if (!this.toolUsage[toolName]) {
 			this.toolUsage[toolName] = { attempts: 0, failures: 0 }
 		}

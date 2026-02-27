@@ -2,6 +2,8 @@ import type { ToolName } from "@coder/types"
 
 import { Task } from "../task/Task"
 import type { ToolUse, HandleError, PushToolResult, AskApproval, NativeToolArgs } from "../../shared/tools"
+import { formatResponse } from "../prompts/responses"
+import { ValidationError } from "../errors/tools/validation-errors.js"
 
 /**
  * Callbacks passed to tool execution
@@ -149,8 +151,19 @@ export abstract class BaseTool<TName extends ToolName> {
 			}
 		} catch (error) {
 			console.error(`Error parsing parameters:`, error)
-			const errorMessage = `Failed to parse ${this.name} parameters: ${error instanceof Error ? error.message : String(error)}`
-			await callbacks.handleError(`parsing ${this.name} args`, new Error(errorMessage))
+			// Use structured error types when possible
+			if (error instanceof ValidationError) {
+				// Structured error with LLM guidance
+				task.recordToolError(this.name, error.toLogEntry())
+				await callbacks.handleError(
+					`parsing ${this.name} args`,
+					error,
+				)
+			} else {
+				// Fallback for generic errors
+				const errorMessage = `Failed to parse ${this.name} parameters: ${error instanceof Error ? error.message : String(error)}`
+				await callbacks.handleError(`parsing ${this.name} args`, new Error(errorMessage))
+			}
 			// Note: handleError already emits a tool_result via formatResponse.toolError in the caller.
 			// Do NOT call pushToolResult here to avoid duplicate tool_result payloads.
 			return

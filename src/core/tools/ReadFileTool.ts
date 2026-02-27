@@ -34,6 +34,7 @@ import {
 	ImageMemoryTracker,
 } from "./helpers/imageHelpers"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { MissingParameterError, RooIgnoreViolationError } from "../errors/tools/index.js"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -91,9 +92,9 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 		// Validate input
 		if (!filePath) {
 			task.consecutiveMistakeCount++
-			task.recordToolError("read_file")
-			const errorMsg = await task.sayAndCreateMissingParamError("read_file", "path")
-			pushToolResult(`Error: ${errorMsg}`)
+			const error = new MissingParameterError("read_file", "path")
+			task.recordToolError("read_file", error.toLogEntry())
+			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 			return
 		}
 
@@ -152,12 +153,14 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				// RooIgnore validation
 				const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
 				if (!accessAllowed) {
+					const error = new RooIgnoreViolationError("read_file", relPath)
 					await task.say("rooignore_error", relPath)
-					const errorMsg = formatResponse.rooIgnoreError(relPath)
+					task.recordToolError("read_file", error.toLogEntry())
+					const llmMessage = formatResponse.toolErrorFromInstance(error.toLLMMessage())
 					updateFileResult(relPath, {
 						status: "blocked",
-						error: errorMsg,
-						nativeContent: `File: ${relPath}\nError: ${errorMsg}`,
+						error: llmMessage,
+						nativeContent: `File: ${relPath}\nError: ${llmMessage}`,
 					})
 					continue
 				}
@@ -684,9 +687,9 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 
 		if (!fileEntries || fileEntries.length === 0) {
 			task.consecutiveMistakeCount++
-			task.recordToolError("read_file")
-			const errorMsg = await task.sayAndCreateMissingParamError("read_file", "files")
-			pushToolResult(`Error: ${errorMsg}`)
+			const error = new MissingParameterError("read_file", "files")
+			task.recordToolError("read_file", error.toLogEntry())
+			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 			return
 		}
 
@@ -702,9 +705,11 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			// RooIgnore validation
 			const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
 			if (!accessAllowed) {
+				const error = new RooIgnoreViolationError("read_file", relPath)
 				await task.say("rooignore_error", relPath)
-				const errorMsg = formatResponse.rooIgnoreError(relPath)
-				results.push(`File: ${relPath}\nError: ${errorMsg}`)
+				task.recordToolError("read_file", error.toLogEntry())
+				const llmMessage = formatResponse.toolErrorFromInstance(error.toLLMMessage())
+				results.push(`File: ${relPath}\nError: ${llmMessage}`)
 				continue
 			}
 

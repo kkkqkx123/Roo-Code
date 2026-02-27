@@ -16,9 +16,9 @@ import type { ClineAsk, ClineSayTool, ClineMessage, ExtensionMessage, AudioType 
 
 import { findLast } from "@coder/array"
 import { SuggestionItem } from "@coder/types"
-import { combineApiRequests } from "@coder/core/browser"
-import { combineCommandSequences } from "@coder/core/browser"
-import { getApiMetrics } from "@coder/core/browser"
+import { consolidateApiRequests } from "@coder/core/browser"
+import { consolidateCommands } from "@coder/core/browser"
+import { consolidateTokenUsage } from "@coder/core/browser"
 import { getAllModes } from "@coder/modes"
 import { ProfileValidator } from "@coder/ProfileValidator"
 import { getLatestTodo } from "@coder/todo"
@@ -124,10 +124,10 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		return getLatestTodo(messages)
 	}, [messages, currentTaskTodos])
 
-	const modifiedMessages = useMemo(() => combineApiRequests(combineCommandSequences(messages.slice(1))), [messages])
+	const modifiedMessages = useMemo(() => consolidateApiRequests(consolidateCommands(messages.slice(1))), [messages])
 
 	// Has to be after api_req_finished are all reduced into api_req_started messages.
-	const apiMetrics = useMemo(() => getApiMetrics(modifiedMessages), [modifiedMessages])
+	const apiMetrics = useMemo(() => consolidateTokenUsage(modifiedMessages), [modifiedMessages])
 
 	const [inputValue, setInputValue] = useState("")
 	const inputValueRef = useRef(inputValue)

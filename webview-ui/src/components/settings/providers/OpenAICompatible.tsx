@@ -30,6 +30,15 @@ type OpenAICompatibleProps = {
 	simplifySettings?: boolean
 }
 
+const DEFAULT_MODEL_INFO: ModelInfo = {
+	contextWindow: 128000,
+	supportsPromptCache: false,
+	supportsImages: false,
+	supportsTemperature: true,
+	supportsReasoningBudget: false,
+	supportsReasoningEffort: false,
+}
+
 export const OpenAICompatible = ({
 	apiConfiguration,
 	setApiConfigurationField,
@@ -108,7 +117,11 @@ export const OpenAICompatible = ({
 		switch (message.type) {
 			case "openAiModels": {
 				const updatedModels = message.openAiModels ?? []
-				setOpenAiModels(Object.fromEntries(updatedModels.map((item) => [item, undefined])))
+				setOpenAiModels(
+					Object.fromEntries(
+						updatedModels.map((item) => [item, DEFAULT_MODEL_INFO])
+					)
+				)
 				break
 			}
 		}
@@ -208,10 +221,12 @@ export const OpenAICompatible = ({
 						setApiConfigurationField("enableReasoningEffort", checked)
 
 						if (!checked) {
-							const { reasoningEffort: _, ...openAiCustomModelInfo } =
-								apiConfiguration.openAiCustomModelInfo || undefined
+							if (apiConfiguration.openAiCustomModelInfo) {
+								const { reasoningEffort: _, ...openAiCustomModelInfo } =
+									apiConfiguration.openAiCustomModelInfo
 
-							setApiConfigurationField("openAiCustomModelInfo", openAiCustomModelInfo)
+								setApiConfigurationField("openAiCustomModelInfo", openAiCustomModelInfo)
+							}
 						}
 					}}>
 					{t("settings:providers.setReasoningLevel")}
@@ -225,7 +240,7 @@ export const OpenAICompatible = ({
 						setApiConfigurationField={(field, value) => {
 							if (field === "reasoningEffort") {
 								const openAiCustomModelInfo =
-									apiConfiguration.openAiCustomModelInfo || undefined
+									apiConfiguration.openAiCustomModelInfo || DEFAULT_MODEL_INFO
 
 								setApiConfigurationField("openAiCustomModelInfo", {
 									...openAiCustomModelInfo,
@@ -234,7 +249,7 @@ export const OpenAICompatible = ({
 							}
 						}}
 						modelInfo={{
-							...(apiConfiguration.openAiCustomModelInfo || undefined),
+							...(apiConfiguration.openAiCustomModelInfo || DEFAULT_MODEL_INFO),
 							supportsReasoningEffort: ["low", "medium", "high", "xhigh"],
 						}}
 					/>
@@ -266,8 +281,10 @@ export const OpenAICompatible = ({
 						onInput={handleInputChange("openAiCustomModelInfo", (e) => {
 							const value = parseInt((e.target as HTMLInputElement).value)
 
+							const currentValue = apiConfiguration?.openAiCustomModelInfo || DEFAULT_MODEL_INFO
+
 							return {
-								...(apiConfiguration?.openAiCustomModelInfo || undefined),
+								...currentValue,
 								maxTokens: isNaN(value) ? undefined : value,
 							}
 						})}
@@ -304,8 +321,10 @@ export const OpenAICompatible = ({
 							const value = (e.target as HTMLInputElement).value
 							const parsed = parseInt(value)
 
+							const currentValue = apiConfiguration?.openAiCustomModelInfo || DEFAULT_MODEL_INFO
+
 							return {
-								...(apiConfiguration?.openAiCustomModelInfo || undefined),
+								...currentValue,
 								contextWindow: parsed,
 							}
 						})}
@@ -328,8 +347,10 @@ export const OpenAICompatible = ({
 								false
 							}
 							onChange={handleInputChange("openAiCustomModelInfo", (checked) => {
+								const currentValue = apiConfiguration?.openAiCustomModelInfo || DEFAULT_MODEL_INFO
+
 								return {
-									...(apiConfiguration?.openAiCustomModelInfo || undefined),
+									...currentValue,
 									supportsImages: checked,
 								}
 							})}>
@@ -354,8 +375,10 @@ export const OpenAICompatible = ({
 						<Checkbox
 							checked={apiConfiguration?.openAiCustomModelInfo?.supportsPromptCache ?? false}
 							onChange={handleInputChange("openAiCustomModelInfo", (checked) => {
+								const currentValue = apiConfiguration?.openAiCustomModelInfo || DEFAULT_MODEL_INFO
+
 								return {
-									...(apiConfiguration?.openAiCustomModelInfo || undefined),
+									...currentValue,
 									supportsPromptCache: checked,
 								}
 							})}>
@@ -396,8 +419,10 @@ export const OpenAICompatible = ({
 							const value = (e.target as HTMLInputElement).value
 							const parsed = parseFloat(value)
 
+							const currentValue = apiConfiguration?.openAiCustomModelInfo || DEFAULT_MODEL_INFO
+
 							return {
-								...(apiConfiguration?.openAiCustomModelInfo ?? undefined),
+								...currentValue,
 								inputPrice: parsed,
 							}
 						})}
@@ -440,8 +465,10 @@ export const OpenAICompatible = ({
 							const value = (e.target as HTMLInputElement).value
 							const parsed = parseFloat(value)
 
+							const currentValue = apiConfiguration?.openAiCustomModelInfo || DEFAULT_MODEL_INFO
+
 							return {
-								...(apiConfiguration?.openAiCustomModelInfo || undefined),
+								...currentValue,
 								outputPrice: parsed,
 							}
 						})}
@@ -484,8 +511,10 @@ export const OpenAICompatible = ({
 									const value = (e.target as HTMLInputElement).value
 									const parsed = parseFloat(value)
 
+									const currentValue = apiConfiguration?.openAiCustomModelInfo || DEFAULT_MODEL_INFO
+
 									return {
-										...(apiConfiguration?.openAiCustomModelInfo ?? undefined),
+										...currentValue,
 										cacheReadsPrice: isNaN(parsed) ? 0 : parsed,
 									}
 								})}
@@ -526,8 +555,10 @@ export const OpenAICompatible = ({
 									const value = (e.target as HTMLInputElement).value
 									const parsed = parseFloat(value)
 
+									const currentValue = apiConfiguration?.openAiCustomModelInfo || DEFAULT_MODEL_INFO
+
 									return {
-										...(apiConfiguration?.openAiCustomModelInfo ?? undefined),
+										...currentValue,
 										cacheWritesPrice: isNaN(parsed) ? 0 : parsed,
 									}
 								})}
