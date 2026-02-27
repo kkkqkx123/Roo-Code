@@ -8,7 +8,7 @@ import { Payload, VectorStoreSearchResult } from "../interfaces"
 import { DEFAULT_MAX_SEARCH_RESULTS, DEFAULT_SEARCH_MIN_SCORE, QDRANT_CODE_BLOCK_NAMESPACE } from "../constants"
 import { t } from "../../../i18n"
 import { VectorStorageConfigManager } from "../vector-storage-config-manager"
-import { QdrantConnectionError, QdrantCollectionNotFoundError } from "./qdrant-errors"
+import { QdrantConnectionError, QdrantCollectionNotFoundError } from "@coder/types"
 
 /**
  * Qdrant implementation of the vector store interface

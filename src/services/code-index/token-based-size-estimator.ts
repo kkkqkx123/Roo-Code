@@ -26,11 +26,11 @@ export interface SizeEstimationResult {
  */
 export class TokenBasedSizeEstimator {
 	/** Average tokens per vector (default: 100) */
-	private readonly avgTokensPerVector: number = 100
+	private avgTokensPerVector: number = 100
 	/** Average characters per token (default: 4) */
-	private readonly avgCharsPerToken: number = 4
+	private avgCharsPerToken: number = 4
 	/** Code text multiplier for token estimation (default: 1.2) */
-	private readonly codeMultiplier: number = 1.2
+	private codeMultiplier: number = 1.2
 
 	/**
 	 * Estimates the collection size based on file analysis

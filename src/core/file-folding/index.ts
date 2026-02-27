@@ -296,17 +296,18 @@ ${content}
 }
 
 // Export all public types and functions
-export { extractFoldingItems, FoldingItem } from "./name-extractor"
-export { mergeFunctionBlocks, formatMergedSections, MergedSection } from "./function-merger"
+export { extractFoldingItems } from "./name-extractor"
+export type { FoldingItem } from "./name-extractor"
+export { mergeFunctionBlocks, formatMergedSections } from "./function-merger"
+export type { MergedSection } from "./function-merger"
 export {
 	applyRandomDrop,
 	estimateAvgTokensPerSection,
 	calculateExcessRatio,
 	calculateBatchSize,
 	shuffleArray,
-	RandomDropResult,
-	RandomDropOptions,
 } from "./random-dropper"
+export type { RandomDropResult, RandomDropOptions } from "./random-dropper"
 export {
 	extractFoldingItemsFromString,
 	extractParsedDefinitionLines,
@@ -314,15 +315,15 @@ export {
 	convertDefinitionsToFoldingItems,
 	convertDefinitionsToParsedLines,
 	isTreeSitterErrorString,
-	ParsedDefinitionLine,
 } from "./definition-parser"
+export type { ParsedDefinitionLine } from "./definition-parser"
 export {
 	formatFoldedFile,
 	formatMultipleFoldedFiles,
 	joinFormattedFiles,
 	formatSectionsWithOriginalContent,
-	FormatOptions,
 } from "./formatter"
+export type { FormatOptions } from "./formatter"
 
 /**
  * Result of folding a single file.

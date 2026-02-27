@@ -1,43 +1,8 @@
 import { z } from "zod"
 
-import { modelInfoSchema, reasoningEffortSettingSchema, verbosityLevelsSchema, serviceTierSchema } from "./model.js"
-import { codebaseIndexProviderSchema } from "./codebase-index.js"
-
-/**
- * constants
- */
-
-export const DEFAULT_CONSECUTIVE_MISTAKE_LIMIT = 3
-
-/**
- * CustomProvider
- *
- * Custom providers are completely configurable within Coder settings.
- */
-
-export const customProviders = ["openai"] as const
-
-export type CustomProvider = (typeof customProviders)[number]
-
-export const isCustomProvider = (key: string): key is CustomProvider => customProviders.includes(key as CustomProvider)
-
-/**
- * ProviderName
- */
-
-export const providerNames = [
-	...customProviders,
-	"anthropic",
-	"gemini",
-	"openai-native",
-] as const
-
-export const providerNamesSchema = z.enum(providerNames)
-
-export type ProviderName = (typeof providerNames)[number]
-
-export const isProviderName = (key: unknown): key is ProviderName =>
-	typeof key === "string" && providerNames.includes(key as ProviderName)
+import { modelInfoSchema, reasoningEffortSettingSchema, verbosityLevelsSchema, serviceTierSchema } from "../model.js"
+import { codebaseIndexProviderSchema } from "../codebase-index.js"
+import { providerNamesSchema } from "./types.js"
 
 /**
  * ProviderSettingsEntry
@@ -180,10 +145,6 @@ export const providerSettingsSchema = z.object({
 	...codebaseIndexProviderSchema.shape,
 })
 
-export type ProviderSettings = z.infer<typeof providerSettingsSchema>
-
-export const providerSettingsWithIdSchema = providerSettingsSchema.extend({ id: z.string().optional() })
-
 /**
  * Discriminated version with id for filtering provider-specific properties.
  *
@@ -194,86 +155,20 @@ export const discriminatedProviderSettingsWithIdSchema = providerSettingsSchemaD
 	z.object({ id: z.string().optional() }),
 )
 
-export type ProviderSettingsWithId = z.infer<typeof providerSettingsWithIdSchema>
-
 export const PROVIDER_SETTINGS_KEYS = providerSettingsSchema.keyof().options
 
 /**
- * ModelIdKey
+ * ProviderSettings type
  */
 
-export const modelIdKeys = [
-	"apiModelId",
-	"openAiModelId",
-] as const satisfies readonly (keyof ProviderSettings)[]
-
-export type ModelIdKey = (typeof modelIdKeys)[number]
-
-export const getModelId = (settings: ProviderSettings): string | undefined => {
-	const modelIdKey = modelIdKeys.find((key) => settings[key])
-	return modelIdKey ? settings[modelIdKey] : undefined
-}
+export type ProviderSettings = z.infer<typeof providerSettingsSchema>
 
 /**
- * TypicalProvider
+ * ProviderSettingsWithId
  */
 
-export type TypicalProvider = Exclude<ProviderName, CustomProvider>
+export const providerSettingsWithIdSchema = providerSettingsSchema.extend({
+	id: z.string().optional(),
+})
 
-export const isTypicalProvider = (key: unknown): key is TypicalProvider =>
-	isProviderName(key) && !isCustomProvider(key)
-
-export const modelIdKeysByProvider: Record<TypicalProvider, ModelIdKey> = {
-	anthropic: "apiModelId",
-	"openai-native": "openAiModelId",
-	gemini: "apiModelId",
-}
-
-/**
- * ANTHROPIC_STYLE_PROVIDERS
- */
-
-// Providers that use Anthropic-style API protocol.
-export const ANTHROPIC_STYLE_PROVIDERS: ProviderName[] = ["anthropic"]
-
-export const getApiProtocol = (
-	provider: ProviderName | undefined,
-	_modelId?: string,
-): "anthropic" | "openai" => {
-	if (provider && ANTHROPIC_STYLE_PROVIDERS.includes(provider)) {
-		return "anthropic"
-	}
-
-	return "openai"
-}
-
-/**
- * MODELS_BY_PROVIDER
- *
- * Removed hardcoded model lists. All providers now support custom model configuration
- * just like OpenAI Compatible endpoints. Users must provide model ID and optionally
- * model info through their configuration.
- */
-
-export const MODELS_BY_PROVIDER: Record<ProviderName, { id: ProviderName; label: string; models: string[] }> = {
-	anthropic: {
-		id: "anthropic",
-		label: "Anthropic",
-		models: [], // No hardcoded models - users provide custom model IDs
-	},
-	gemini: {
-		id: "gemini",
-		label: "Google Gemini",
-		models: [], // No hardcoded models - users provide custom model IDs
-	},
-	"openai-native": {
-		id: "openai-native",
-		label: "OpenAI",
-		models: [], // No hardcoded models - users provide custom model IDs
-	},
-	openai: {
-		id: "openai",
-		label: "OpenAI Compatible",
-		models: [],
-	},
-}
+export type ProviderSettingsWithId = z.infer<typeof providerSettingsWithIdSchema>

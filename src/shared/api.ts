@@ -22,7 +22,11 @@ export type ApiHandlerOptions = Omit<ProviderSettings, "apiProvider"> & {
 	/**
 	 * Anthropic custom model info for custom/compatible endpoints
 	 */
-	anthropicCustomModelInfo?: ModelInfo
+	anthropicCustomModelInfo?: ModelInfo | null
+	/**
+	 * Gemini custom model info for custom/compatible endpoints
+	 */
+	geminiCustomModelInfo?: ModelInfo | null
 }
 
 // RouterName

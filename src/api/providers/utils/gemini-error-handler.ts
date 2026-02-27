@@ -123,7 +123,7 @@ export function handleGeminiError(
 							if (detail["@type"] === "type.googleapis.com/google.rpc.RetryInfo" && detail.reason) {
 								// Parse retry delay if available (usually in seconds)
 								const match = detail.reason.match(/(\d+)s/)
-								if (match) {
+								if (match && match[1]) {
 									retryAfter = parseInt(match[1], 10)
 								}
 							}

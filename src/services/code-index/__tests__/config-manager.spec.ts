@@ -1547,12 +1547,20 @@ describe("CodeIndexConfigManager", () => {
 				// Mock getModelDimension to return a built-in dimension
 				mockedGetModelDimension.mockReturnValue(1536)
 
-				mockContextProxy.getGlobalState.mockReturnValue({
-					codebaseIndexEnabled: true,
-					codebaseIndexEmbedderProvider: "openai",
-					codebaseIndexEmbedderModelId: "text-embedding-3-small",
-					codebaseIndexEmbedderModelDimension: 2048, // Custom dimension should be ignored
-					codebaseIndexQdrantUrl: "http://localhost:6333",
+				mockContextProxy.getGlobalState.mockImplementation((key: string) => {
+					if (key === "codebaseIndexConfig") {
+						return {
+							codebaseIndexEnabled: true,
+							codebaseIndexEmbedderProvider: "openai",
+							codebaseIndexEmbedderModelId: "text-embedding-3-small",
+							codebaseIndexEmbedderModelDimension: 2048, // Custom dimension should be ignored
+							codebaseIndexQdrantUrl: "http://localhost:6333",
+						}
+					}
+					if (key === "codebaseIndexModels") {
+						return {}
+					}
+					return undefined
 				})
 				mockContextProxy.getSecret.mockImplementation((key: string) => {
 					if (key === "codeIndexOpenAiKey") return "test-key"
@@ -1564,19 +1572,27 @@ describe("CodeIndexConfigManager", () => {
 
 				// Should return model's built-in dimension, not custom
 				expect(configManager.currentModelDimension).toBe(1536)
-				expect(mockedGetModelDimension).toHaveBeenCalledWith("openai", "text-embedding-3-small")
+				expect(mockedGetModelDimension).toHaveBeenCalledWith({}, "openai", "text-embedding-3-small")
 			})
 
 			it("should use custom dimension only when model has no built-in dimension", async () => {
 				// Mock getModelDimension to return undefined (no built-in dimension)
 				mockedGetModelDimension.mockReturnValue(undefined)
 
-				mockContextProxy.getGlobalState.mockReturnValue({
-					codebaseIndexEnabled: true,
-					codebaseIndexEmbedderProvider: "openai-compatible",
-					codebaseIndexEmbedderModelId: "custom-model",
-					codebaseIndexEmbedderModelDimension: 2048, // Custom dimension should be used
-					codebaseIndexQdrantUrl: "http://localhost:6333",
+				mockContextProxy.getGlobalState.mockImplementation((key: string) => {
+					if (key === "codebaseIndexConfig") {
+						return {
+							codebaseIndexEnabled: true,
+							codebaseIndexEmbedderProvider: "openai-compatible",
+							codebaseIndexEmbedderModelId: "custom-model",
+							codebaseIndexEmbedderModelDimension: 2048, // Custom dimension should be used
+							codebaseIndexQdrantUrl: "http://localhost:6333",
+						}
+					}
+					if (key === "codebaseIndexModels") {
+						return {}
+					}
+					return undefined
 				})
 				mockContextProxy.getSecret.mockImplementation((key: string) => {
 					if (key === "codebaseIndexOpenAiCompatibleApiKey") return "test-key"
@@ -1588,19 +1604,27 @@ describe("CodeIndexConfigManager", () => {
 
 				// Should use custom dimension as fallback
 				expect(configManager.currentModelDimension).toBe(2048)
-				expect(mockedGetModelDimension).toHaveBeenCalledWith("openai-compatible", "custom-model")
+				expect(mockedGetModelDimension).toHaveBeenCalledWith({}, "openai-compatible", "custom-model")
 			})
 
 			it("should return undefined when neither model dimension nor custom dimension is available", async () => {
 				// Mock getModelDimension to return undefined
 				mockedGetModelDimension.mockReturnValue(undefined)
 
-				mockContextProxy.getGlobalState.mockReturnValue({
-					codebaseIndexEnabled: true,
-					codebaseIndexEmbedderProvider: "openai-compatible",
-					codebaseIndexEmbedderModelId: "unknown-model",
-					// No custom dimension set
-					codebaseIndexQdrantUrl: "http://localhost:6333",
+				mockContextProxy.getGlobalState.mockImplementation((key: string) => {
+					if (key === "codebaseIndexConfig") {
+						return {
+							codebaseIndexEnabled: true,
+							codebaseIndexEmbedderProvider: "openai-compatible",
+							codebaseIndexEmbedderModelId: "unknown-model",
+							// No custom dimension set
+							codebaseIndexQdrantUrl: "http://localhost:6333",
+						}
+					}
+					if (key === "codebaseIndexModels") {
+						return {}
+					}
+					return undefined
 				})
 				mockContextProxy.getSecret.mockImplementation((key: string) => {
 					if (key === "codebaseIndexOpenAiCompatibleApiKey") return "test-key"
@@ -1612,7 +1636,7 @@ describe("CodeIndexConfigManager", () => {
 
 				// Should return undefined
 				expect(configManager.currentModelDimension).toBe(undefined)
-				expect(mockedGetModelDimension).toHaveBeenCalledWith("openai-compatible", "unknown-model")
+				expect(mockedGetModelDimension).toHaveBeenCalledWith({}, "openai-compatible", "unknown-model")
 			})
 
 			it("should use default model ID when modelId is not specified", async () => {
@@ -1620,11 +1644,19 @@ describe("CodeIndexConfigManager", () => {
 				mockedGetDefaultModelId.mockReturnValue("text-embedding-3-small")
 				mockedGetModelDimension.mockReturnValue(1536)
 
-				mockContextProxy.getGlobalState.mockReturnValue({
-					codebaseIndexEnabled: true,
-					codebaseIndexEmbedderProvider: "openai",
-					// No modelId specified
-					codebaseIndexQdrantUrl: "http://localhost:6333",
+				mockContextProxy.getGlobalState.mockImplementation((key: string) => {
+					if (key === "codebaseIndexConfig") {
+						return {
+							codebaseIndexEnabled: true,
+							codebaseIndexEmbedderProvider: "openai",
+							// No modelId specified
+							codebaseIndexQdrantUrl: "http://localhost:6333",
+						}
+					}
+					if (key === "codebaseIndexModels") {
+						return {}
+					}
+					return undefined
 				})
 				mockContextProxy.getSecret.mockImplementation((key: string) => {
 					if (key === "codeIndexOpenAiKey") return "test-key"
@@ -1636,20 +1668,28 @@ describe("CodeIndexConfigManager", () => {
 
 				// Should use default model ID
 				expect(configManager.currentModelDimension).toBe(1536)
-				expect(mockedGetDefaultModelId).toHaveBeenCalledWith("openai")
-				expect(mockedGetModelDimension).toHaveBeenCalledWith("openai", "text-embedding-3-small")
+				expect(mockedGetDefaultModelId).toHaveBeenCalledWith({}, "openai")
+				expect(mockedGetModelDimension).toHaveBeenCalledWith({}, "openai", "text-embedding-3-small")
 			})
 
 			it("should ignore invalid custom dimension (0 or negative)", async () => {
 				// Mock getModelDimension to return undefined
 				mockedGetModelDimension.mockReturnValue(undefined)
 
-				mockContextProxy.getGlobalState.mockReturnValue({
-					codebaseIndexEnabled: true,
-					codebaseIndexEmbedderProvider: "openai-compatible",
-					codebaseIndexEmbedderModelId: "custom-model",
-					codebaseIndexEmbedderModelDimension: 0, // Invalid dimension
-					codebaseIndexQdrantUrl: "http://localhost:6333",
+				mockContextProxy.getGlobalState.mockImplementation((key: string) => {
+					if (key === "codebaseIndexConfig") {
+						return {
+							codebaseIndexEnabled: true,
+							codebaseIndexEmbedderProvider: "openai-compatible",
+							codebaseIndexEmbedderModelId: "custom-model",
+							codebaseIndexEmbedderModelDimension: 0, // Invalid dimension
+							codebaseIndexQdrantUrl: "http://localhost:6333",
+						}
+					}
+					if (key === "codebaseIndexModels") {
+						return {}
+					}
+					return undefined
 				})
 				mockContextProxy.getSecret.mockImplementation((key: string) => {
 					if (key === "codebaseIndexOpenAiCompatibleApiKey") return "test-key"

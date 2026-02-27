@@ -1,4 +1,4 @@
-import { getApiProtocol } from "../provider-settings.js"
+import { getApiProtocol } from "../provider-settings/index.js"
 
 describe("getApiProtocol", () => {
 	describe("Anthropic-style providers", () => {

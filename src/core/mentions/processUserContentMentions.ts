@@ -64,7 +64,6 @@ export async function processUserContentMentions({
 							cwd,
 							fileContextTracker,
 							rooIgnoreController,
-							false, // Always filter ignored files
 							includeDiagnosticMessages,
 							maxDiagnosticMessages,
 						)
@@ -107,7 +106,6 @@ export async function processUserContentMentions({
 								cwd,
 								fileContextTracker,
 								rooIgnoreController,
-								false, // Always filter ignored files
 								includeDiagnosticMessages,
 								maxDiagnosticMessages,
 							)
@@ -156,7 +154,6 @@ export async function processUserContentMentions({
 											cwd,
 											fileContextTracker,
 											rooIgnoreController,
-											false, // Always filter ignored files
 											includeDiagnosticMessages,
 											maxDiagnosticMessages,
 										)

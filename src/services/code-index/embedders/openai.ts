@@ -9,6 +9,7 @@ import {
 	INITIAL_RETRY_DELAY_MS as INITIAL_DELAY_MS,
 } from "../constants"
 import { getModelQueryPrefix } from "@coder/types"
+import type { EmbeddingModelProfiles } from "@coder/types"
 import { t } from "../../../i18n"
 import { withValidationErrorHandling, formatEmbeddingError, HttpError } from "../shared/validation-helpers"
 import { handleOpenAIError } from "../../../api/providers/utils/openai-error-handler"
@@ -19,12 +20,14 @@ import { handleOpenAIError } from "../../../api/providers/utils/openai-error-han
 export class OpenAiEmbedder extends OpenAiNativeHandler implements IEmbedder {
 	private embeddingsClient: OpenAI
 	private readonly defaultModelId: string
+	private readonly embeddingModelProfiles: EmbeddingModelProfiles
 
 	/**
 	 * Creates a new OpenAI embedder
 	 * @param options API handler options
+	 * @param embeddingModelProfiles User-defined embedding model profiles
 	 */
-	constructor(options: ApiHandlerOptions & { openAiEmbeddingModelId?: string }) {
+	constructor(options: ApiHandlerOptions & { openAiEmbeddingModelId?: string }, embeddingModelProfiles?: EmbeddingModelProfiles) {
 		super(options)
 		const apiKey = this.options.openAiNativeApiKey ?? "not-provided"
 
@@ -37,6 +40,7 @@ export class OpenAiEmbedder extends OpenAiNativeHandler implements IEmbedder {
 		}
 
 		this.defaultModelId = options.openAiEmbeddingModelId || "text-embedding-3-small"
+		this.embeddingModelProfiles = embeddingModelProfiles ?? {}
 	}
 
 	/**
@@ -49,7 +53,7 @@ export class OpenAiEmbedder extends OpenAiNativeHandler implements IEmbedder {
 		const modelToUse = model || this.defaultModelId
 
 		// Apply model-specific query prefix if required
-		const queryPrefix = getModelQueryPrefix("openai", modelToUse)
+		const queryPrefix = getModelQueryPrefix(this.embeddingModelProfiles, "openai", modelToUse)
 		const processedTexts = queryPrefix
 			? texts.map((text, index) => {
 					// Prevent double-prefixing

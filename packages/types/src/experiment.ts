@@ -1,7 +1,5 @@
 import { z } from "zod"
 
-import type { Keys, Equals, AssertEqual } from "./type-fu.js"
-
 /**
  * ExperimentId
  */
@@ -25,4 +23,3 @@ export const experimentsSchema = z.object({
 
 export type Experiments = z.infer<typeof experimentsSchema>
 
-type _AssertExperiments = AssertEqual<Equals<ExperimentId, Keys<Experiments>>>

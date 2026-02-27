@@ -1,6 +1,11 @@
 import { z } from "zod"
 
 /**
+ * Anthropic default max tokens constant
+ */
+export const ANTHROPIC_DEFAULT_MAX_TOKENS = 8192
+
+/**
  * ReasoningEffort
  */
 

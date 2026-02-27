@@ -328,7 +328,7 @@ export class DiffViewProvider {
 			}
 
 			// Send the user feedback
-			await task.say("user_feedback_diff", { text: JSON.stringify(say) })
+			await task.say("user_feedback_diff", JSON.stringify(say))
 		}
 
 		// Build notices array

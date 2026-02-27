@@ -6,7 +6,8 @@ import {
 	MAX_BATCH_RETRIES as MAX_RETRIES,
 	INITIAL_RETRY_DELAY_MS as INITIAL_DELAY_MS,
 } from "../constants"
-import { getDefaultModelId, getModelQueryPrefix } from "@coder/types"
+import { getModelQueryPrefix, getDefaultModelId } from "@coder/types"
+import type { EmbeddingModelProfiles } from "@coder/types"
 import { t } from "../../../i18n"
 import { withValidationErrorHandling, HttpError, formatEmbeddingError } from "../shared/validation-helpers"
 import { Mutex } from "async-mutex"
@@ -37,6 +38,7 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
 	private readonly apiKey: string
 	private readonly isFullUrl: boolean
 	private readonly maxItemTokens: number
+	private readonly embeddingModelProfiles: EmbeddingModelProfiles
 
 	// Global rate limiting state shared across all instances
 	private static globalRateLimitState = {
@@ -52,10 +54,17 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
 	 * Creates a new OpenAI Compatible embedder
 	 * @param baseUrl The base URL for the OpenAI-compatible API endpoint
 	 * @param apiKey The API key for authentication
-	 * @param modelId Optional model identifier (defaults to "text-embedding-3-small")
+	 * @param modelId Optional model identifier (defaults to first model in profiles)
+	 * @param embeddingModelProfiles User-defined embedding model profiles
 	 * @param maxItemTokens Optional maximum tokens per item (defaults to MAX_ITEM_TOKENS)
 	 */
-	constructor(baseUrl: string, apiKey: string, modelId?: string, maxItemTokens?: number) {
+	constructor(
+		baseUrl: string,
+		apiKey: string,
+		modelId?: string,
+		embeddingModelProfiles?: EmbeddingModelProfiles,
+		maxItemTokens?: number,
+	) {
 		if (!baseUrl) {
 			throw new Error(t("embeddings:validation.baseUrlRequired"))
 		}
@@ -65,6 +74,7 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
 
 		this.baseUrl = baseUrl
 		this.apiKey = apiKey
+		this.embeddingModelProfiles = embeddingModelProfiles ?? {}
 
 		// Wrap OpenAI client creation to handle invalid API key characters
 		try {
@@ -77,7 +87,8 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
 			throw handleOpenAIError(error, "OpenAI Compatible")
 		}
 
-		this.defaultModelId = modelId || getDefaultModelId("openai-compatible")
+		this.defaultModelId =
+			modelId ?? getDefaultModelId(this.embeddingModelProfiles, "openai-compatible") ?? "text-embedding-3-small"
 		// Cache the URL type check for performance
 		this.isFullUrl = this.isFullEndpointUrl(baseUrl)
 		this.maxItemTokens = maxItemTokens || MAX_ITEM_TOKENS
@@ -93,7 +104,7 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
 		const modelToUse = model || this.defaultModelId
 
 		// Apply model-specific query prefix if required
-		const queryPrefix = getModelQueryPrefix("openai-compatible", modelToUse)
+		const queryPrefix = getModelQueryPrefix(this.embeddingModelProfiles, "openai-compatible", modelToUse)
 		const processedTexts = queryPrefix
 			? texts.map((text, index) => {
 					// Prevent double-prefixing

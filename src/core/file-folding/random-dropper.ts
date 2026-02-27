@@ -76,7 +76,9 @@ export function calculateBatchSize(
 export function shuffleArray<T>(array: T[]): T[] {
 	for (let i = array.length - 1; i > 0; i--) {
 		const j = Math.floor(Math.random() * (i + 1))
-			;[array[i], array[j]] = [array[j], array[i]]
+		const temp = array[i]
+		array[i] = array[j]!
+		array[j] = temp!
 	}
 	return array
 }
@@ -125,8 +127,8 @@ export function applyRandomDrop(sections: MergedSection[], options: RandomDropOp
 
 	if (batchSize >= sections.length) {
 		// Drop all sections except keep at least one if possible
-		const kept = sections.length > 0 ? [sections[0]] : []
-		const dropped = sections.length > 0 ? sections.slice(1) : []
+		const kept: MergedSection[] = sections.length > 0 ? [sections[0]!] : []
+		const dropped: MergedSection[] = sections.length > 0 ? sections.slice(1) : []
 		return {
 			keptSections: kept,
 			droppedSections: dropped,
@@ -140,8 +142,8 @@ export function applyRandomDrop(sections: MergedSection[], options: RandomDropOp
 	shuffleArray(shuffled)
 
 	// Split into kept and dropped
-	const dropped = shuffled.slice(0, batchSize)
-	const kept = shuffled.slice(batchSize)
+	const dropped: MergedSection[] = shuffled.slice(0, batchSize)
+	const kept: MergedSection[] = shuffled.slice(batchSize)
 
 	// Estimate new token count
 	const estimatedTokens = kept.length * avgTokensPerSection

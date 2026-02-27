@@ -229,6 +229,14 @@ export class StreamingErrorHandler {
 		cancelReason: string
 		shouldRetry: boolean
 	} {
+		// StreamingRetryError doesn't have a code property
+		if (!("code" in error) || typeof error.code !== "string") {
+			return {
+				cancelReason: "unknown_error",
+				shouldRetry: false,
+			}
+		}
+
 		switch (error.code) {
 			case "STREAM_ABORTED":
 				// StreamAbortedError has a 'reason' property

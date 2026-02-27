@@ -2,7 +2,7 @@ import * as vscode from "vscode"
 import { Ignore } from "ignore"
 import { QdrantClient } from "@qdrant/js-client-rest"
 
-import type { EmbedderProvider } from "@coder/types"
+import type { EmbedderProvider, EmbeddingModelProfiles } from "@coder/types"
 
 import { t } from "../../i18n"
 
@@ -37,6 +37,7 @@ export class CodeIndexServiceFactory {
 	 */
 	public createEmbedder(): IEmbedder {
 		const config = this.configManager.getConfig()
+		const embeddingModelProfiles = this.configManager.getEmbeddingModelProfiles()
 
 		const provider = config.embedderProvider as EmbedderProvider
 
@@ -46,10 +47,13 @@ export class CodeIndexServiceFactory {
 			if (!apiKey) {
 				throw new Error(t("embeddings:serviceFactory.openAiConfigMissing"))
 			}
-			return new OpenAiEmbedder({
-				...config.openAiOptions,
-				openAiEmbeddingModelId: config.modelId,
-			})
+			return new OpenAiEmbedder(
+				{
+					...config.openAiOptions,
+					openAiEmbeddingModelId: config.modelId,
+				},
+				embeddingModelProfiles,
+			)
 		} else if (provider === "openai-compatible") {
 			if (!config.openAiCompatibleOptions?.baseUrl || !config.openAiCompatibleOptions?.apiKey) {
 				throw new Error(t("embeddings:serviceFactory.openAiCompatibleConfigMissing"))
@@ -58,6 +62,7 @@ export class CodeIndexServiceFactory {
 				config.openAiCompatibleOptions.baseUrl,
 				config.openAiCompatibleOptions.apiKey,
 				config.modelId,
+				embeddingModelProfiles,
 			)
 		} else if (provider === "gemini") {
 			if (!config.geminiOptions?.apiKey) {
@@ -93,16 +98,19 @@ export class CodeIndexServiceFactory {
 	 */
 	public createVectorStore(): IVectorStore {
 		const config = this.configManager.getConfig()
+		const embeddingModelProfiles = this.configManager.getEmbeddingModelProfiles()
 
 		const provider = config.embedderProvider as EmbedderProvider
-		const defaultModel = getDefaultModelId(provider)
+		const defaultModel = getDefaultModelId(embeddingModelProfiles, provider)
 		// Use the embedding model ID from config, not the chat model IDs
 		const modelId = config.modelId ?? defaultModel
 
 		let vectorSize: number | undefined
 
 		// First try to get the model-specific dimension from profiles
-		vectorSize = getModelDimension(provider, modelId)
+		if (modelId) {
+			vectorSize = getModelDimension(embeddingModelProfiles, provider, modelId)
+		}
 
 		// Only use manual dimension if model doesn't have a built-in dimension
 		if (!vectorSize && config.modelDimension && config.modelDimension > 0) {

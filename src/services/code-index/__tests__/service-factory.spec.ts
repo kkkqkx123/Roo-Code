@@ -37,6 +37,7 @@ describe("CodeIndexServiceFactory", () => {
 
 		mockConfigManager = {
 			getConfig: vitest.fn(),
+			getEmbeddingModelProfiles: vitest.fn().mockReturnValue({}),
 		}
 
 		mockCacheManager = {}
@@ -61,10 +62,13 @@ describe("CodeIndexServiceFactory", () => {
 			factory.createEmbedder()
 
 			// Assert
-			expect(MockedOpenAiEmbedder).toHaveBeenCalledWith({
-				openAiNativeApiKey: "test-api-key",
-				openAiEmbeddingModelId: testModelId,
-			})
+			expect(MockedOpenAiEmbedder).toHaveBeenCalledWith(
+				{
+					openAiNativeApiKey: "test-api-key",
+					openAiEmbeddingModelId: testModelId,
+				},
+				{},
+			)
 		})
 
 		it("should handle undefined model ID for OpenAI embedder", () => {
@@ -82,10 +86,13 @@ describe("CodeIndexServiceFactory", () => {
 			factory.createEmbedder()
 
 			// Assert
-			expect(MockedOpenAiEmbedder).toHaveBeenCalledWith({
-				openAiNativeApiKey: "test-api-key",
-				openAiEmbeddingModelId: undefined,
-			})
+			expect(MockedOpenAiEmbedder).toHaveBeenCalledWith(
+				{
+					openAiNativeApiKey: "test-api-key",
+					openAiEmbeddingModelId: undefined,
+				},
+				{},
+			)
 		})
 
 		it("should throw error when OpenAI API key is missing", () => {
@@ -124,6 +131,7 @@ describe("CodeIndexServiceFactory", () => {
 				"https://api.example.com/v1",
 				"test-api-key",
 				testModelId,
+				{},
 			)
 		})
 
@@ -147,6 +155,7 @@ describe("CodeIndexServiceFactory", () => {
 				"https://api.example.com/v1",
 				"test-api-key",
 				undefined,
+				{},
 			)
 		})
 
@@ -310,7 +319,7 @@ describe("CodeIndexServiceFactory", () => {
 			factory.createVectorStore()
 
 			// Assert
-			expect(mockGetModelDimension).toHaveBeenCalledWith("openai", testModelId)
+			expect(mockGetModelDimension).toHaveBeenCalledWith({}, "openai", testModelId)
 			expect(MockedQdrantVectorStore).toHaveBeenCalledWith(
 				"/test/workspace",
 				"http://localhost:6333",
@@ -335,7 +344,7 @@ describe("CodeIndexServiceFactory", () => {
 			factory.createVectorStore()
 
 			// Assert
-			expect(mockGetModelDimension).toHaveBeenCalledWith("openai-compatible", testModelId)
+			expect(mockGetModelDimension).toHaveBeenCalledWith({}, "openai-compatible", testModelId)
 			expect(MockedQdrantVectorStore).toHaveBeenCalledWith(
 				"/test/workspace",
 				"http://localhost:6333",
@@ -367,7 +376,7 @@ describe("CodeIndexServiceFactory", () => {
 			factory.createVectorStore()
 
 			// Assert
-			expect(mockGetModelDimension).toHaveBeenCalledWith("openai-compatible", testModelId)
+			expect(mockGetModelDimension).toHaveBeenCalledWith({}, "openai-compatible", testModelId)
 			expect(MockedQdrantVectorStore).toHaveBeenCalledWith(
 				"/test/workspace",
 				"http://localhost:6333",
@@ -398,7 +407,7 @@ describe("CodeIndexServiceFactory", () => {
 			factory.createVectorStore()
 
 			// Assert
-			expect(mockGetModelDimension).toHaveBeenCalledWith("openai-compatible", testModelId)
+			expect(mockGetModelDimension).toHaveBeenCalledWith({}, "openai-compatible", testModelId)
 			expect(MockedQdrantVectorStore).toHaveBeenCalledWith(
 				"/test/workspace",
 				"http://localhost:6333",
@@ -427,7 +436,7 @@ describe("CodeIndexServiceFactory", () => {
 			factory.createVectorStore()
 
 			// Assert
-			expect(mockGetModelDimension).toHaveBeenCalledWith("openai-compatible", testModelId)
+			expect(mockGetModelDimension).toHaveBeenCalledWith({}, "openai-compatible", testModelId)
 			expect(MockedQdrantVectorStore).toHaveBeenCalledWith(
 				"/test/workspace",
 				"http://localhost:6333",
@@ -496,7 +505,7 @@ describe("CodeIndexServiceFactory", () => {
 			factory.createVectorStore()
 
 			// Assert
-			expect(mockGetModelDimension).toHaveBeenCalledWith("gemini", "gemini-embedding-001")
+			expect(mockGetModelDimension).toHaveBeenCalledWith({}, "gemini", "gemini-embedding-001")
 			expect(MockedQdrantVectorStore).toHaveBeenCalledWith(
 				"/test/workspace",
 				"http://localhost:6333",
@@ -520,8 +529,8 @@ describe("CodeIndexServiceFactory", () => {
 			factory.createVectorStore()
 
 			// Assert
-			expect(mockGetDefaultModelId).toHaveBeenCalledWith("gemini")
-			expect(mockGetModelDimension).toHaveBeenCalledWith("gemini", "gemini-embedding-001")
+			expect(mockGetDefaultModelId).toHaveBeenCalledWith({}, "gemini")
+			expect(mockGetModelDimension).toHaveBeenCalledWith({}, "gemini", "gemini-embedding-001")
 			expect(MockedQdrantVectorStore).toHaveBeenCalledWith(
 				"/test/workspace",
 				"http://localhost:6333",
@@ -545,7 +554,7 @@ describe("CodeIndexServiceFactory", () => {
 			factory.createVectorStore()
 
 			// Assert
-			expect(mockGetModelDimension).toHaveBeenCalledWith("openai", "default-model")
+			expect(mockGetModelDimension).toHaveBeenCalledWith({}, "openai", "default-model")
 			expect(MockedQdrantVectorStore).toHaveBeenCalledWith(
 				"/test/workspace",
 				"http://localhost:6333",

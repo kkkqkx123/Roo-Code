@@ -56,6 +56,7 @@ export class GeminiEmbedder implements IEmbedder {
 			GeminiEmbedder.GEMINI_BASE_URL,
 			apiKey,
 			this.modelId,
+			undefined, // embeddingModelProfiles
 			GEMINI_MAX_ITEM_TOKENS,
 		)
 	}

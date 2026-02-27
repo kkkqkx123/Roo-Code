@@ -85,16 +85,16 @@ import { initializeI18n } from "./i18n"
  *  - https://github.com/microsoft/vscode-webview-ui-toolkit-samples/tree/main/frameworks/hello-world-react-cra
  */
 
-let outputChannel: vscode.OutputChannel
-let extensionContext: vscode.ExtensionContext
+let outputChannel: vscodeTypes.OutputChannel
+let extensionContext: vscodeTypes.ExtensionContext
 
 /**
  * Check if we should auto-open the Coder sidebar after switching to a worktree.
  * This is called during extension activation to handle the worktree auto-open flow.
  */
 async function checkWorktreeAutoOpen(
-	context: vscode.ExtensionContext,
-	outputChannel: vscode.OutputChannel,
+	context: vscodeTypes.ExtensionContext,
+	outputChannel: vscodeTypes.OutputChannel,
 ): Promise<void> {
 	try {
 		const worktreeAutoOpenPath = context.globalState.get<string>("worktreeAutoOpenPath")
@@ -144,7 +144,7 @@ async function checkWorktreeAutoOpen(
 
 // This method is called when your extension is activated.
 // Your extension is activated the very first time the command is executed.
-export async function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscodeTypes.ExtensionContext) {
 	extensionContext = context
 	outputChannel = vscode.window.createOutputChannel(Package.outputChannel)
 	context.subscriptions.push(outputChannel)
@@ -248,8 +248,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	 *
 	 * https://code.visualstudio.com/api/extension-guides/virtual-documents
 	 */
-	const diffContentProvider = new (class implements vscode.TextDocumentContentProvider {
-		provideTextDocumentContent(uri: vscode.Uri): string {
+	const diffContentProvider = new (class implements vscodeTypes.TextDocumentContentProvider {
+		provideTextDocumentContent(uri: vscodeTypes.Uri): string {
 			return Buffer.from(uri.query, "base64").toString("utf-8")
 		}
 	})()
@@ -292,7 +292,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		let reloadTimeout: NodeJS.Timeout | undefined
 		const DEBOUNCE_DELAY = 1_000
 
-		const debouncedReload = (uri: vscode.Uri) => {
+		const debouncedReload = (uri: vscodeTypes.Uri) => {
 			if (reloadTimeout) {
 				clearTimeout(reloadTimeout)
 			}

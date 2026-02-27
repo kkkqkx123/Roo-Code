@@ -3,7 +3,7 @@ import type { Socket } from "net"
 
 import type { CoderEvents } from "./events.js"
 import type { CoderSettings } from "./global-settings.js"
-import type { ProviderSettingsEntry, ProviderSettings } from "./provider-settings.js"
+import type { ProviderSettingsEntry, ProviderSettings } from "./provider-settings/index.js"
 import type { IpcMessage, IpcServerEvents } from "./ipc.js"
 
 export type CoderAPIEvents = CoderEvents

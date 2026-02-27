@@ -48,10 +48,23 @@ export function mergeConsecutiveApiMessages(messages: ApiMessage[], options?: { 
 		const mergedContent = [...normalizeContentToBlocks(prev.content), ...normalizeContentToBlocks(msg.content)]
 
 		// Preserve the newest ts to keep chronological ordering for downstream logic.
-		out[out.length - 1] = {
-			...prev,
-			content: mergedContent,
-			ts: Math.max(prev.ts ?? 0, msg.ts ?? 0) || prev.ts || msg.ts,
+		// System messages must have string content, not array content
+		if (prev.role === "system") {
+			const textContent = mergedContent
+				.filter((block): block is Anthropic.Messages.TextBlockParam => block.type === "text")
+				.map((block) => block.text)
+				.join("")
+			out[out.length - 1] = {
+				...prev,
+				content: textContent,
+				ts: Math.max(prev.ts ?? 0, msg.ts ?? 0) || prev.ts || msg.ts,
+			}
+		} else {
+			out[out.length - 1] = {
+				...prev,
+				content: mergedContent,
+				ts: Math.max(prev.ts ?? 0, msg.ts ?? 0) || prev.ts || msg.ts,
+			}
 		}
 	}
 

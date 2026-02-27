@@ -385,8 +385,10 @@ export async function parseSourceCodeDefinitionsForFileStructured(
 		const { node, name } = capture
 
 		// 提取类型和名称
+		if (!name) continue
+		
 		const typeMatch = name.match(/name\.definition\.(.+)/)
-		if (!typeMatch) continue
+		if (!typeMatch?.[1]) continue
 
 		const originalType = typeMatch[1]
 		const standardType = mapToStandardType(extLang, originalType)
@@ -417,8 +419,8 @@ export async function parseSourceCodeDefinitionsForFileStructured(
 			endLine,
 			originalType,
 			language: extLang,
-			signature: lines[startLine - 1]?.trim(),
-			metadata,
+			signature: lines[startLine - 1]?.trim() ?? "",
+			metadata: metadata ?? undefined,
 		})
 	}
 

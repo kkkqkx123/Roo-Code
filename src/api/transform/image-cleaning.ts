@@ -1,3 +1,5 @@
+import { Anthropic } from "@anthropic-ai/sdk"
+
 import { ApiMessage } from "../../core/task-persistence/apiMessages"
 
 import { ApiHandler } from "../index"
@@ -27,6 +29,17 @@ export function maybeRemoveImageBlocks(messages: ApiMessage[], apiHandler: ApiHa
 				})
 			}
 		}
-		return { ...message, content }
+		// System messages must have string content, not array content
+		if (message.role === "system") {
+			if (Array.isArray(content)) {
+				// Convert array content to string for system messages
+				const textContent = content
+					.filter((block): block is Anthropic.Messages.TextBlockParam => block.type === "text")
+					.map((block) => block.text)
+					.join("")
+				return { ...message, content: textContent }
+			}
+		}
+		return { ...message, content } as ApiMessage
 	})
 }

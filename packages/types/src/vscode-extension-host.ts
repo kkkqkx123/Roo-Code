@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 import type { GlobalSettings, CoderSettings } from "./global-settings.js"
-import type { ProviderSettings, ProviderSettingsEntry } from "./provider-settings.js"
+import type { ProviderSettings, ProviderSettingsEntry } from "./provider-settings/index.js"
 import type { HistoryItem } from "./history.js"
 import type { ModeConfig, PromptComponent } from "./mode.js"
 import type { Experiments } from "./experiment.js"

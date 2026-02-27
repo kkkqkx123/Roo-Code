@@ -47,7 +47,6 @@ import { Mode, defaultModeSlug, getModeBySlug } from "../../shared/modes"
 import { experimentDefault } from "../../shared/experiments"
 import { formatLanguage } from "@coder/types"
 import type { WebviewInboundMessage } from "@coder/types"
-import { EMBEDDING_MODEL_PROFILES } from "@coder/types"
 import { ProfileValidator } from "../../shared/ProfileValidator"
 
 import { Terminal } from "../../integrations/terminal/Terminal"
@@ -203,7 +202,7 @@ export class ClineProvider
 		)
 
 		// Now that configurationService is initialized, we can update global state
-		this.updateGlobalState("codebaseIndexModels", EMBEDDING_MODEL_PROFILES)
+		this.updateGlobalState("codebaseIndexModels", {})
 
 		// Initialize MCP Hub through the singleton manager
 		McpServerManager.getInstance(this.context, this)
@@ -2547,7 +2546,7 @@ export class ClineProvider
 		let toolUseId: string | undefined
 		for (let i = parentApiMessages.length - 1; i >= 0; i--) {
 			const msg = parentApiMessages[i]
-			if (msg.role === "assistant" && Array.isArray(msg.content)) {
+			if (msg && msg.role === "assistant" && Array.isArray(msg.content)) {
 				for (const block of msg.content) {
 					if (block.type === "tool_use" && block.name === "new_task") {
 						toolUseId = block.id

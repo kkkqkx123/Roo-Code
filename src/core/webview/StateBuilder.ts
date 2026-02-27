@@ -28,7 +28,6 @@ import { Package } from "../../shared/package"
 import { Mode, defaultModeSlug } from "../../shared/modes"
 import { experimentDefault } from "../../shared/experiments"
 import { formatLanguage } from "@coder/types"
-import { EMBEDDING_MODEL_PROFILES } from "@coder/types"
 import { Terminal } from "../../integrations/terminal/Terminal"
 
 import { ContextProxy } from "../config/ContextProxy"
@@ -156,7 +155,7 @@ export class StateBuilder {
 			reasoningBlockCollapsed: stateValues.reasoningBlockCollapsed ?? true,
 			enterBehavior: stateValues.enterBehavior ?? "send",
 			customCondensingPrompt: stateValues.customCondensingPrompt,
-			codebaseIndexModels: stateValues.codebaseIndexModels ?? EMBEDDING_MODEL_PROFILES,
+			codebaseIndexModels: stateValues.codebaseIndexModels ?? {},
 			codebaseIndexConfig: this.buildCodebaseIndexConfig(stateValues),
 			profileThresholds: stateValues.profileThresholds ?? {},
 			lockApiConfigAcrossModes: this.getLockApiConfigAcrossModes(),
@@ -333,7 +332,7 @@ export class StateBuilder {
 			reasoningBlockCollapsed: reasoningBlockCollapsed ?? true,
 			enterBehavior: enterBehavior ?? "send",
 			customCondensingPrompt,
-			codebaseIndexModels: codebaseIndexModels ?? EMBEDDING_MODEL_PROFILES,
+			codebaseIndexModels: codebaseIndexModels ?? {},
 			codebaseIndexConfig: {
 				codebaseIndexEnabled: codebaseIndexConfig?.codebaseIndexEnabled ?? false,
 				codebaseIndexQdrantUrl: codebaseIndexConfig?.codebaseIndexQdrantUrl ?? "http://localhost:6333",

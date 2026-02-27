@@ -3,7 +3,7 @@ import { ContextProxy } from "../../core/config/ContextProxy"
 import { EmbedderProvider } from "./interfaces/manager"
 import { CodeIndexConfig, PreviousConfigSnapshot } from "./interfaces/config"
 import { DEFAULT_SEARCH_MIN_SCORE, DEFAULT_MAX_SEARCH_RESULTS } from "./constants"
-import { getDefaultModelId, getModelDimension, getModelScoreThreshold } from "@coder/types"
+import { getModelDimension, getModelScoreThreshold, getDefaultModelId, type EmbeddingModelProfiles } from "@coder/types"
 import { VectorStorageConfig, DEFAULT_VECTOR_STORAGE_CONFIG } from "./interfaces/vector-storage-config"
 
 /**
@@ -27,6 +27,8 @@ export class CodeIndexConfigManager {
 	private codebaseIndexConfig?: any
 	// Allowed projects list
 	private allowedProjects?: string[]
+	// User-defined embedding model profiles
+	private embeddingModelProfiles: EmbeddingModelProfiles = {}
 
 	constructor(private readonly contextProxy: ContextProxy) {
 		// Initialize with current configuration to avoid false restart triggers
@@ -81,6 +83,9 @@ export class CodeIndexConfigManager {
 		// Store allowed projects list
 		this.allowedProjects = codebaseIndexAllowedProjects
 
+		// Load user-defined embedding model profiles
+		this.embeddingModelProfiles = this.contextProxy?.getGlobalState("codebaseIndexModels") ?? {}
+
 		const openAiKey = this.contextProxy?.getSecret("codeIndexOpenAiKey") ?? ""
 		const qdrantApiKey = this.contextProxy?.getSecret("codeIndexQdrantApiKey") ?? ""
 		// Use the generic baseUrl field for all providers
@@ -105,14 +110,14 @@ export class CodeIndexConfigManager {
 		// Validate and set model dimension
 		// Use the generic dimension field (used by all providers)
 		const rawDimension = codebaseIndexConfig.codebaseIndexEmbedderModelDimension
-		
+
 		console.log("[ConfigManager] Processing model dimension:", {
 			rawValue: rawDimension,
 			valueType: typeof rawDimension,
 			isUndefined: rawDimension === undefined,
 			isNull: rawDimension === null,
 		})
-		
+
 		if (rawDimension !== undefined && rawDimension !== null) {
 			const dimension = Number(rawDimension)
 			console.log("[ConfigManager] Dimension conversion:", {
@@ -121,7 +126,7 @@ export class CodeIndexConfigManager {
 				isNaN: isNaN(dimension),
 				isPositive: dimension > 0,
 			})
-			
+
 			if (!isNaN(dimension) && dimension > 0) {
 				this.modelDimension = dimension
 				console.log(`[ConfigManager] Model dimension set to: ${dimension}`)
@@ -399,8 +404,8 @@ export class CodeIndexConfigManager {
 	 */
 	private _hasVectorDimensionChanged(prevProvider: EmbedderProvider, prevModelId?: string): boolean {
 		const currentProvider = this.embedderProvider
-		const currentModelId = this.modelId ?? getDefaultModelId(currentProvider)
-		const resolvedPrevModelId = prevModelId ?? getDefaultModelId(prevProvider)
+		const currentModelId = this.modelId ?? getDefaultModelId(this.embeddingModelProfiles, currentProvider)
+		const resolvedPrevModelId = prevModelId ?? getDefaultModelId(this.embeddingModelProfiles, prevProvider)
 
 		// If model IDs are the same and provider is the same, no dimension change
 		if (prevProvider === currentProvider && resolvedPrevModelId === currentModelId) {
@@ -408,8 +413,8 @@ export class CodeIndexConfigManager {
 		}
 
 		// Get vector dimensions for both models
-		const prevDimension = getModelDimension(prevProvider, resolvedPrevModelId)
-		const currentDimension = getModelDimension(currentProvider, currentModelId)
+		const prevDimension = getModelDimension(this.embeddingModelProfiles, prevProvider, resolvedPrevModelId ?? "")
+		const currentDimension = getModelDimension(this.embeddingModelProfiles, currentProvider, currentModelId ?? "")
 
 		// If we can't determine dimensions, be safe and restart
 		if (prevDimension === undefined || currentDimension === undefined) {
@@ -501,8 +506,8 @@ export class CodeIndexConfigManager {
 	 */
 	public get currentModelDimension(): number | undefined {
 		// First try to get the model-specific dimension
-		const modelId = this.modelId ?? getDefaultModelId(this.embedderProvider)
-		const modelDimension = getModelDimension(this.embedderProvider, modelId)
+		const modelId = this.modelId ?? getDefaultModelId(this.embeddingModelProfiles, this.embedderProvider)
+		const modelDimension = modelId ? getModelDimension(this.embeddingModelProfiles, this.embedderProvider, modelId) : undefined
 
 		// Only use custom dimension if model doesn't have a built-in dimension
 		if (!modelDimension && this.modelDimension && this.modelDimension > 0) {
@@ -523,8 +528,10 @@ export class CodeIndexConfigManager {
 		}
 
 		// Fall back to model-specific threshold
-		const currentModelId = this.modelId ?? getDefaultModelId(this.embedderProvider)
-		const modelSpecificThreshold = getModelScoreThreshold(this.embedderProvider, currentModelId)
+		const currentModelId = this.modelId ?? getDefaultModelId(this.embeddingModelProfiles, this.embedderProvider)
+		const modelSpecificThreshold = currentModelId
+			? getModelScoreThreshold(this.embeddingModelProfiles, this.embedderProvider, currentModelId)
+			: undefined
 		return modelSpecificThreshold ?? DEFAULT_SEARCH_MIN_SCORE
 	}
 
@@ -561,5 +568,12 @@ export class CodeIndexConfigManager {
 	 */
 	public getAllowedProjects(): string[] {
 		return this.allowedProjects ?? []
+	}
+
+	/**
+	 * Gets the user-defined embedding model profiles
+	 */
+	public getEmbeddingModelProfiles(): EmbeddingModelProfiles {
+		return this.embeddingModelProfiles
 	}
 }

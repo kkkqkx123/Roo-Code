@@ -21,7 +21,7 @@ export class ReasoningHandler extends BaseChunkHandler {
 	 * Handle reasoning stream chunks
 	 */
 	async handle(chunk: StreamChunk): Promise<void> {
-		if (!this.matchesType(chunk, "reasoning")) {
+		if (chunk.type !== "reasoning") {
 			return
 		}
 

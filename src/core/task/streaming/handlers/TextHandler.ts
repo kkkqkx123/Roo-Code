@@ -13,7 +13,7 @@ export class TextHandler extends BaseChunkHandler {
 	 * Handle text stream chunks
 	 */
 	async handle(chunk: StreamChunk): Promise<void> {
-		if (!this.matchesType(chunk, "text")) {
+		if (chunk.type !== "text") {
 			return
 		}
 

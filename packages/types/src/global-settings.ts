@@ -1,12 +1,11 @@
 import { z } from "zod"
 
-import { type Keys } from "./type-fu.js"
 import {
 	type ProviderSettings,
 	PROVIDER_SETTINGS_KEYS,
 	providerSettingsEntrySchema,
 	providerSettingsSchema,
-} from "./provider-settings.js"
+} from "./provider-settings/index.js"
 import { historyItemSchema } from "./history.js"
 import { codebaseIndexModelsSchema, codebaseIndexConfigSchema } from "./codebase-index.js"
 import { experimentsSchema } from "./experiment.js"
@@ -286,7 +285,7 @@ export type SecretState = {
 	[K in GlobalSecretKey]?: string
 }
 
-export const isSecretStateKey = (key: string): key is Keys<SecretState> =>
+export const isSecretStateKey = (key: string): key is keyof SecretState =>
 	SECRET_STATE_KEYS.includes(key as (typeof SECRET_STATE_KEYS)[number]) ||
 	GLOBAL_SECRET_KEYS.includes(key as GlobalSecretKey)
 
@@ -294,14 +293,14 @@ export const isSecretStateKey = (key: string): key is Keys<SecretState> =>
  * GlobalState
  */
 
-export type GlobalState = Omit<CoderSettings, Keys<SecretState>>
+export type GlobalState = Omit<CoderSettings, keyof SecretState>
 
 export const GLOBAL_STATE_KEYS = [...GLOBAL_SETTINGS_KEYS, ...PROVIDER_SETTINGS_KEYS].filter(
-	(key: Keys<CoderSettings>) => !isSecretStateKey(key),
-) as Keys<GlobalState>[]
+	(key: keyof CoderSettings) => !isSecretStateKey(key),
+) as (keyof GlobalState)[]
 
-export const isGlobalStateKey = (key: string): key is Keys<GlobalState> =>
-	GLOBAL_STATE_KEYS.includes(key as Keys<GlobalState>)
+export const isGlobalStateKey = (key: string): key is keyof GlobalState =>
+	GLOBAL_STATE_KEYS.includes(key as keyof GlobalState)
 
 /**
  * Evals

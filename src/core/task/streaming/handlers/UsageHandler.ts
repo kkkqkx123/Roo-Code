@@ -13,7 +13,7 @@ export class UsageHandler extends BaseChunkHandler {
 	 * Handle usage stream chunks
 	 */
 	async handle(chunk: StreamChunk): Promise<void> {
-		if (!this.matchesType(chunk, "usage")) {
+		if (chunk.type !== "usage") {
 			return
 		}
 
@@ -23,7 +23,7 @@ export class UsageHandler extends BaseChunkHandler {
 			chunk.outputTokens,
 			chunk.cacheWriteTokens ?? 0,
 			chunk.cacheReadTokens ?? 0,
-			chunk.totalCost
+			chunk.totalCost ?? 0
 		)
 	}
 }

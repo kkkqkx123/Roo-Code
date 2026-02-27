@@ -123,7 +123,7 @@ export function handleOpenAiCompatibleError(
 					let retryAfter: number | undefined
 					// AI SDK may include retry info in various places
 					const retryMatch = errorMessage.match(/retry.*?(\d+)/i)
-					if (retryMatch) {
+					if (retryMatch && retryMatch[1]) {
 						retryAfter = parseInt(retryMatch[1], 10)
 					}
 
@@ -131,7 +131,7 @@ export function handleOpenAiCompatibleError(
 						providerName,
 						`${errorMessage}. Please slow down your requests.`,
 						retryAfter,
-						requestId,
+						requestId ?? undefined,
 						aiSdkError,
 					)
 				}

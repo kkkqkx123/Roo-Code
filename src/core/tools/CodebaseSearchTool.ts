@@ -246,7 +246,7 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 			output += "\nResults:\n\n"
 		} else {
 			// 单查询格式
-			output += `Query: ${normalizedQueries[0].query}\nResults:\n\n`
+			output += `Query: ${normalizedQueries[0]?.query}\nResults:\n\n`
 		}
 
 		aggregatedResults.forEach((result) => {

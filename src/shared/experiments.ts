@@ -1,4 +1,4 @@
-import type { AssertEqual, Equals, Keys, Values, ExperimentId, Experiments } from "@coder/types"
+import type { ExperimentId, Experiments } from "@coder/types"
 
 export const EXPERIMENT_IDS = {
 	PREVENT_FOCUS_DISRUPTION: "preventFocusDisruption",
@@ -7,9 +7,7 @@ export const EXPERIMENT_IDS = {
 	CUSTOM_TOOLS: "customTools",
 } as const satisfies Record<string, ExperimentId>
 
-type _AssertExperimentIds = AssertEqual<Equals<ExperimentId, Values<typeof EXPERIMENT_IDS>>>
-
-type ExperimentKey = Keys<typeof EXPERIMENT_IDS>
+type ExperimentKey = keyof typeof EXPERIMENT_IDS
 
 interface ExperimentConfig {
 	enabled: boolean

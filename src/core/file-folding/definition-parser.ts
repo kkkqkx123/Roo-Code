@@ -51,7 +51,7 @@ export function parseDefinitionLine(line: string): ParsedDefinitionLine | null {
 
 	// Parse line range format: "startLine--endLine | content" or "startLine | content"
 	const rangeMatch = trimmedLine.match(/^(\d+)(?:--(\d+))?\s*\|\s*(.+)$/)
-	if (!rangeMatch) {
+	if (!rangeMatch?.[1]) {
 		return null
 	}
 
@@ -87,55 +87,55 @@ function extractTypeAndName(
 
 	// Match class definitions
 	const classMatch = trimmedContent.match(/(?:^|\s)class\s+(\w+)/)
-	if (classMatch) {
+	if (classMatch?.[1]) {
 		return { type: "class", name: classMatch[1] }
 	}
 
 	// Match interface definitions
 	const interfaceMatch = trimmedContent.match(/(?:^|\s)interface\s+(\w+)/)
-	if (interfaceMatch) {
+	if (interfaceMatch?.[1]) {
 		return { type: "interface", name: interfaceMatch[1] }
 	}
 
 	// Match type definitions
 	const typeMatch = trimmedContent.match(/(?:^|\s)type\s+(\w+)/)
-	if (typeMatch) {
+	if (typeMatch?.[1]) {
 		return { type: "type", name: typeMatch[1] }
 	}
 
 	// Match function definitions (including async, export, etc.)
 	const functionMatch = trimmedContent.match(/(?:^|\s)(?:async\s+)?function\s+(\w+)/)
-	if (functionMatch) {
+	if (functionMatch?.[1]) {
 		return { type: "function", name: functionMatch[1] }
 	}
 
 	// Match arrow functions with const/let/var
 	const arrowMatch = trimmedContent.match(/(?:^|\s)(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>/)
-	if (arrowMatch) {
+	if (arrowMatch?.[1]) {
 		return { type: "function", name: arrowMatch[1] }
 	}
 
 	// Match const/let/var declarations (treat as 'other' type for now)
 	const constMatch = trimmedContent.match(/(?:^|\s)(?:const|let|var)\s+(\w+)/)
-	if (constMatch) {
+	if (constMatch?.[1]) {
 		return { type: "other", name: constMatch[1] }
 	}
 
 	// Match method definitions (inside classes)
 	const methodMatch = trimmedContent.match(/^\s*(?:async\s+)?(\w+)\s*\(/)
-	if (methodMatch) {
+	if (methodMatch?.[1]) {
 		return { type: "function", name: methodMatch[1] }
 	}
 
 	// Match Python function definitions
 	const pythonFunctionMatch = trimmedContent.match(/(?:^|\s)def\s+(\w+)/)
-	if (pythonFunctionMatch) {
+	if (pythonFunctionMatch?.[1]) {
 		return { type: "function", name: pythonFunctionMatch[1] }
 	}
 
 	// If no specific type matched, try to extract any identifier
 	const identifierMatch = trimmedContent.match(/(\w+)/)
-	if (identifierMatch) {
+	if (identifierMatch?.[1]) {
 		return { type: "other", name: identifierMatch[1] }
 	}
 

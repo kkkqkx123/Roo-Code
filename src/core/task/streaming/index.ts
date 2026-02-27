@@ -30,7 +30,8 @@ export { StreamingTokenManager } from "./StreamingTokenManager"
 export { StreamingErrorHandler } from "./StreamingErrorHandler"
 
 // Handlers
-export { ChunkHandler, BaseChunkHandler } from "./handlers/ChunkHandler"
+export { BaseChunkHandler } from "./handlers/ChunkHandler"
+export type { ChunkHandler } from "./handlers/ChunkHandler"
 export { ReasoningHandler } from "./handlers/ReasoningHandler"
 export { TextHandler } from "./handlers/TextHandler"
 export { ToolCallHandler } from "./handlers/ToolCallHandler"

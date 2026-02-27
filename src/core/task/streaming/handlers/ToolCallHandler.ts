@@ -27,6 +27,10 @@ export class ToolCallHandler extends BaseChunkHandler {
 	 * Handle partial tool call chunks (streaming)
 	 */
 	private async handleToolCallPartial(chunk: StreamChunk): Promise<void> {
+		if (chunk.type !== "tool_call_partial") {
+			return
+		}
+
 		const events = NativeToolCallParser.processRawChunk({
 			index: chunk.index,
 			id: chunk.id,
@@ -156,6 +160,10 @@ export class ToolCallHandler extends BaseChunkHandler {
 	 * Handle complete tool call chunks (non-streaming, backward compatibility)
 	 */
 	private async handleToolCall(chunk: StreamChunk): Promise<void> {
+		if (chunk.type !== "tool_call") {
+			return
+		}
+
 		// Backward compatibility: handle complete tool calls
 		const toolUse = NativeToolCallParser.parseToolCall({
 			id: chunk.id,

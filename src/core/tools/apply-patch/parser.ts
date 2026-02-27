@@ -260,7 +260,7 @@ function parseOneHunk(lines: string[], lineNumber: number): { hunk: Hunk; linesC
 			if (line?.startsWith("+")) {
 				contents += line.substring(1) + "\n"
 				parsedLines++
-			} else if (line?.trim() !== "" && !line.startsWith("***")) {
+			} else if (line !== undefined && line.trim() !== "" && !line.startsWith("***")) {
 				// Non-empty line that doesn't start with + is invalid in Add File section
 				// Unless it's a new file operation marker
 				throw new ParseError(

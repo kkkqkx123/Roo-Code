@@ -5,7 +5,7 @@
  * These types are used across all streaming modules to ensure type safety and consistency.
  */
 
-import type { StreamingErrorType } from "./errors.js"
+import type { StreamingErrorType } from "./errors/index.js"
 
 // ============================================================================
 // Grounding Types

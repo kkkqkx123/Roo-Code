@@ -7,7 +7,7 @@ import { DirectoryScanner } from "./processors"
 import { CacheManager } from "./cache-manager"
 import { TokenBasedSizeEstimator } from "./token-based-size-estimator"
 import { t } from "../../i18n"
-import { QdrantConnectionError } from "./vector-store/qdrant-errors"
+import { QdrantConnectionError } from "@coder/types"
 
 /**
  * Manages the code indexing workflow, coordinating between different services and managers.

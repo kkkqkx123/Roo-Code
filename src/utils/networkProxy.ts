@@ -232,7 +232,9 @@ async function configureGlobalProxy(config: ProxyConfig): Promise<void> {
 
 	let bootstrap: (() => void) | undefined
 	try {
-		const mod = (await import("global-agent")) as typeof import("global-agent")
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+		const mod = (await import("global-agent")) as any
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 		bootstrap = mod.bootstrap
 	} catch (error) {
 		log(
@@ -244,7 +246,7 @@ async function configureGlobalProxy(config: ProxyConfig): Promise<void> {
 	// Bootstrap global-agent to intercept all HTTP/HTTPS requests
 	log(`Calling global-agent bootstrap()...`)
 	try {
-		bootstrap()
+		bootstrap?.()
 		proxyInitialized = true
 		log(`global-agent bootstrap() completed successfully`)
 	} catch (error) {
