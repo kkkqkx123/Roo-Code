@@ -4,9 +4,6 @@ import { CacheControlEphemeral } from "@anthropic-ai/sdk/resources"
 
 import {
 	type ModelInfo,
-	type AnthropicModelId,
-	anthropicDefaultModelId,
-	anthropicModels,
 	ANTHROPIC_DEFAULT_MAX_TOKENS,
 } from "@coder/types"
 
@@ -61,14 +58,8 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 		// Filter out non-Anthropic blocks (reasoning, thoughtSignature, etc.) before sending to the API
 		const sanitizedMessages = filterNonAnthropicBlocks(messages)
 
-		// Add 1M context beta flag if enabled for supported models (Claude Sonnet 4/4.5/4.6, Opus 4.6)
-		if (
-			(modelId === "claude-sonnet-4-20250514" ||
-				modelId === "claude-sonnet-4-5" ||
-				modelId === "claude-sonnet-4-6" ||
-				modelId === "claude-opus-4-6") &&
-			this.options.anthropicBeta1MContext
-		) {
+		// Add 1M context beta flag if enabled by user configuration
+		if (this.options.anthropicBeta1MContext) {
 			betas.push("context-1m-2025-08-07")
 		}
 
@@ -77,110 +68,70 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 			tool_choice: convertOpenAIToolChoiceToAnthropic(metadata?.tool_choice, metadata?.parallelToolCalls),
 		}
 
-		switch (modelId) {
-			case "claude-sonnet-4-6":
-			case "claude-sonnet-4-5":
-			case "claude-sonnet-4-20250514":
-			case "claude-opus-4-6":
-			case "claude-opus-4-5-20251101":
-			case "claude-opus-4-1-20250805":
-			case "claude-opus-4-20250514":
-			case "claude-3-7-sonnet-20250219":
-			case "claude-3-5-sonnet-20241022":
-			case "claude-3-5-haiku-20241022":
-			case "claude-3-opus-20240229":
-			case "claude-haiku-4-5-20251001":
-			case "claude-3-haiku-20240307": {
-				/**
-				 * The latest message will be the new user message, one before
-				 * will be the assistant message from a previous request, and
-				 * the user message before that will be a previously cached user
-				 * message. So we need to mark the latest user message as
-				 * ephemeral to cache it for the next request, and mark the
-				 * second to last user message as ephemeral to let the server
-				 * know the last message to retrieve from the cache for the
-				 * current request.
-				 */
-				const userMsgIndices = sanitizedMessages.reduce(
-					(acc, msg, index) => (msg.role === "user" ? [...acc, index] : acc),
-					[] as number[],
-				)
+		// Use prompt caching for all models if enabled
+		// Users can control this through their model configuration
+		const usePromptCaching = this.getModel().info.supportsPromptCache !== false
 
-				const lastUserMsgIndex = userMsgIndices[userMsgIndices.length - 1] ?? -1
-				const secondLastMsgUserIndex = userMsgIndices[userMsgIndices.length - 2] ?? -1
+		if (usePromptCaching) {
+			betas.push("prompt-caching-2024-07-31")
 
+			/**
+			 * The latest message will be the new user message, one before
+			 * will be the assistant message from a previous request, and
+			 * the user message before that will be a previously cached user
+			 * message. So we need to mark the latest user message as
+			 * ephemeral to cache it for the next request, and mark the
+			 * second to last user message as ephemeral to let the server
+			 * know the last message to retrieve from the cache for the
+			 * current request.
+			 */
+			const userMsgIndices = sanitizedMessages.reduce(
+				(acc, msg, index) => (msg.role === "user" ? [...acc, index] : acc),
+				[] as number[],
+			)
 
-				stream = await this.client.messages.create(
-					{
-						model: modelId,
-						max_tokens: maxTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS,
-						temperature,
-						thinking,
-						// Setting cache breakpoint for system prompt so new tasks can reuse it.
-						system: [{ text: systemPrompt, type: "text", cache_control: cacheControl }],
-						messages: sanitizedMessages.map((message, index) => {
-							if (index === lastUserMsgIndex || index === secondLastMsgUserIndex) {
-								return {
-									...message,
-									content:
-										typeof message.content === "string"
-											? [{ type: "text", text: message.content, cache_control: cacheControl }]
-											: message.content.map((content, contentIndex) =>
+			const lastUserMsgIndex = userMsgIndices[userMsgIndices.length - 1] ?? -1
+			const secondLastMsgUserIndex = userMsgIndices[userMsgIndices.length - 2] ?? -1
+
+			stream = await this.client.messages.create(
+				{
+					model: modelId,
+					max_tokens: maxTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS,
+					temperature,
+					thinking,
+					// Setting cache breakpoint for system prompt so new tasks can reuse it.
+					system: [{ text: systemPrompt, type: "text", cache_control: cacheControl }],
+					messages: sanitizedMessages.map((message, index) => {
+						if (index === lastUserMsgIndex || index === secondLastMsgUserIndex) {
+							return {
+								...message,
+								content:
+									typeof message.content === "string"
+										? [{ type: "text", text: message.content, cache_control: cacheControl }]
+										: message.content.map((content, contentIndex) =>
 												contentIndex === message.content.length - 1
 													? { ...content, cache_control: cacheControl }
 													: content,
 											),
-								}
 							}
-							return message
-						}),
-						stream: true,
-						...nativeToolParams,
-					},
-					(() => {
-						// prompt caching: https://x.com/alexalbert__/status/1823751995901272068
-						// https://github.com/anthropics/anthropic-sdk-typescript?tab=readme-ov-file#default-headers
-						// https://github.com/anthropics/anthropic-sdk-typescript/commit/c920b77fc67bd839bfeb6716ceab9d7c9bbe7393
-
-						// Then check for models that support prompt caching
-						switch (modelId) {
-							case "claude-sonnet-4-6":
-							case "claude-sonnet-4-5":
-							case "claude-sonnet-4-20250514":
-							case "claude-opus-4-6":
-							case "claude-opus-4-5-20251101":
-							case "claude-opus-4-1-20250805":
-							case "claude-opus-4-20250514":
-							case "claude-3-7-sonnet-20250219":
-							case "claude-3-5-sonnet-20241022":
-							case "claude-3-5-haiku-20241022":
-							case "claude-3-opus-20240229":
-							case "claude-haiku-4-5-20251001":
-							case "claude-3-haiku-20240307":
-								betas.push("prompt-caching-2024-07-31")
-								return { headers: { "anthropic-beta": betas.join(",") } }
-							default:
-								return undefined
 						}
-					})(),
-				)
-
-				break
-			}
-			default: {
-
-				stream = (await this.client.messages.create({
-					model: modelId,
-					max_tokens: maxTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS,
-					temperature,
-					system: [{ text: systemPrompt, type: "text" }],
-					messages: sanitizedMessages,
+						return message
+					}),
 					stream: true,
 					...nativeToolParams,
-				})) as any
-
-				break
-			}
+				},
+				{ headers: { "anthropic-beta": betas.join(",") } },
+			)
+		} else {
+			stream = (await this.client.messages.create({
+				model: modelId,
+				max_tokens: maxTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS,
+				temperature,
+				system: [{ text: systemPrompt, type: "text" }],
+				messages: sanitizedMessages,
+				stream: true,
+				...nativeToolParams,
+			})) as any
 		}
 
 		let inputTokens = 0
@@ -311,34 +262,26 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 
 	getModel() {
 		const modelId = this.options.apiModelId
-		let id = modelId && modelId in anthropicModels ? (modelId as AnthropicModelId) : anthropicDefaultModelId
-		let info: ModelInfo = anthropicModels[id]
+		if (!modelId) {
+			throw new Error("Model ID is required. Please configure apiModelId in your provider settings.")
+		}
 
-		// If 1M context beta is enabled for supported models, update the model info
-		if (
-			(id === "claude-sonnet-4-20250514" ||
-				id === "claude-sonnet-4-5" ||
-				id === "claude-sonnet-4-6" ||
-				id === "claude-opus-4-6") &&
-			this.options.anthropicBeta1MContext
-		) {
-			// Use the tier pricing for 1M context
-			const tier = info.tiers?.[0]
-			if (tier) {
-				info = {
-					...info,
-					contextWindow: tier.contextWindow,
-					inputPrice: tier.inputPrice,
-					outputPrice: tier.outputPrice,
-					cacheWritesPrice: tier.cacheWritesPrice,
-					cacheReadsPrice: tier.cacheReadsPrice,
-				}
-			}
+		// User must provide custom model info through their configuration
+		// This is similar to how OpenAI Compatible endpoints work
+		const info: ModelInfo = this.options.anthropicCustomModelInfo || {
+			maxTokens: 8192,
+			contextWindow: 200000,
+			supportsImages: true,
+			supportsPromptCache: false,
+			inputPrice: 3,
+			outputPrice: 15,
+			supportsTemperature: true,
+			defaultTemperature: 0,
 		}
 
 		const params = getModelParams({
 			format: "anthropic",
-			modelId: id,
+			modelId,
 			model: info,
 			settings: this.options,
 			defaultTemperature: 0,
@@ -349,9 +292,9 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 		// The actual model ID honored by Anthropic's API does not have this
 		// suffix.
 		return {
-			id: id === "claude-3-7-sonnet-20250219:thinking" ? "claude-3-7-sonnet-20250219" : id,
+			id: modelId.endsWith(":thinking") ? modelId.replace(":thinking", "") : modelId,
 			info,
-			betas: id === "claude-3-7-sonnet-20250219:thinking" ? ["output-128k-2025-02-19"] : undefined,
+			betas: modelId.endsWith(":thinking") ? ["output-128k-2025-02-19"] : undefined,
 			...params,
 		}
 	}

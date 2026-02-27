@@ -4204,4 +4204,20 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			console.error(`[Task] Queue processing error:`, e)
 		}
 	}
+
+	/**
+	 * Record a tool usage attempt.
+	 * Delegates to the metricsService.
+	 */
+	public recordToolUsage(toolName: ToolName): void {
+		this.metricsService.recordToolUsage(toolName)
+	}
+
+	/**
+	 * Record a tool execution failure.
+	 * Delegates to the metricsService.
+	 */
+	public recordToolError(toolName: ToolName, error?: string): void {
+		this.metricsService.recordToolError(toolName, error)
+	}
 }

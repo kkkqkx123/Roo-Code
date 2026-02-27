@@ -6,9 +6,6 @@ import OpenAI from "openai"
 import { Package } from "../../shared/package"
 import {
 	type ModelInfo,
-	openAiNativeDefaultModelId,
-	OpenAiNativeModelId,
-	openAiNativeModels,
 	OPENAI_NATIVE_DEFAULT_TEMPERATURE,
 	type ReasoningEffort,
 	type VerbosityLevel,
@@ -1383,26 +1380,35 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 
 	override getModel() {
 		const modelId = this.options.apiModelId
+		if (!modelId) {
+			throw new Error("Model ID is required. Please configure apiModelId in your provider settings.")
+		}
 
-		let id =
-			modelId && modelId in openAiNativeModels ? (modelId as OpenAiNativeModelId) : openAiNativeDefaultModelId
-
-		const info: ModelInfo = openAiNativeModels[id]
+		// User must provide custom model info through their configuration
+		// This is similar to how OpenAI Compatible endpoints work
+		const info: ModelInfo = this.options.openAiNativeCustomModelInfo || {
+			maxTokens: 4096,
+			contextWindow: 128000,
+			supportsImages: true,
+			supportsPromptCache: false,
+			inputPrice: 0.5,
+			outputPrice: 1.5,
+			supportsTemperature: true,
+			defaultTemperature: OPENAI_NATIVE_DEFAULT_TEMPERATURE,
+		}
 
 		const params = getModelParams({
 			format: "openai",
-			modelId: id,
+			modelId,
 			model: info,
 			settings: this.options,
 			defaultTemperature: OPENAI_NATIVE_DEFAULT_TEMPERATURE,
 		})
 
-		// Reasoning effort inclusion is handled by getModelParams/getOpenAiReasoning.
-		// Do not re-compute or filter efforts here.
-
 		// The o3 models are named like "o3-mini-[reasoning-effort]", which are
 		// not valid model ids, so we need to strip the suffix.
-		return { id: id.startsWith("o3-mini") ? "o3-mini" : id, info, ...params, verbosity: params.verbosity }
+		const id = modelId.startsWith("o3-mini") ? "o3-mini" : modelId
+		return { id, info, ...params, verbosity: params.verbosity }
 	}
 
 	/**

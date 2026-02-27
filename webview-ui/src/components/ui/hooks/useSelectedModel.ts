@@ -2,11 +2,7 @@ import {
 	type ProviderName,
 	type ProviderSettings,
 	type ModelInfo,
-	anthropicModels,
-	geminiModels,
 	openAiModelInfoSaneDefaults,
-	openAiNativeModels,
-	getProviderDefaultModelId,
 } from "@coder/types"
 
 
@@ -20,7 +16,7 @@ export const useSelectedModel = (apiConfiguration?: ProviderSettings) => {
 				provider: activeProvider,
 				apiConfiguration,
 			})
-			: { id: getProviderDefaultModelId(activeProvider ?? "anthropic"), info: undefined }
+			: { id: "", info: undefined }
 
 	return {
 		provider,
@@ -38,19 +34,15 @@ function getSelectedModel({
 	provider: ProviderName
 	apiConfiguration: ProviderSettings
 }): { id: string; info: ModelInfo | undefined } {
-	// the `undefined` case are used to show the invalid selection to prevent
-	// users from seeing the default model if their selection is invalid
-	// this gives a better UX than showing the default model
-	const defaultModelId = getProviderDefaultModelId(provider)
 	switch (provider) {
 		case "gemini": {
-			const id = apiConfiguration.apiModelId ?? defaultModelId
-			const info = geminiModels[id as keyof typeof geminiModels]
+			const id = apiConfiguration.apiModelId ?? ""
+			const info = apiConfiguration.geminiCustomModelInfo
 			return { id, info }
 		}
 		case "openai-native": {
-			const id = apiConfiguration.apiModelId ?? defaultModelId
-			const info = openAiNativeModels[id as keyof typeof openAiNativeModels]
+			const id = apiConfiguration.apiModelId ?? ""
+			const info = apiConfiguration.openAiNativeCustomModelInfo
 			return { id, info }
 		}
 		case "openai": {
@@ -61,45 +53,9 @@ function getSelectedModel({
 		}
 		default: {
 			provider satisfies "anthropic" | "gemini-cli" | "fake-ai"
-			const id = apiConfiguration.apiModelId ?? defaultModelId
-			const baseInfo = anthropicModels[id as keyof typeof anthropicModels]
-
-			// Apply 1M context beta tier pricing for supported Claude 4 models
-			if (
-				provider === "anthropic" &&
-				(id === "claude-sonnet-4-20250514" ||
-					id === "claude-sonnet-4-5" ||
-					id === "claude-sonnet-4-6" ||
-					id === "claude-opus-4-6") &&
-				apiConfiguration.anthropicBeta1MContext &&
-				baseInfo
-			) {
-				// Type assertion since supported Claude 4 models include 1M context pricing tiers.
-				const modelWithTiers = baseInfo as typeof baseInfo & {
-					tiers?: Array<{
-						contextWindow: number
-						inputPrice?: number
-						outputPrice?: number
-						cacheWritesPrice?: number
-						cacheReadsPrice?: number
-					}>
-				}
-				const tier = modelWithTiers.tiers?.[0]
-				if (tier) {
-					// Create a new ModelInfo object with updated values
-					const info: ModelInfo = {
-						...baseInfo,
-						contextWindow: tier.contextWindow,
-						inputPrice: tier.inputPrice ?? baseInfo.inputPrice,
-						outputPrice: tier.outputPrice ?? baseInfo.outputPrice,
-						cacheWritesPrice: tier.cacheWritesPrice ?? baseInfo.cacheWritesPrice,
-						cacheReadsPrice: tier.cacheReadsPrice ?? baseInfo.cacheReadsPrice,
-					}
-					return { id, info }
-				}
-			}
-
-			return { id, info: baseInfo }
+			const id = apiConfiguration.apiModelId ?? ""
+			const info = apiConfiguration.anthropicCustomModelInfo
+			return { id, info }
 		}
 	}
 }

@@ -1,12 +1,22 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { OpenAiNativeHandler } from "../openai-native"
-import { openAiNativeModels } from "@coder/types"
+import type { ModelInfo } from "@coder/types"
 
 describe("OpenAiNativeHandler - normalizeUsage", () => {
 	let handler: OpenAiNativeHandler
+	const mockModelInfo: ModelInfo = {
+		maxTokens: 4096,
+		contextWindow: 128000,
+		supportsImages: true,
+		supportsPromptCache: false,
+		inputPrice: 0.5,
+		outputPrice: 1.5,
+		supportsTemperature: true,
+		defaultTemperature: 0.7,
+	}
 	const mockModel = {
 		id: "gpt-4o",
-		info: openAiNativeModels["gpt-4o"],
+		info: mockModelInfo,
 	}
 
 	beforeEach(() => {
@@ -382,8 +392,8 @@ describe("OpenAiNativeHandler - normalizeUsage", () => {
 
 		it("should not set prompt_cache_retention when the model does not support prompt caching", () => {
 			const modelId = "codex-mini-latest"
-			expect(openAiNativeModels[modelId as keyof typeof openAiNativeModels].supportsPromptCache).toBe(false)
-
+			// Since we no longer have hardcoded models, we just test the behavior
+			// The model info would be provided by user configuration
 			const body = buildRequestBodyForModel(modelId)
 			expect(body.prompt_cache_retention).toBeUndefined()
 		})

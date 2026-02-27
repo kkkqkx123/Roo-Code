@@ -1,9 +1,4 @@
 import type { ProviderName, ModelInfo, ProviderSettings } from "@coder/types"
-import {
-	anthropicDefaultModelId,
-	geminiDefaultModelId,
-	openAiNativeDefaultModelId,
-} from "@coder/types"
 
 import { MODELS_BY_PROVIDER } from "../constants"
 
@@ -18,10 +13,14 @@ export const PROVIDER_SERVICE_CONFIG: Partial<Record<ProviderName, ProviderServi
 	"openai-native": { serviceName: "OpenAI", serviceUrl: "https://platform.openai.com" },
 }
 
+/**
+ * PROVIDER_DEFAULT_MODEL_IDS
+ *
+ * Removed hardcoded default model IDs. All providers now require users to provide
+ * their own model ID, just like OpenAI Compatible endpoints.
+ */
 export const PROVIDER_DEFAULT_MODEL_IDS: Partial<Record<ProviderName, string>> = {
-	anthropic: anthropicDefaultModelId,
-	gemini: geminiDefaultModelId,
-	"openai-native": openAiNativeDefaultModelId,
+	// No hardcoded default model IDs - users provide their own
 }
 
 export const getProviderServiceConfig = (provider: ProviderName): ProviderServiceConfig => {

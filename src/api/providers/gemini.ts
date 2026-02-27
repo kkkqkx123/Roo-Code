@@ -11,9 +11,6 @@ import type { JWTInput } from "google-auth-library"
 
 import {
 	type ModelInfo,
-	type GeminiModelId,
-	geminiDefaultModelId,
-	geminiModels,
 } from "@coder/types"
 import { safeJsonParse } from "@coder/core"
 
@@ -342,12 +339,26 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 
 	override getModel() {
 		const modelId = this.options.apiModelId
-		let id = modelId && modelId in geminiModels ? (modelId as GeminiModelId) : geminiDefaultModelId
-		let info: ModelInfo = geminiModels[id]
+		if (!modelId) {
+			throw new Error("Model ID is required. Please configure apiModelId in your provider settings.")
+		}
+
+		// User must provide custom model info through their configuration
+		// This is similar to how OpenAI Compatible endpoints work
+		const info: ModelInfo = this.options.geminiCustomModelInfo || {
+			maxTokens: 8192,
+			contextWindow: 2000000,
+			supportsImages: true,
+			supportsPromptCache: false,
+			inputPrice: 0.5,
+			outputPrice: 1.5,
+			supportsTemperature: true,
+			defaultTemperature: 1,
+		}
 
 		const params = getModelParams({
 			format: "gemini",
-			modelId: id,
+			modelId,
 			model: info,
 			settings: this.options,
 			defaultTemperature: info.defaultTemperature ?? 1,
@@ -357,7 +368,7 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 		// reasoning model and that reasoning is required to be enabled.
 		// The actual model ID honored by Gemini's API does not have this
 		// suffix.
-		return { id: id.endsWith(":thinking") ? id.replace(":thinking", "") : id, info, ...params }
+		return { id: modelId.endsWith(":thinking") ? modelId.replace(":thinking", "") : modelId, info, ...params }
 	}
 
 	private extractGroundingSources(groundingMetadata?: GroundingMetadata): GroundingSource[] {

@@ -15,7 +15,7 @@
 
 import type Anthropic from "@anthropic-ai/sdk"
 import type { AssistantMessageContent } from "../../assistant-message/types"
-import type { ModelInfo } from "@coder/types"
+import type { ModelInfo, ClineMessage } from "@coder/types"
 import { ApiMessage, StreamChunk, StreamingErrorType, TokenBreakdown } from "@coder/types"
 import { GroundingSource, TokenUsage } from "."
 
@@ -63,8 +63,9 @@ export type {
   ModelInfo,
 } from "@coder/types"
 
-// Re-export AssistantMessageContent from local module
+// Re-export types from local and external modules
 export type { AssistantMessageContent } from "../../assistant-message/types"
+export type { ClineMessage } from "@coder/types"
 
 // ============================================================================
 // Streaming Result Types (Module-specific)
@@ -85,21 +86,6 @@ export interface StreamingResult {
 	aborted: boolean
 	abortReason?: string
 	error: StreamingErrorType | null
-}
-
-// ============================================================================
-// Message Types (Module-specific)
-// ============================================================================
-
-/**
- * Cline message type used in the conversation history
- */
-export interface ClineMessage {
-	type: string
-	say?: string
-	content?: string
-	partial?: boolean
-	[key: string]: any
 }
 
 // ============================================================================

@@ -2,12 +2,12 @@
 
 import { Anthropic } from "@anthropic-ai/sdk"
 
-import { type ModelInfo, geminiDefaultModelId } from "@coder/types"
+import { type ModelInfo } from "@coder/types"
 
 import { t } from "i18next"
 import { GeminiHandler } from "../gemini"
 
-const GEMINI_MODEL_NAME = geminiDefaultModelId
+const GEMINI_MODEL_NAME = "gemini-2.5-pro-preview"
 
 describe("GeminiHandler", () => {
 	let handler: GeminiHandler
@@ -158,7 +158,7 @@ describe("GeminiHandler", () => {
 				geminiApiKey: "test-key",
 			})
 			const modelInfo = invalidHandler.getModel()
-			expect(modelInfo.id).toBe(geminiDefaultModelId) // Default model
+			expect(modelInfo.id).toBe("invalid-model") // User-provided model ID
 		})
 	})
 

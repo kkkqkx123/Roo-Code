@@ -8,9 +8,6 @@ import {
 	type ProviderName,
 	type ProviderSettings,
 	DEFAULT_CONSECUTIVE_MISTAKE_LIMIT,
-	openAiNativeDefaultModelId,
-	anthropicDefaultModelId,
-	geminiDefaultModelId,
 } from "@coder/types"
 
 import {
@@ -224,9 +221,9 @@ const ApiOptions = ({
 					}
 				>
 			> = {
-				anthropic: { field: "apiModelId", default: anthropicDefaultModelId },
-				"openai-native": { field: "apiModelId", default: openAiNativeDefaultModelId },
-				gemini: { field: "apiModelId", default: geminiDefaultModelId },
+				anthropic: { field: "apiModelId", default: "" },
+				"openai-native": { field: "apiModelId", default: "" },
+				gemini: { field: "apiModelId", default: "" },
 				openai: { field: "openAiModelId" },
 			}
 
