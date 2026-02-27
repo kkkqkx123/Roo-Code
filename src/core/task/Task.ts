@@ -58,7 +58,7 @@ import { maybeRemoveImageBlocks } from "../../api/transform/image-cleaning"
 // shared
 import { findLastIndex } from "../../shared/array"
 import { t } from "../../i18n"
-import { ClineAskResponse } from "../../shared/WebviewMessage"
+import type { ClineAskResponse } from "@coder/types"
 import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
 import { DiffStrategy, type ToolUse, type ToolParamName, toolParamNames } from "../../shared/tools"
 import { getModelMaxOutputTokens } from "../../shared/api"

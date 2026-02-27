@@ -6,7 +6,7 @@ import type { EmbedderProvider } from "@coder/types"
 
 import { t } from "../../i18n"
 
-import { getDefaultModelId, getModelDimension } from "../../shared/embeddingModels"
+import { getDefaultModelId, getModelDimension } from "@coder/types"
 import { Package } from "../../shared/package"
 
 import { RooIgnoreController } from "../../core/ignore/RooIgnoreController"

@@ -1,7 +1,5 @@
-import { GlobalState, ClineMessage, ClineAsk } from "@coder/types"
-
-import { getApiMetrics } from "../../shared/getApiMetrics"
-import { ClineAskResponse } from "../../shared/WebviewMessage"
+import { GlobalState, ClineMessage, ClineAsk, ClineAskResponse } from "@coder/types"
+import { consolidateTokenUsage as getApiMetrics } from "@coder/core/browser"
 
 export interface AutoApprovalResult {
 	shouldProceed: boolean

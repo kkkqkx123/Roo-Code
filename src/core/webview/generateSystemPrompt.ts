@@ -1,5 +1,5 @@
 import * as vscode from "vscode"
-import { WebviewMessage } from "../../shared/WebviewMessage"
+import type { WebviewMessage } from "@coder/types"
 import { defaultModeSlug } from "../../shared/modes"
 import { buildApiHandler } from "../../api"
 

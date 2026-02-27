@@ -13,9 +13,11 @@
  * and runtime bundling work correctly.
  */
 
-import type { AssistantMessageContent } from "../../assistant-message/types"
 import type Anthropic from "@anthropic-ai/sdk"
-import type { ModelInfo } from "../../../shared/api"
+import type { AssistantMessageContent } from "../../assistant-message/types"
+import type { ModelInfo } from "@coder/types"
+import { ApiMessage, StreamChunk, StreamingErrorType, TokenBreakdown } from "@coder/types"
+import { GroundingSource, TokenUsage } from "."
 
 // ============================================================================
 // Re-exported Types and Values from @coder/types
@@ -54,11 +56,15 @@ export type {
 
 // Streaming core types - all are type-only, with aliases for backward compatibility
 export type {
-	ApiMessage,
-	StreamingTokenUsage as TokenUsage,
-	TokenBreakdown,
-	StreamingGroundingSource as GroundingSource,
+  ApiMessage,
+  StreamingTokenUsage as TokenUsage,
+  TokenBreakdown,
+  StreamingGroundingSource as GroundingSource,
+  ModelInfo,
 } from "@coder/types"
+
+// Re-export AssistantMessageContent from local module
+export type { AssistantMessageContent } from "../../assistant-message/types"
 
 // ============================================================================
 // Streaming Result Types (Module-specific)

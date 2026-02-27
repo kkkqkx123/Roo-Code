@@ -2,7 +2,7 @@
  * Defines profiles for different embedding models, including their dimensions.
  */
 
-import type { EmbedderProvider, EmbeddingModelProfiles } from "@coder/types"
+import type { EmbedderProvider, EmbeddingModelProfiles } from "./embedding.js"
 
 // Example profiles - expand this list as needed
 export const EMBEDDING_MODEL_PROFILES: EmbeddingModelProfiles = {

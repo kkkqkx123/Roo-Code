@@ -4,7 +4,7 @@ import { type ModeConfig, type PromptComponent, type CustomModePrompts, type Tod
 
 import { Mode, modes, defaultModeSlug, getModeBySlug, getGroupName, getModeSelection } from "../../shared/modes"
 import { DiffStrategy } from "../../shared/tools"
-import { formatLanguage } from "../../shared/language"
+import { formatLanguage } from "@coder/types"
 import { isEmpty } from "../../utils/object"
 
 import { McpHub } from "../../services/mcp/McpHub"

@@ -4,7 +4,7 @@ import { Task } from "../task/Task"
 
 import { getCheckpointService } from "./checkpoint-service"
 
-import { getApiMetrics } from "../../shared/getApiMetrics"
+import { consolidateTokenUsage as getApiMetrics } from "@coder/core/browser"
 
 /**
  * Options for checkpoint restore operation

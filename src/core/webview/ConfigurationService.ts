@@ -29,7 +29,7 @@ import {
 
 import { Package } from "../../shared/package"
 import { Mode, defaultModeSlug } from "../../shared/modes"
-import { formatLanguage } from "../../shared/language"
+import { formatLanguage } from "@coder/types"
 import { Terminal } from "../../integrations/terminal/Terminal"
 
 import { ContextProxy } from "../config/ContextProxy"

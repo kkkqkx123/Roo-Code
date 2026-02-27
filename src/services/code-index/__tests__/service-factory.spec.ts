@@ -12,7 +12,7 @@ vitest.mock("../embedders/gemini")
 vitest.mock("../vector-store/qdrant-client")
 
 // Mock the embedding models module
-vitest.mock("../../../shared/embeddingModels", () => ({
+vitest.mock("@coder/types", () => ({
 	getDefaultModelId: vitest.fn(),
 	getModelDimension: vitest.fn(),
 }))
@@ -23,7 +23,7 @@ const MockedGeminiEmbedder = GeminiEmbedder as MockedClass<typeof GeminiEmbedder
 const MockedQdrantVectorStore = QdrantVectorStore as MockedClass<typeof QdrantVectorStore>
 
 // Import the mocked functions
-import { getDefaultModelId, getModelDimension } from "../../../shared/embeddingModels"
+import { getDefaultModelId, getModelDimension } from "@coder/types"
 const mockGetDefaultModelId = getDefaultModelId as MockedFunction<typeof getDefaultModelId>
 const mockGetModelDimension = getModelDimension as MockedFunction<typeof getModelDimension>
 

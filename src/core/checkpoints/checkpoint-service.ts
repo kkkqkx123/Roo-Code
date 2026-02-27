@@ -10,7 +10,7 @@ import { t } from "../../i18n"
 
 import { CheckpointServiceOptions, RepoPerTaskCheckpointService } from "../../services/checkpoints"
 import { DIFF_VIEW_URI_SCHEME } from "../../integrations/editor/DiffViewProvider"
-import { getApiMetrics } from "../../shared/getApiMetrics"
+import { consolidateTokenUsage as getApiMetrics } from "@coder/core/browser"
 
 // Re-export types for public API
 export type { CheckpointRestoreOptions } from "./checkpoint-restore"

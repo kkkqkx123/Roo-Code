@@ -2,10 +2,8 @@ import NodeCache from "node-cache"
 import getFolderSize from "get-folder-size"
 
 import type { ClineMessage, HistoryItem } from "@coder/types"
-
-import { combineApiRequests } from "../../shared/combineApiRequests"
-import { combineCommandSequences } from "../../shared/combineCommandSequences"
-import { getApiMetrics } from "../../shared/getApiMetrics"
+import { consolidateApiRequests as combineApiRequests, consolidateCommands as combineCommandSequences } from "@coder/core/browser"
+import { consolidateTokenUsage as getApiMetrics } from "@coder/core/browser"
 import { findLastIndex } from "../../shared/array"
 import { getTaskDirectoryPath } from "../../utils/storage"
 import { t } from "../../i18n"

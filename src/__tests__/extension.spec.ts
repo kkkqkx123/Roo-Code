@@ -65,8 +65,9 @@ vi.mock("../shared/package", () => ({
 	},
 }))
 
-vi.mock("../shared/language", () => ({
+vi.mock("@coder/types", () => ({
 	formatLanguage: vi.fn().mockReturnValue("en"),
+	...await vi.importActual("@coder/types"),
 }))
 
 vi.mock("../core/config/ContextProxy", () => ({

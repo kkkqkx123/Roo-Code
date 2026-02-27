@@ -8,7 +8,7 @@ import {
 	MAX_BATCH_RETRIES as MAX_RETRIES,
 	INITIAL_RETRY_DELAY_MS as INITIAL_DELAY_MS,
 } from "../constants"
-import { getModelQueryPrefix } from "../../../shared/embeddingModels"
+import { getModelQueryPrefix } from "@coder/types"
 import { t } from "../../../i18n"
 import { withValidationErrorHandling, formatEmbeddingError, HttpError } from "../shared/validation-helpers"
 import { handleOpenAIError } from "../../../api/providers/utils/openai-error-handler"

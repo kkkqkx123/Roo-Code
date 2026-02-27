@@ -16,7 +16,7 @@ import {
 	StreamAbortedError,
 	StreamProviderError,
 	TokenError,
-} from "./types"
+} from "@coder/types"
 
 export class StreamingErrorHandler {
 	private config: StreamingProcessorConfig
@@ -83,7 +83,8 @@ export class StreamingErrorHandler {
 
 		switch (streamingError.code) {
 			case "STREAM_ABORTED":
-				cancelReason = streamingError.reason || "user_cancelled"
+				// StreamAbortedError has a 'reason' property
+				cancelReason = (streamingError as any).reason || "user_cancelled"
 				shouldRetry = false
 				break
 

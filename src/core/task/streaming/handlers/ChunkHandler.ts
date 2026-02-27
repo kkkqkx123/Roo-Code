@@ -5,18 +5,12 @@
  * Each chunk type (reasoning, text, tool_call, etc.) has its own handler implementation.
  */
 
-import type { ChunkHandlerContext, StreamChunk } from "../types"
+import type { ChunkHandlerContext, StreamChunk, ChunkHandler } from "../types"
 
 /**
  * Base handler interface for processing stream chunks
+ * Note: ChunkHandler interface is defined in ../types.ts
  */
-export interface ChunkHandler {
-	/**
-	 * Handle a stream chunk
-	 * @param chunk The stream chunk to process
-	 */
-	handle(chunk: StreamChunk): Promise<void>
-}
 
 /**
  * Base class for chunk handlers with common functionality

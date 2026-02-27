@@ -6,7 +6,7 @@ import matter from "gray-matter"
 import type { ClineProvider } from "../../core/webview/ClineProvider"
 import { getGlobalRooDirectory, getGlobalAgentsDirectory, getProjectAgentsDirectoryForCwd } from "../roo-config"
 import { directoryExists, fileExists } from "../roo-config"
-import { SkillMetadata, SkillContent } from "../../shared/skills"
+import type { SkillMetadata, SkillContent } from "@coder/types"
 import { modes, getAllModes } from "../../shared/modes"
 import {
 	validateSkillName as validateSkillNameShared,

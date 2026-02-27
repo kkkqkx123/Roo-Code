@@ -7,7 +7,7 @@ import {
 	isNonBlockingAsk,
 } from "@coder/types"
 
-import { ClineAskResponse } from "../../shared/WebviewMessage"
+import type { ClineAskResponse } from "@coder/types"
 
 import { isWriteToolAction, isReadOnlyToolAction } from "./tools"
 import { isMcpToolAlwaysAllowed } from "./mcp"

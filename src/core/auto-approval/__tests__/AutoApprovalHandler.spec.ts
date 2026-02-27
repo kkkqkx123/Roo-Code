@@ -2,11 +2,11 @@ import { GlobalState, ClineMessage } from "@coder/types"
 
 import { AutoApprovalHandler } from "../AutoApprovalHandler"
 
-vi.mock("../../../shared/getApiMetrics", () => ({
-	getApiMetrics: vi.fn(),
+vi.mock("@coder/core/browser", () => ({
+	consolidateTokenUsage: vi.fn(),
 }))
 
-import { getApiMetrics } from "../../../shared/getApiMetrics"
+import { consolidateTokenUsage as getApiMetrics } from "@coder/core/browser"
 
 describe("AutoApprovalHandler", () => {
 	let handler: AutoApprovalHandler

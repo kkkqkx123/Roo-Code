@@ -27,8 +27,8 @@ import {
 import { Package } from "../../shared/package"
 import { Mode, defaultModeSlug } from "../../shared/modes"
 import { experimentDefault } from "../../shared/experiments"
-import { formatLanguage } from "../../shared/language"
-import { EMBEDDING_MODEL_PROFILES } from "../../shared/embeddingModels"
+import { formatLanguage } from "@coder/types"
+import { EMBEDDING_MODEL_PROFILES } from "@coder/types"
 import { Terminal } from "../../integrations/terminal/Terminal"
 
 import { ContextProxy } from "../config/ContextProxy"

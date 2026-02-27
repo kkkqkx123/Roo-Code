@@ -7,7 +7,7 @@ import { isLanguage } from "@coder/types"
 
 import type { SystemPromptSettings } from "../types"
 
-import { LANGUAGES } from "../../../shared/language"
+import { LANGUAGES } from "@coder/types"
 import {
 	getRooDirectoriesForCwd,
 	getAllRooDirectoriesForCwd,

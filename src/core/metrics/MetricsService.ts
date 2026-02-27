@@ -1,7 +1,5 @@
 import { type ToolName, type TokenUsage, type ToolUsage, type ClineMessage } from "@coder/types"
-import { combineApiRequests } from "../../shared/combineApiRequests"
-import { combineCommandSequences } from "../../shared/combineCommandSequences"
-import { getApiMetrics } from "../../shared/getApiMetrics"
+import { consolidateApiRequests as combineApiRequests, consolidateCommands as combineCommandSequences, consolidateTokenUsage as getApiMetrics } from "@coder/core/browser"
 import EventEmitter from "events"
 import debounce from "lodash.debounce"
 

@@ -6,7 +6,7 @@ import {
 	MAX_BATCH_RETRIES as MAX_RETRIES,
 	INITIAL_RETRY_DELAY_MS as INITIAL_DELAY_MS,
 } from "../constants"
-import { getDefaultModelId, getModelQueryPrefix } from "../../../shared/embeddingModels"
+import { getDefaultModelId, getModelQueryPrefix } from "@coder/types"
 import { t } from "../../../i18n"
 import { withValidationErrorHandling, HttpError, formatEmbeddingError } from "../shared/validation-helpers"
 import { Mutex } from "async-mutex"

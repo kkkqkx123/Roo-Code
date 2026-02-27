@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest"
 import { getEnvironmentDetails } from "../getEnvironmentDetails"
 import { getFullModeDetails } from "../../../shared/modes"
 import { isToolAllowedForMode } from "../../tools/validateToolUse"
-import { getApiMetrics } from "../../../shared/getApiMetrics"
+import { consolidateTokenUsage as getApiMetrics } from "@coder/core/browser"
 import { listFiles } from "../../../services/glob/list-files"
 import { TerminalRegistry } from "../../../integrations/terminal/TerminalRegistry"
 import { Terminal } from "../../../integrations/terminal/Terminal"
@@ -43,7 +43,9 @@ vi.mock("execa", () => ({
 }))
 
 vi.mock("../../../shared/modes")
-vi.mock("../../../shared/getApiMetrics")
+vi.mock("@coder/core/browser", () => ({
+	consolidateTokenUsage: vi.fn(),
+}))
 vi.mock("../../../services/glob/list-files")
 vi.mock("../../../integrations/terminal/TerminalRegistry")
 vi.mock("../../../integrations/terminal/Terminal")

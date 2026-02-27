@@ -4,7 +4,7 @@ import * as path from "path"
 import * as vscode from "vscode"
 import { isBinaryFile } from "isbinaryfile"
 
-import { mentionRegexGlobal, commandRegexGlobal, unescapeSpaces } from "../../shared/context-mentions"
+import { mentionRegexGlobal, commandRegexGlobal, unescapeSpaces } from "@coder/types"
 
 import { getCommitInfo, getWorkingState } from "../../utils/git"
 
