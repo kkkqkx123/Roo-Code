@@ -96,7 +96,14 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 				const currentCount = (task.consecutiveMistakeCountForApplyDiff.get(relPath) || 0) + 1
 				task.consecutiveMistakeCountForApplyDiff.set(relPath, currentCount)
 
-				const errorReason = diffResult.failParts?.[0]?.error ?? diffResult.error ?? "Unknown diff apply error"
+				// Extract error reason from failParts or the main error
+				let errorReason = "Unknown diff apply error"
+				if (diffResult.failParts && diffResult.failParts.length > 0 && diffResult.failParts[0].success === false) {
+					errorReason = (diffResult.failParts[0] as Extract<typeof diffResult.failParts[number], { success: false }>).error ?? errorReason
+				} else if ("error" in diffResult && diffResult.error) {
+					errorReason = diffResult.error
+				}
+
 				const error = new DiffApplyFailedError("apply_diff", relPath, errorReason)
 
 				if (currentCount >= 2) {

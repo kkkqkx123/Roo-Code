@@ -58,6 +58,7 @@ import { maybeRemoveImageBlocks } from "../../api/transform/image-cleaning"
 // shared
 import { findLastIndex } from "../../shared/array"
 import { t } from "../../i18n"
+import type { ApiMessage } from "../task-persistence"
 import type { ClineAskResponse } from "@coder/types"
 import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
 import { DiffStrategy, type ToolUse, type ToolParamName, toolParamNames } from "../../shared/tools"
@@ -118,6 +119,7 @@ import { MessageManager } from "../message-manager"
 import { validateAndFixToolResultIds } from "./validateToolResultIds"
 import { mergeConsecutiveApiMessages } from "./mergeConsecutiveApiMessages"
 import { MetricsService } from "../metrics/MetricsService"
+import { readApiMessages, saveApiMessages, readTaskMessages, saveTaskMessages, taskMetadata } from "../task-persistence"
 import {
 	StreamingProcessor,
 	StreamingRetryError,
@@ -528,7 +530,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 		// Forward tool failure events from metrics service to task
 		this.metricsService.on("toolFailed", (taskId, toolName, error) => {
-			this.emit(CoderEventName.TaskToolFailed, taskId, toolName, error)
+			const errorMessage = typeof error === "string" ? error : error.message
+			this.emit(CoderEventName.TaskToolFailed, taskId, toolName, errorMessage)
 		})
 
 		onCreated?.(this)
@@ -3345,6 +3348,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			settings: this.apiConfiguration,
 		})
 
+		// Validate required model info fields
+		if (modelInfo.contextWindow === undefined || modelInfo.contextWindow === null) {
+			throw new Error(
+				`Model info for ${this.api.getModel().id} is missing required field 'contextWindow'. ` +
+				`Please ensure the model configuration is complete.`
+			)
+		}
+
 		const contextWindow = modelInfo.contextWindow
 
 		// Get the current profile ID using the helper method
@@ -3536,6 +3547,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				settings: this.apiConfiguration,
 			})
 
+			// Validate required model info fields
+			if (modelInfo.contextWindow === undefined || modelInfo.contextWindow === null) {
+				throw new Error(
+					`Model info for ${this.api.getModel().id} is missing required field 'contextWindow'. ` +
+					`Please ensure the model configuration is complete.`
+				)
+			}
+
 			const contextWindow = modelInfo.contextWindow
 
 			// Get the current profile ID using the helper method
@@ -3625,7 +3644,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					messages: this.apiConversationHistory,
 					totalTokens: contextTokens,
 					maxTokens,
-					contextWindow,
+					contextWindow: modelInfo.contextWindow,
 					apiHandler: this.api,
 					autoCondenseContext,
 					autoCondenseContextPercent,

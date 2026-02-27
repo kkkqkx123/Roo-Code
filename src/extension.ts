@@ -3,24 +3,25 @@
 /**
  * VSCode extension entry point.
  * 
- * This is an ES Module that is dynamically imported by extension.cjs.
- * The vscode module is passed via globalThis by the CommonJS wrapper.
+ * The vscode module is passed via globalThis by the esbuild banner.
  * 
  * @see https://jan.miksovsky.com/posts/2025/03-17-vs-code-extension
  */
 
-// Access vscode from globalThis (passed by extension.cjs wrapper)
-// @ts-ignore - globalThis.vscode is set by the CommonJS wrapper
-const vscode = globalThis.vscode;
+import type * as vscodeTypes from "vscode"
+
+// Access vscode from globalThis (set by esbuild banner)
+// @ts-ignore - globalThis.vscode is set by the esbuild banner
+const vscode: typeof vscodeTypes = globalThis.vscode;
 
 import * as dotenvx from "@dotenvx/dotenvx"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
 
-// Use __filename and __dirname from globalThis (set by extension.cjs wrapper)
+// Use __filename and __dirname from globalThis (set by esbuild banner)
 // This is needed because import.meta.url is not available in bundled CJS
-// @ts-ignore - globalThis.__filename and globalThis.__dirname are set by the CommonJS wrapper
+// @ts-ignore - globalThis.__filename and globalThis.__dirname are set by the esbuild banner
 let __filename;
 let __dirname;
 
@@ -55,7 +56,7 @@ import { createOutputChannelLogger, createDualLogger } from "./utils/outputChann
 import { initializeNetworkProxy } from "./utils/networkProxy"
 
 import { Package } from "./shared/package"
-import { formatLanguage } from "./shared/language"
+import { formatLanguage } from "@coder/types"
 import { ContextProxy } from "./core/config/ContextProxy"
 import { ClineProvider } from "./core/webview/ClineProvider"
 import { DIFF_VIEW_URI_SCHEME } from "./integrations/editor/DiffViewProvider"

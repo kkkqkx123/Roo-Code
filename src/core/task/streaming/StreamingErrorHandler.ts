@@ -1,8 +1,11 @@
 /**
  * Streaming Error Handler
- * 
+ *
  * Handles errors during streaming processing.
  * Manages stream abortion, retry logic, and backoff strategies.
+ *
+ * Supports both legacy StreamingError types and new ApiProviderError types
+ * for consistent error handling across all providers.
  */
 
 import { serializeError } from "serialize-error"
@@ -16,6 +19,18 @@ import {
 	StreamAbortedError,
 	StreamProviderError,
 	TokenError,
+	ApiProviderError,
+	AuthenticationError,
+	RateLimitError,
+	ServerError,
+	ConnectionError,
+	RequestTimeoutError,
+	BadRequestError,
+	PermissionDeniedError,
+	NotFoundError,
+	UnprocessableEntityError,
+	isApiProviderError,
+	isRetryableError,
 } from "@coder/types"
 
 export class StreamingErrorHandler {
@@ -80,41 +95,19 @@ export class StreamingErrorHandler {
 		const streamingError = this.normalizeError(error)
 		let cancelReason: string
 		let shouldRetry: boolean
+		let retryDelay: number | undefined
 
-		switch (streamingError.code) {
-			case "STREAM_ABORTED":
-				// StreamAbortedError has a 'reason' property
-				cancelReason = (streamingError as any).reason || "user_cancelled"
-				shouldRetry = false
-				break
-
-			case "INVALID_STREAM":
-				cancelReason = "invalid_stream"
-				shouldRetry = false
-				break
-
-			case "STATE_ERROR":
-				cancelReason = "state_error"
-				shouldRetry = false
-				break
-
-			case "STREAM_TIMEOUT":
-				cancelReason = "timeout"
-				shouldRetry = true
-				break
-
-			case "TOKEN_ERROR":
-				cancelReason = "token_error"
-				shouldRetry = true
-				break
-
-			case "CHUNK_HANDLER_ERROR":
-			case "TOOL_CALL_ERROR":
-			case "STREAM_PROVIDER_ERROR":
-			default:
-				cancelReason = "streaming_failed"
-				shouldRetry = true
-				break
+		// Handle ApiProviderError types (new standardized errors)
+		if (isApiProviderError(streamingError)) {
+			const result = this.handleApiProviderError(streamingError)
+			cancelReason = result.cancelReason
+			shouldRetry = result.shouldRetry
+			retryDelay = result.retryDelay
+		} else {
+			// Handle legacy StreamingError types
+			const result = this.handleStreamingError(streamingError)
+			cancelReason = result.cancelReason
+			shouldRetry = result.shouldRetry
 		}
 
 		const rawErrorMessage = this.extractErrorMessage(error)
@@ -135,9 +128,148 @@ export class StreamingErrorHandler {
 		// Stream failed, should retry
 		return {
 			shouldRetry,
-			retryDelay: await this.calculateBackoffDelay(),
+			retryDelay: retryDelay ?? (await this.calculateBackoffDelay()),
 			abortReason: cancelReason,
 			errorMessage: streamingFailedMessage,
+		}
+	}
+
+	/**
+	 * Handle ApiProviderError types (new standardized errors)
+	 */
+	private handleApiProviderError(error: ApiProviderError): {
+		cancelReason: string
+		shouldRetry: boolean
+		retryDelay?: number
+	} {
+		// Authentication errors - should not retry
+		if (error instanceof AuthenticationError) {
+			return {
+				cancelReason: "authentication_failed",
+				shouldRetry: false,
+			}
+		}
+
+		// Permission denied - should not retry
+		if (error instanceof PermissionDeniedError) {
+			return {
+				cancelReason: "permission_denied",
+				shouldRetry: false,
+			}
+		}
+
+		// Bad request - should not retry (client error)
+		if (error instanceof BadRequestError) {
+			return {
+				cancelReason: "bad_request",
+				shouldRetry: false,
+			}
+		}
+
+		// Not found - should not retry
+		if (error instanceof NotFoundError) {
+			return {
+				cancelReason: "not_found",
+				shouldRetry: false,
+			}
+		}
+
+		// Unprocessable entity - should not retry
+		if (error instanceof UnprocessableEntityError) {
+			return {
+				cancelReason: "unprocessable_entity",
+				shouldRetry: false,
+			}
+		}
+
+		// Rate limit - should retry with delay
+		if (error instanceof RateLimitError) {
+			return {
+				cancelReason: "rate_limited",
+				shouldRetry: true,
+				retryDelay: error.retryAfter ? error.retryAfter * 1000 : undefined,
+			}
+		}
+
+		// Server errors - should retry
+		if (error instanceof ServerError) {
+			return {
+				cancelReason: "server_error",
+				shouldRetry: true,
+			}
+		}
+
+		// Connection errors - should retry
+		if (error instanceof ConnectionError) {
+			return {
+				cancelReason: "connection_error",
+				shouldRetry: true,
+			}
+		}
+
+		// Request timeout - should retry
+		if (error instanceof RequestTimeoutError) {
+			return {
+				cancelReason: "timeout",
+				shouldRetry: true,
+			}
+		}
+
+		// Generic API provider error - use isRetryableError helper
+		return {
+			cancelReason: "api_error",
+			shouldRetry: isRetryableError(error),
+		}
+	}
+
+	/**
+	 * Handle legacy StreamingError types
+	 */
+	private handleStreamingError(error: StreamingErrorType): {
+		cancelReason: string
+		shouldRetry: boolean
+	} {
+		switch (error.code) {
+			case "STREAM_ABORTED":
+				// StreamAbortedError has a 'reason' property
+				return {
+					cancelReason: (error as any).reason || "user_cancelled",
+					shouldRetry: false,
+				}
+
+			case "INVALID_STREAM":
+				return {
+					cancelReason: "invalid_stream",
+					shouldRetry: false,
+				}
+
+			case "STATE_ERROR":
+				return {
+					cancelReason: "state_error",
+					shouldRetry: false,
+				}
+
+			case "STREAM_TIMEOUT":
+				return {
+					cancelReason: "timeout",
+					shouldRetry: true,
+				}
+
+			case "TOKEN_ERROR":
+				return {
+					cancelReason: "token_error",
+					shouldRetry: true,
+				}
+
+			case "CHUNK_HANDLER_ERROR":
+			case "TOOL_CALL_ERROR":
+			case "STREAM_PROVIDER_ERROR":
+			case "API_PROVIDER_ERROR":
+			default:
+				return {
+					cancelReason: "streaming_failed",
+					shouldRetry: true,
+				}
 		}
 	}
 
@@ -197,6 +329,14 @@ export class StreamingErrorHandler {
 	 */
 	private extractErrorMessage(error: unknown): string {
 		if (error instanceof Error) {
+			// For ApiProviderError, include provider name and request ID
+			if (isApiProviderError(error)) {
+				let message = error.message
+				if (error.requestId) {
+					message += ` (Request ID: ${error.requestId})`
+				}
+				return message
+			}
 			return error.message
 		}
 		return JSON.stringify(serializeError(error), null, 2)

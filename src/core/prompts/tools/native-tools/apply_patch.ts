@@ -54,11 +54,6 @@ const apply_patch = {
 					description:
 						"The complete patch text in the apply_patch format, starting with '*** Begin Patch' and ending with '*** End Patch'.",
 				},
-				workdir: {
-					type: ["string", "null"],
-					description:
-						"Optional working directory for the patch operations. If not provided, uses the current workspace directory.",
-				},
 			},
 			required: ["patch"],
 			additionalProperties: false,

@@ -161,3 +161,53 @@ export class RooIgnoreViolationError extends FileOperationError {
 		this.name = "RooIgnoreViolationError"
 	}
 }
+
+/**
+ * Directory creation failed.
+ */
+export class DirectoryCreationError extends FileOperationError {
+	constructor(toolName: ToolName, dirPath: string, reason: string) {
+		super(
+			`Failed to create directory: ${dirPath}`,
+			toolName,
+			dirPath,
+			"Ensure parent directory exists and you have write permission. " +
+			"Verify the file path is within the workspace directory."
+		)
+		this.name = "DirectoryCreationError"
+		this.message = `${this.message}\nReason: ${reason}`
+	}
+}
+
+/**
+ * Binary file error - cannot read/parse binary content.
+ */
+export class BinaryFileError extends FileOperationError {
+	constructor(toolName: ToolName, filePath: string, format?: string) {
+		super(
+			`Cannot read binary file: ${filePath}${format ? ` (format: ${format})` : ""}`,
+			toolName,
+			filePath,
+			"Binary files cannot be read as text. " +
+			"For images, ensure the model supports vision capabilities. " +
+			"For other binary formats, use appropriate extraction tools."
+		)
+		this.name = "BinaryFileError"
+	}
+}
+
+/**
+ * File too large to read in one operation.
+ */
+export class FileTooLargeError extends FileOperationError {
+	constructor(toolName: ToolName, filePath: string, size: number, maxSize: number) {
+		super(
+			`File too large: ${filePath} (${size} bytes exceeds ${maxSize} bytes limit)`,
+			toolName,
+			filePath,
+			"Read the file in chunks using offset/limit parameters, " +
+			"or ask the user to increase the file size limit."
+		)
+		this.name = "FileTooLargeError"
+	}
+}

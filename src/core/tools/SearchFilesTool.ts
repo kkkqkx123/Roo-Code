@@ -10,7 +10,12 @@ import { regexSearchFiles } from "../../services/ripgrep"
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
-import { MissingParameterError } from "../errors/tools/index.js"
+import {
+	MissingParameterError,
+	DirectoryNotFoundToolError,
+	PermissionDeniedToolError,
+	RooIgnoreViolationError,
+} from "../errors/tools/index.js"
 
 interface SearchFilesParams {
 	path: string
@@ -18,6 +23,30 @@ interface SearchFilesParams {
 	file_pattern?: string | null
 }
 
+/**
+ * SearchFilesTool - Search for files matching a regex pattern.
+ * 
+ * Note: This tool currently supports single directory search.
+ * Future enhancement: Multi-directory search could use ToolExecutionResult
+ * to collect errors from each directory independently.
+ * 
+ * Example multi-directory implementation:
+ * ```typescript
+ * const result = createMutableToolResult<SearchResult>()
+ * for (const dirPath of directories) {
+ *   try {
+ *     const matches = await regexSearchFiles(cwd, dirPath, regex, pattern, rooIgnore)
+ *     result.addSuccess({ path: dirPath, matches })
+ *   } catch (error) {
+ *     result.addError(new DirectoryNotFoundToolError("search_files", dirPath))
+ *   }
+ * }
+ * if (result.hasErrors()) {
+ *   result.errors.forEach(e => task.recordToolError("search_files", e.toLogEntry()))
+ * }
+ * pushToolResult(result.toLLMReport())
+ * ```
+ */
 export class SearchFilesTool extends BaseTool<"search_files"> {
 	readonly name = "search_files" as const
 
@@ -52,6 +81,17 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 		const absolutePath = path.resolve(task.cwd, relDirPath)
 		const isOutsideWorkspace = isPathOutsideWorkspace(absolutePath)
 
+		// Check RooIgnore access
+		const accessAllowed = task.rooIgnoreController?.validateAccess(relDirPath)
+		if (!accessAllowed) {
+			const error = new RooIgnoreViolationError("search_files", relDirPath)
+			await task.say("rooignore_error", relDirPath)
+			task.recordToolError("search_files", error.toLogEntry())
+			task.didToolFailInCurrentTurn = true
+			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
+			return
+		}
+
 		const sharedMessageProps: ClineSayTool = {
 			tool: "searchFiles",
 			path: getReadablePath(task.cwd, relDirPath),
@@ -72,8 +112,27 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 
 			pushToolResult(results)
 		} catch (error) {
-			await handleError("searching files", error as Error)
+			// Map error to appropriate ToolError type
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			const toolError = this.mapToToolError(relDirPath, errorMessage)
+			task.recordToolError("search_files", toolError.toLogEntry())
+			task.didToolFailInCurrentTurn = true
+			pushToolResult(formatResponse.toolErrorFromInstance(toolError.toLLMMessage()))
 		}
+	}
+
+	/**
+	 * Map generic errors to appropriate ToolError types.
+	 */
+	private mapToToolError(path: string, errorMessage: string) {
+		if (errorMessage.includes("ENOENT") || errorMessage.includes("no such file or directory")) {
+			return new DirectoryNotFoundToolError("search_files", path)
+		}
+		if (errorMessage.includes("EACCES") || errorMessage.includes("permission denied")) {
+			return new PermissionDeniedToolError("search_files", path, "system_permission")
+		}
+		// Default to generic error
+		return new DirectoryNotFoundToolError("search_files", path)
 	}
 
 	override async handlePartial(task: Task, block: ToolUse<"search_files">): Promise<void> {

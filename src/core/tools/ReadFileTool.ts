@@ -34,7 +34,16 @@ import {
 	ImageMemoryTracker,
 } from "./helpers/imageHelpers"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
-import { MissingParameterError, RooIgnoreViolationError } from "../errors/tools/index.js"
+import {
+	MissingParameterError,
+	RooIgnoreViolationError,
+	FileNotFoundToolError,
+	PermissionDeniedToolError,
+	BinaryFileError,
+	createMutableToolResult,
+	type ToolExecutionResult,
+	type ToolError,
+} from "../errors/tools/index.js"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -190,13 +199,14 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 					// Check if path is a directory
 					const stats = await fs.stat(fullPath)
 					if (stats.isDirectory()) {
-						const errorMsg = `Cannot read '${relPath}' because it is a directory. Use list_files tool instead.`
+						const error = new PermissionDeniedToolError("read_file", relPath, "system_permission")
+						error.message = `Cannot read '${relPath}' because it is a directory. Use list_files tool instead.`
+						task.recordToolError("read_file", error.toLogEntry())
 						updateFileResult(relPath, {
 							status: "error",
-							error: errorMsg,
-							nativeContent: `File: ${relPath}\nError: ${errorMsg}`,
+							error: formatResponse.toolErrorFromInstance(error.toLLMMessage()),
+							nativeContent: `File: ${relPath}\nError: ${error.message}`,
 						})
-						await task.say("error", `Error reading file ${relPath}: ${errorMsg}`)
 						continue
 					}
 
@@ -231,12 +241,14 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 					})
 				} catch (error) {
 					const errorMsg = error instanceof Error ? error.message : String(error)
+					const toolError = new FileNotFoundToolError("read_file", relPath)
+					toolError.message = `Error reading file: ${errorMsg}`
+					task.recordToolError("read_file", toolError.toLogEntry())
 					updateFileResult(relPath, {
 						status: "error",
-						error: `Error reading file: ${errorMsg}`,
+						error: formatResponse.toolErrorFromInstance(toolError.toLLMMessage()),
 						nativeContent: `File: ${relPath}\nError: ${errorMsg}`,
 					})
-					await task.say("error", `Error reading file ${relPath}: ${errorMsg}`)
 				}
 			}
 
@@ -251,13 +263,16 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			const relPath = filePath || "unknown"
 			const errorMsg = error instanceof Error ? error.message : String(error)
 
+			const toolError = new FileNotFoundToolError("read_file", relPath)
+			toolError.message = `Error reading file: ${errorMsg}`
+			task.recordToolError("read_file", toolError.toLogEntry())
+
 			updateFileResult(relPath, {
 				status: "error",
-				error: `Error reading file: ${errorMsg}`,
+				error: formatResponse.toolErrorFromInstance(toolError.toLLMMessage()),
 				nativeContent: `File: ${relPath}\nError: ${errorMsg}`,
 			})
 
-			await task.say("error", `Error reading file ${relPath}: ${errorMsg}`)
 			task.didToolFailInCurrentTurn = true
 
 			const errorResult = fileResults
@@ -265,7 +280,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				.map((r) => r.nativeContent)
 				.join("\n\n---\n\n")
 
-			pushToolResult(errorResult || `Error: ${errorMsg}`)
+			pushToolResult(errorResult || formatResponse.toolErrorFromInstance(toolError.toLLMMessage()))
 		}
 	}
 
@@ -384,12 +399,14 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				return
 			} catch (error) {
 				const errorMsg = error instanceof Error ? error.message : String(error)
+				const toolError = new BinaryFileError("read_file", relPath, "image")
+				toolError.message = `Error reading image file: ${errorMsg}`
+				task.recordToolError("read_file", toolError.toLogEntry())
 				updateFileResult(relPath, {
 					status: "error",
-					error: `Error reading image file: ${errorMsg}`,
+					error: formatResponse.toolErrorFromInstance(toolError.toLLMMessage()),
 					nativeContent: `File: ${relPath}\nError: ${errorMsg}`,
 				})
-				await task.say("error", `Error reading image file ${relPath}: ${errorMsg}`)
 				return
 			}
 		}
@@ -412,18 +429,22 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				return
 			} catch (error) {
 				const errorMsg = error instanceof Error ? error.message : String(error)
+				const toolError = new BinaryFileError("read_file", relPath, fileExtension.slice(1))
+				toolError.message = `Error extracting text: ${errorMsg}`
+				task.recordToolError("read_file", toolError.toLogEntry())
 				updateFileResult(relPath, {
 					status: "error",
-					error: `Error extracting text: ${errorMsg}`,
+					error: formatResponse.toolErrorFromInstance(toolError.toLLMMessage()),
 					nativeContent: `File: ${relPath}\nError: ${errorMsg}`,
 				})
-				await task.say("error", `Error extracting text from ${relPath}: ${errorMsg}`)
 				return
 			}
 		}
 
 		// Unsupported binary format
 		const fileFormat = fileExtension.slice(1) || "bin"
+		const toolError = new BinaryFileError("read_file", relPath, fileFormat)
+		task.recordToolError("read_file", toolError.toLogEntry())
 		updateFileResult(relPath, {
 			notice: `Binary file format: ${fileFormat}`,
 			nativeContent: `File: ${relPath}\nBinary file (${fileFormat}) - content not displayed`,
@@ -677,6 +698,8 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 	/**
 	 * Execute legacy multi-file format for backward compatibility.
 	 * This handles the old format: { files: [{ path: string, lineRanges?: [...] }] }
+	 * 
+	 * Uses ToolExecutionResult to collect all errors and provide unified reporting.
 	 */
 	private async executeLegacy(fileEntries: FileEntry[], task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { pushToolResult } = callbacks
@@ -695,8 +718,14 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 
 		const supportsImages = modelInfo.supportsImages ?? false
 
-		// Process each file sequentially (legacy behavior)
-		const results: string[] = []
+		// Use ToolExecutionResult for batch file processing
+		interface FileReadSuccess {
+			path: string
+			content: string
+			isImage?: boolean
+		}
+
+		const result = createMutableToolResult<FileReadSuccess>()
 
 		for (const entry of fileEntries) {
 			const relPath = entry.path
@@ -707,9 +736,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			if (!accessAllowed) {
 				const error = new RooIgnoreViolationError("read_file", relPath)
 				await task.say("rooignore_error", relPath)
-				task.recordToolError("read_file", error.toLogEntry())
-				const llmMessage = formatResponse.toolErrorFromInstance(error.toLLMMessage())
-				results.push(`File: ${relPath}\nError: ${llmMessage}`)
+				result.addError(error)
 				continue
 			}
 
@@ -734,7 +761,11 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			if (response !== "yesButtonClicked") {
 				if (text) await task.say("user_feedback", text, images)
 				task.didRejectTool = true
-				results.push(`File: ${relPath}\nStatus: Denied by user`)
+				// User denied - add as a special case (not an error per se)
+				result.addSuccess({
+					path: relPath,
+					content: `Status: Denied by user`,
+				})
 				continue
 			}
 
@@ -744,9 +775,10 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				// Check if the path is a directory
 				const stats = await fs.stat(fullPath)
 				if (stats.isDirectory()) {
-					const errorMsg = `Cannot read '${relPath}' because it is a directory.`
-					results.push(`File: ${relPath}\nError: ${errorMsg}`)
-					await task.say("error", `Error reading file ${relPath}: ${errorMsg}`)
+					const error = new PermissionDeniedToolError("read_file", relPath, "system_permission")
+					error.message = `Cannot read '${relPath}' because it is a directory. Use list_files tool instead.`
+					result.addError(error)
+					await task.say("error", error.message)
 					continue
 				}
 
@@ -769,15 +801,25 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 							0, // Legacy path doesn't track cumulative memory
 						)
 						if (!validation.isValid) {
-							results.push(`File: ${relPath}\nNotice: ${validation.notice ?? "Image validation failed"}`)
+							result.addSuccess({
+								path: relPath,
+								content: `Notice: ${validation.notice ?? "Image validation failed"}`,
+								isImage: true,
+							})
 							continue
 						}
 						const imageResult = await processImageFile(fullPath)
 						if (imageResult) {
-							results.push(`File: ${relPath}\n[Image file - content processed for vision model]`)
+							result.addSuccess({
+								path: relPath,
+								content: `[Image file - content processed for vision model]`,
+								isImage: true,
+							})
 						}
 					} else {
-						results.push(`File: ${relPath}\nError: Cannot read binary file`)
+						const error = new PermissionDeniedToolError("read_file", relPath, "system_permission")
+						error.message = `Cannot read binary file: ${relPath}`
+						result.addError(error)
 					}
 					continue
 				}
@@ -803,26 +845,57 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 					content = selectedLines.join("\n")
 				} else {
 					// Read with default limits using slice mode
-					const result = readWithSlice(rawContent, 0, DEFAULT_LINE_LIMIT)
-					content = result.content
-					if (result.wasTruncated) {
-						content += `\n\n[File truncated: showing ${result.returnedLines} of ${result.totalLines} total lines]`
+					const sliceResult = readWithSlice(rawContent, 0, DEFAULT_LINE_LIMIT)
+					content = sliceResult.content
+					if (sliceResult.wasTruncated) {
+						content += `\n\n[File truncated: showing ${sliceResult.returnedLines} of ${sliceResult.totalLines} total lines]`
 					}
 				}
 
-				results.push(`File: ${relPath}\n${content}`)
+				result.addSuccess({ path: relPath, content })
 
 				// Track file in context
 				await task.fileContextTracker.trackFileContext(relPath, "read_tool")
 			} catch (error) {
 				const errorMsg = error instanceof Error ? error.message : String(error)
-				results.push(`File: ${relPath}\nError: ${errorMsg}`)
+				// Use FileNotFoundToolError for file read errors
+				const toolError = new FileNotFoundToolError("read_file", relPath)
+				toolError.message = `Error reading file: ${errorMsg}`
+				result.addError(toolError)
 				await task.say("error", `Error reading file ${relPath}: ${errorMsg}`)
 			}
 		}
 
-		// Push combined results
-		pushToolResult(results.join("\n\n---\n\n"))
+		// Record all errors to telemetry
+		if (result.hasErrors()) {
+			task.didToolFailInCurrentTurn = true
+			result.errors.forEach((e) => task.recordToolError("read_file", e.toLogEntry()))
+		}
+
+		// Build unified output using ToolExecutionResult
+		pushToolResult(this.buildLegacyResultReport(result))
+	}
+
+	/**
+	 * Build a unified report from the ToolExecutionResult for legacy format.
+	 */
+	private buildLegacyResultReport(result: ToolExecutionResult<{ path: string; content: string; isImage?: boolean }>): string {
+		const parts: string[] = []
+
+		// Add successful file contents
+		if (result.hasSuccesses()) {
+			const successContents = result.successes
+				.map((s) => `File: ${s.path}\n${s.content}`)
+				.join("\n\n---\n\n")
+			parts.push(successContents)
+		}
+
+		// Add error summary using ToolExecutionResult's built-in reporting
+		if (result.hasErrors()) {
+			parts.push("\n" + result.toLLMReport())
+		}
+
+		return parts.join("\n")
 	}
 }
 

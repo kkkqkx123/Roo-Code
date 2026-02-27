@@ -36,7 +36,7 @@ async function main() {
 		banner: {
 			js: `
 // Set globalThis values before any other code executes
-// This is needed because extension.mjs is inlined and initializes immediately
+// This is needed because extension.ts is inlined and initializes immediately
 globalThis.vscode = require("vscode");
 globalThis.__filename = __filename;
 globalThis.__dirname = __dirname;
@@ -113,7 +113,7 @@ globalThis.__dirname = __dirname;
 	const extensionConfig = {
 		...buildOptions,
 		plugins,
-		entryPoints: ["extension.cjs"],
+		entryPoints: ["extension.ts"],
 		outfile: "dist/extension.cjs",
 		// global-agent must be external because it dynamically patches Node.js http/https modules
 		// which breaks when bundled. It needs access to the actual Node.js module instances.

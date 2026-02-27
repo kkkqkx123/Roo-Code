@@ -18,6 +18,7 @@ import { ApiStream, ApiStreamUsageChunk } from "../transform/stream"
 import { DEFAULT_HEADERS } from "./constants"
 import { BaseProvider } from "./base-provider"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
+import { handleOpenAiCompatibleError } from "./utils/openai-compatible-error-handler"
 
 /**
  * Configuration options for creating an OpenAI-compatible provider.
@@ -176,21 +177,28 @@ export abstract class OpenAICompatibleHandler extends BaseProvider implements Si
 			toolChoice: this.mapToolChoice(metadata?.tool_choice),
 		}
 
-		// Use streamText for streaming responses
-		const result = streamText(requestOptions)
+		try {
+			// Use streamText for streaming responses
+			const result = streamText(requestOptions)
 
-		// Process the full stream to get all events
-		for await (const part of result.fullStream) {
-			// Use the processAiSdkStreamPart utility to convert stream parts
-			for (const chunk of processAiSdkStreamPart(part)) {
-				yield chunk
+			// Process the full stream to get all events
+			for await (const part of result.fullStream) {
+				// Use the processAiSdkStreamPart utility to convert stream parts
+				for (const chunk of processAiSdkStreamPart(part)) {
+					yield chunk
+				}
 			}
-		}
 
-		// Yield usage metrics at the end
-		const usage = await result.usage
-		if (usage) {
-			yield this.processUsageMetrics(usage)
+			// Yield usage metrics at the end
+			const usage = await result.usage
+			if (usage) {
+				yield this.processUsageMetrics(usage)
+			}
+		} catch (error) {
+			// Use OpenAI Compatible-specific error handler
+			throw handleOpenAiCompatibleError(error, this.config.providerName, {
+				messagePrefix: "streaming",
+			})
 		}
 	}
 
@@ -200,14 +208,21 @@ export abstract class OpenAICompatibleHandler extends BaseProvider implements Si
 	async completePrompt(prompt: string): Promise<string> {
 		const languageModel = this.getLanguageModel()
 
-		const { text } = await generateText({
-			model: languageModel,
-			prompt,
-			maxOutputTokens: this.getMaxOutputTokens(),
-			temperature: this.config.temperature ?? 0,
-		})
+		try {
+			const { text } = await generateText({
+				model: languageModel,
+				prompt,
+				maxOutputTokens: this.getMaxOutputTokens(),
+				temperature: this.config.temperature ?? 0,
+			})
 
-		return text
+			return text
+		} catch (error) {
+			// Use OpenAI Compatible-specific error handler
+			throw handleOpenAiCompatibleError(error, this.config.providerName, {
+				messagePrefix: "completion",
+			})
+		}
 	}
 }
 

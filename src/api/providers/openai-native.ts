@@ -6,7 +6,6 @@ import OpenAI from "openai"
 import { Package } from "../../shared/package"
 import {
 	type ModelInfo,
-	OPENAI_NATIVE_DEFAULT_TEMPERATURE,
 	type ReasoningEffort,
 	type VerbosityLevel,
 	type ReasoningEffortExtended,
@@ -24,6 +23,7 @@ import { BaseProvider } from "./base-provider"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
 import { isMcpTool } from "../../utils/mcp-name"
 import { sanitizeOpenAiCallId } from "../../utils/tool-id"
+import { handleOpenAiNativeError } from "./utils/openai-native-error-handler"
 
 export type OpenAiNativeModel = ReturnType<OpenAiNativeHandler["getModel"]>
 
@@ -101,6 +101,11 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 				session_id: this.sessionId,
 				"User-Agent": userAgent,
 			},
+			// Configure SDK retry options (default: 2 retries with exponential backoff)
+			// This works alongside the project's retry logic in Task.ts
+			maxRetries: 2,
+			// Configure timeout (default: 10 minutes, SDK handles dynamic adjustment for large max_tokens)
+			timeout: 10 * 60 * 1000, // 10 minutes
 		})
 	}
 
@@ -357,7 +362,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 				: {}),
 			// Only include temperature if the model supports it
 			...(model.info.supportsTemperature !== false && {
-				temperature: this.options.modelTemperature ?? OPENAI_NATIVE_DEFAULT_TEMPERATURE,
+				temperature: this.options.modelTemperature ?? 0.7,
 			}),
 			// Explicitly include the calculated max output tokens.
 			// Use the per-request reserved output computed by Roo (params.maxTokens from getModelParams).
@@ -443,8 +448,17 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 				}
 			}
 		} catch (sdkErr: any) {
-			// For errors, fallback to manual SSE via fetch
-			yield* this.makeResponsesApiRequest(requestBody, model, metadata, systemPrompt, messages)
+			// For SDK errors, try fallback to manual SSE via fetch
+			// If that also fails, use the error handler
+			try {
+				yield* this.makeResponsesApiRequest(requestBody, model, metadata, systemPrompt, messages)
+			} catch (fallbackErr) {
+				// Use OpenAI-specific error handler for both SDK and fallback errors
+				throw handleOpenAiNativeError(fallbackErr, "OpenAI Native", {
+					messagePrefix: "streaming",
+					requestId: this.lastResponseId,
+				})
+			}
 		} finally {
 			this.abortController = undefined
 		}
@@ -640,16 +654,11 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			// Handle streaming response
 			yield* this.handleStreamResponse(response.body, model)
 		} catch (error) {
-			if (error instanceof Error) {
-				// Re-throw with the original error message if it's already formatted
-				if (error.message.includes("Responses API")) {
-					throw error
-				}
-				// Otherwise, wrap it with context
-				throw new Error(`Failed to connect to Responses API: ${error.message}`)
-			}
-			// Handle non-Error objects
-			throw new Error(`Unexpected error connecting to Responses API`)
+			// Use OpenAI-specific error handler
+			throw handleOpenAiNativeError(error, "OpenAI Native", {
+				messagePrefix: "streaming",
+				requestId: this.lastResponseId,
+			})
 		} finally {
 			this.abortController = undefined
 		}
@@ -1123,10 +1132,11 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			// If we didn't get any content, don't throw - the API might have returned an empty response
 			// This can happen in certain edge cases and shouldn't break the flow
 		} catch (error) {
-			if (error instanceof Error) {
-				throw new Error(`Error processing response stream: ${error.message}`)
-			}
-			throw new Error("Unexpected error processing response stream")
+			// Use OpenAI-specific error handler
+			throw handleOpenAiNativeError(error, "OpenAI Native", {
+				messagePrefix: "streaming",
+				requestId: this.lastResponseId,
+			})
 		} finally {
 			reader.releaseLock()
 		}
@@ -1394,7 +1404,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			inputPrice: 0.5,
 			outputPrice: 1.5,
 			supportsTemperature: true,
-			defaultTemperature: OPENAI_NATIVE_DEFAULT_TEMPERATURE,
+			defaultTemperature: 0.7,
 		}
 
 		const params = getModelParams({
@@ -1402,7 +1412,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			modelId,
 			model: info,
 			settings: this.options,
-			defaultTemperature: OPENAI_NATIVE_DEFAULT_TEMPERATURE,
+			defaultTemperature: 0.7,
 		})
 
 		// The o3 models are named like "o3-mini-[reasoning-effort]", which are
@@ -1480,7 +1490,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 
 			// Only include temperature if the model supports it
 			if (model.info.supportsTemperature !== false) {
-				requestBody.temperature = this.options.modelTemperature ?? OPENAI_NATIVE_DEFAULT_TEMPERATURE
+				requestBody.temperature = this.options.modelTemperature ?? 0.7
 			}
 
 			// Include max_output_tokens if available
@@ -1524,10 +1534,11 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 
 			return ""
 		} catch (error) {
-			if (error instanceof Error) {
-				throw new Error(`OpenAI Native completion error: ${error.message}`)
-			}
-			throw error
+			// Use OpenAI-specific error handler
+			throw handleOpenAiNativeError(error, "OpenAI Native", {
+				messagePrefix: "completion",
+				requestId: this.lastResponseId,
+			})
 		} finally {
 			this.abortController = undefined
 		}

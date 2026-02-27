@@ -15,18 +15,25 @@ import { BaseTool, ToolCallbacks } from "./BaseTool"
 import type { ToolUse } from "../../shared/tools"
 import {
 	parsePatch,
-	ParseError,
 	processAllHunks,
-	PatchError,
 	PatchErrorCode,
-	PatchErrors,
 	PatchError as PatchErrorType,
 } from "./apply-patch"
 import type { ApplyPatchFileChange, ApplyPatchResult, ApplyPatchFileResult, ApplyPatchSummary } from "./apply-patch"
+import {
+	MissingParameterError,
+	PatchParseError,
+	FileNotFoundToolError,
+	RooIgnoreViolationError,
+	FileAlreadyExistsError,
+	PermissionDeniedToolError,
+	createMutableToolResult,
+	type ToolExecutionResult,
+	type ToolError,
+} from "../errors/tools/index.js"
 
 interface ApplyPatchParams {
 	patch: string
-	workdir?: string | null
 }
 
 export class ApplyPatchTool extends BaseTool<"apply_patch"> {
@@ -109,18 +116,19 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 	}
 
 	async execute(params: ApplyPatchParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
-		const { patch, workdir } = params
+		const { patch } = params
 		const { askApproval, handleError, pushToolResult } = callbacks
 
-		// Use provided workdir or default to task.cwd
-		const cwd = workdir && workdir.trim() !== "" ? path.resolve(task.cwd, workdir) : task.cwd
+		// All paths are relative to the workspace root
+		const cwd = task.cwd
 
 		try {
-			// Validate required parameters
+			// Validate required parameters using structured errors
 			if (!patch) {
 				task.consecutiveMistakeCount++
-				task.recordToolError("apply_patch")
-				const result = this.createResult(false, [], "Missing required parameter: patch")
+				const error = new MissingParameterError("apply_patch", "patch")
+				task.recordToolError("apply_patch", error.toLogEntry())
+				const result = this.createResult(false, [], error.message)
 				pushToolResult(JSON.stringify(result))
 				return
 			}
@@ -131,15 +139,15 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 				parsedPatch = parsePatch(patch)
 			} catch (error) {
 				task.consecutiveMistakeCount++
-				task.recordToolError("apply_patch")
-				const errorCode = error instanceof PatchErrorType ? error.code : PatchErrorCode.INVALID_FORMAT
-				const errorMessage =
-					error instanceof PatchErrorType
-						? `Invalid patch format: ${error.message}`
-						: `Failed to parse patch: ${error instanceof Error ? error.message : String(error)}`
+				const patchError = new PatchParseError(
+					"apply_patch",
+					error instanceof PatchErrorType ? error.message : `Failed to parse patch: ${error instanceof Error ? error.message : String(error)}`
+				)
+				task.recordToolError("apply_patch", patchError.toLogEntry())
 				const result = this.createResult(
 					false,
-					[this.createFileResult("patch", "update", false, errorMessage, errorCode)],
+					[this.createFileResult("patch", "update", false, patchError.message, PatchErrorCode.INVALID_FORMAT)],
+					patchError.message,
 				)
 				pushToolResult(JSON.stringify(result))
 				return
@@ -166,19 +174,26 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 				changes = await processAllHunks(parsedPatch.hunks, readFile)
 			} catch (error) {
 				task.consecutiveMistakeCount++
-				task.recordToolError("apply_patch")
-				const errorCode = error instanceof PatchErrorType ? error.code : PatchErrorCode.HUNK_APPLY_FAILED
 				const errorMessage = `Failed to process patch: ${error instanceof Error ? error.message : String(error)}`
+				const patchError = new PatchParseError("apply_patch", errorMessage)
+				task.recordToolError("apply_patch", patchError.toLogEntry())
 				const result = this.createResult(
 					false,
-					[this.createFileResult("patch", "update", false, errorMessage, errorCode)],
+					[this.createFileResult("patch", "update", false, errorMessage, PatchErrorCode.HUNK_APPLY_FAILED)],
 					undefined,
 				)
 				pushToolResult(JSON.stringify(result))
 				return
 			}
 
-			// Process each file change
+			// Use ToolExecutionResult for batch file processing
+			interface FileOpSuccess {
+				path: string
+				operation: "add" | "delete" | "update" | "rename"
+				diffStats?: { additions: number; deletions: number }
+			}
+
+			const toolResult = createMutableToolResult<FileOpSuccess>()
 			const results: ApplyPatchFileResult[] = []
 
 			for (const change of changes) {
@@ -190,12 +205,10 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 					const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
 					if (!accessAllowed) {
 						await task.say("rooignore_error", relPath)
-						const result = this.createResult(
-							false,
-							[this.createFileResult(relPath, change.type, false, undefined, PatchErrorCode.ROOIGNORE_VIOLATION)],
-						)
-						pushToolResult(JSON.stringify(result))
-						return
+						const error = new RooIgnoreViolationError("apply_patch", relPath)
+						toolResult.addError(error)
+						results.push(this.createFileResult(relPath, change.type, false, error.message, PatchErrorCode.ROOIGNORE_VIOLATION))
+						continue
 					}
 
 					// Check if file is write-protected
@@ -212,6 +225,17 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 							cwd,
 						)
 						results.push(result)
+						if (result.success) {
+							toolResult.addSuccess({
+								path: relPath,
+								operation: "add",
+								diffStats: result.diffStats,
+							})
+						} else if (result.error) {
+							// Map error codes to ToolError types
+							const toolError = this.mapToToolError(relPath, "add", result.error, result.errorCode)
+							toolResult.addError(toolError)
+						}
 					} else if (change.type === "delete") {
 						const result = await this.handleDeleteFile(
 							absolutePath,
@@ -221,6 +245,12 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 							isWriteProtected,
 						)
 						results.push(result)
+						if (result.success) {
+							toolResult.addSuccess({ path: relPath, operation: "delete" })
+						} else if (result.error) {
+							const toolError = this.mapToToolError(relPath, "delete", result.error, result.errorCode)
+							toolResult.addError(toolError)
+						}
 					} else if (change.type === "update") {
 						const result = await this.handleUpdateFile(
 							change,
@@ -232,6 +262,16 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 							cwd,
 						)
 						results.push(result)
+						if (result.success) {
+							toolResult.addSuccess({
+								path: relPath,
+								operation: result.operation,
+								diffStats: result.diffStats,
+							})
+						} else if (result.error) {
+							const toolError = this.mapToToolError(relPath, result.operation, result.error, result.errorCode)
+							toolResult.addError(toolError)
+						}
 					}
 				} catch (error) {
 					// Capture error for this specific file
@@ -240,21 +280,28 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 					results.push(
 						this.createFileResult(relPath, change.type, false, errorMessage, errorCode),
 					)
+					const toolError = this.mapToToolError(relPath, change.type, errorMessage, errorCode)
+					toolResult.addError(toolError)
 				}
 			}
 
+			// Record all errors to telemetry using ToolExecutionResult
+			if (toolResult.hasErrors()) {
+				task.didToolFailInCurrentTurn = true
+				toolResult.errors.forEach((e) => task.recordToolError("apply_patch", e.toLogEntry()))
+			}
+
 			// Check if all operations succeeded
-			const allSucceeded = results.every((r) => r.success)
+			const allSucceeded = toolResult.hasSuccesses() && !toolResult.hasErrors()
 			task.consecutiveMistakeCount = allSucceeded ? 0 : task.consecutiveMistakeCount + 1
-			
-			if (!allSucceeded) {
-				task.recordToolError("apply_patch")
-			} else {
+
+			if (allSucceeded) {
 				task.recordToolUsage("apply_patch")
 			}
 
-			const result = this.createResult(allSucceeded, results, undefined, validate_only)
-			pushToolResult(JSON.stringify(result))
+			// Build enhanced result with ToolExecutionResult summary
+			const result = this.createResult(allSucceeded, results, undefined)
+			pushToolResult(this.buildEnhancedResult(result, toolResult))
 		} catch (error) {
 			// Handle unexpected errors
 			const errorMessage = error instanceof Error ? error.message : String(error)
@@ -267,6 +314,77 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			await handleError("apply patch", error as Error)
 			await task.diffViewProvider.reset()
 		}
+	}
+
+	/**
+	 * Map error codes to appropriate ToolError types.
+	 */
+	private mapToToolError(
+		path: string,
+		operation: "add" | "delete" | "update" | "rename",
+		errorMessage: string,
+		errorCode?: PatchErrorCode
+	): ToolError {
+		switch (errorCode) {
+			case PatchErrorCode.FILE_NOT_FOUND:
+				return new FileNotFoundToolError("apply_patch", path)
+			case PatchErrorCode.FILE_ALREADY_EXISTS:
+				return new FileAlreadyExistsError("apply_patch", path)
+			case PatchErrorCode.ROOIGNORE_VIOLATION:
+				return new RooIgnoreViolationError("apply_patch", path)
+			case PatchErrorCode.WRITE_PROTECTED:
+			case PatchErrorCode.PERMISSION_DENIED:
+				return new PermissionDeniedToolError("apply_patch", path, "write_protected")
+			case PatchErrorCode.INVALID_FORMAT:
+			case PatchErrorCode.HUNK_APPLY_FAILED:
+				return new PatchParseError("apply_patch", errorMessage)
+			default:
+				// Create a generic execution error
+				const execError = new (class extends Error {
+					toLLMMessage() {
+						return {
+							status: "error" as const,
+							type: "execution_error",
+							message: errorMessage,
+							path,
+						}
+					}
+					toLogEntry() {
+						return {
+							level: "error" as const,
+							category: "tool_execution",
+							tool: "apply_patch",
+							message: errorMessage,
+							path,
+							timestamp: Date.now(),
+						}
+					}
+				})(errorMessage)
+				execError.name = "PatchExecutionError"
+				return execError as unknown as ToolError
+		}
+	}
+
+	/**
+	 * Build enhanced result JSON with ToolExecutionResult summary.
+	 */
+	private buildEnhancedResult(
+		result: ApplyPatchResult,
+		toolResult: ToolExecutionResult<{ path: string; operation: string; diffStats?: { additions: number; deletions: number } }>
+	): string {
+		// Include ToolExecutionResult summary in the response
+		const enhancedResult = {
+			...result,
+			summary: {
+				...result.summary,
+				successRate: toolResult.successRate(),
+			},
+			// Add error report if there are errors
+			...(toolResult.hasErrors() && {
+				errorReport: toolResult.toLLMSummary(),
+			}),
+		}
+		return JSON.stringify(enhancedResult)
 	}
 
 	private async handleAddFile(
@@ -380,7 +498,8 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		await task.diffViewProvider.reset()
 		task.processQueuedMessages()
 
-		return this.createFileResult(relPath, "add", true, undefined, undefined, undefined, undefined, diffStats)
+		const convertedDiffStats = diffStats ? { additions: diffStats.added, deletions: diffStats.removed } : undefined
+		return this.createFileResult(relPath, "add", true, undefined, undefined, undefined, undefined, convertedDiffStats)
 	}
 
 	private async handleDeleteFile(
@@ -635,6 +754,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 
 			await task.diffViewProvider.reset()
 			task.processQueuedMessages()
+			const convertedDiffStats = diffStats ? { additions: diffStats.added, deletions: diffStats.removed } : undefined
 			return this.createFileResult(
 				relPath,
 				"rename",
@@ -643,7 +763,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 				undefined,
 				relPath,
 				change.movePath,
-				diffStats,
+				convertedDiffStats,
 			)
 		} else {
 			// Save changes to the same file
@@ -660,7 +780,8 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			const message = await task.diffViewProvider.pushToolWriteResult(task, cwd, false)
 			await task.diffViewProvider.reset()
 			task.processQueuedMessages()
-			return this.createFileResult(relPath, "update", true, undefined, undefined, undefined, undefined, diffStats)
+			const convertedDiffStats = diffStats ? { additions: diffStats.added, deletions: diffStats.removed } : undefined
+			return this.createFileResult(relPath, "update", true, undefined, undefined, undefined, undefined, convertedDiffStats)
 		}
 	}
 

@@ -1,6 +1,7 @@
 {
 	"extends": "../config/typescript/base.json",
 	"compilerOptions": {
+		"allowJs": true,
 		"types": ["vitest/globals"],
 		"esModuleInterop": true,
 		"experimentalDecorators": true,
@@ -22,7 +23,7 @@
 		"useDefineForClassFields": true,
 		"useUnknownInCatchVariables": false
 	},
-	"include": ["*.ts", "*.mjs", "*.cjs"],
+	"include": ["*.ts"],
 	"exclude": ["node_modules", "dist"],
 	"watchOptions": {
 		"watchFile": "useFsEvents",

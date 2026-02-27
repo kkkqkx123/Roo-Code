@@ -1401,7 +1401,275 @@ Anthropic rate limit exceeded: Rate limit exceeded. Please slow down your reques
 
 ---
 
-**文档版本：** 1.0
+## 8. 重试逻辑架构分析
+
+### 8.1 当前重试架构
+
+项目采用双层重试架构：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        SDK Layer                                │
+│  - Anthropic SDK: maxRetries=2 (默认)                           │
+│  - 自动重试: 连接错误、408、409、429、5xx                         │
+│  - 对用户透明，无 UI 反馈                                        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              │ 重试失败后抛出错误
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        Task Layer                               │
+│  - Task.backoffAndAnnounce()                                    │
+│  - 指数退避: baseDelay * 2^retryAttempt                          │
+│  - UI 倒计时显示                                                 │
+│  - 支持 429 RetryInfo 解析                                       │
+│  - 用户可取消                                                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 8.2 双层重试的职责分工
+
+| 层级 | 职责 | 重试场景 | 优势 |
+|------|------|----------|------|
+| SDK 层 | 快速重试 | 网络抖动、瞬时故障 | 无延迟，快速恢复 |
+| 项目层 | 用户可见重试 | 需要通知用户、复杂错误恢复 | UI 反馈、可取消、业务逻辑 |
+
+### 8.3 建议：保持双层架构
+
+**原因：**
+1. SDK 重试对用户透明，无法显示倒计时
+2. 项目重试可以显示 UI 倒计时，让用户知道正在重试
+3. 项目重试可以处理业务逻辑（如保存状态、回滚操作）
+4. 双重重试不会冲突：SDK 重试失败后才会抛出错误到项目层
+
+**配置建议：**
+```typescript
+// SDK 配置：快速重试，处理瞬时故障
+this.client = new Anthropic({
+    maxRetries: 2,  // 快速重试 2 次
+    timeout: 10 * 60 * 1000,
+})
+```
+
+---
+
+## 9. 错误类型体系分析
+
+### 9.1 现有错误类型定义
+
+项目在 `packages/types/src/errors.ts` 中定义了完整的错误类型体系：
+
+```typescript
+// 基类
+BaseError (abstract)
+└── StreamingError (abstract)
+    ├── InvalidStreamError
+    ├── ChunkHandlerError
+    ├── StreamAbortedError
+    ├── ToolCallError
+    ├── TokenError
+    ├── UserInterruptError
+    ├── ToolInterruptError
+    ├── StreamProviderError
+    ├── StreamTimeoutError
+    └── StateError
+```
+
+### 9.2 当前问题
+
+1. **Provider 层直接抛出原始 Error**：错误类型信息在传递过程中丢失
+2. **StreamingErrorHandler 需要猜测错误类型**：通过消息字符串判断
+3. **缺少 API 特定错误类型**：无法区分认证错误、速率限制等
+
+### 9.3 建议：扩展错误类型并统一使用
+
+#### 9.3.1 新增 API 错误类型
+
+```typescript
+// packages/types/src/errors.ts
+
+/**
+ * Base class for API provider errors
+ */
+export class ApiProviderError extends StreamingError {
+    constructor(
+        message: string,
+        public readonly providerName: string,
+        public readonly statusCode?: number,
+        public readonly requestId?: string,
+        originalError?: Error
+    ) {
+        super(message, "API_PROVIDER_ERROR", {
+            providerName,
+            statusCode,
+            requestId,
+            originalError,
+        })
+    }
+}
+
+/**
+ * Authentication error (401)
+ */
+export class AuthenticationError extends ApiProviderError {
+    constructor(providerName: string, message: string, requestId?: string, originalError?: Error) {
+        super(message, providerName, 401, requestId, originalError)
+        this.code = "AUTHENTICATION_ERROR"
+    }
+}
+
+/**
+ * Rate limit error (429)
+ */
+export class RateLimitError extends ApiProviderError {
+    constructor(
+        providerName: string,
+        message: string,
+        public readonly retryAfter?: number,
+        requestId?: string,
+        originalError?: Error
+    ) {
+        super(message, providerName, 429, requestId, originalError)
+        this.code = "RATE_LIMIT_ERROR"
+    }
+}
+
+/**
+ * Server error (5xx)
+ */
+export class ServerError extends ApiProviderError {
+    constructor(
+        providerName: string,
+        message: string,
+        statusCode: number,
+        requestId?: string,
+        originalError?: Error
+    ) {
+        super(message, providerName, statusCode, requestId, originalError)
+        this.code = "SERVER_ERROR"
+    }
+}
+
+/**
+ * Connection error (network issues)
+ */
+export class ConnectionError extends ApiProviderError {
+    constructor(
+        providerName: string,
+        message: string,
+        originalError?: Error
+    ) {
+        super(message, providerName, undefined, undefined, originalError)
+        this.code = "CONNECTION_ERROR"
+    }
+}
+
+/**
+ * Request timeout error
+ */
+export class RequestTimeoutError extends ApiProviderError {
+    constructor(
+        providerName: string,
+        message: string,
+        requestId?: string,
+        originalError?: Error
+    ) {
+        super(message, providerName, 408, requestId, originalError)
+        this.code = "REQUEST_TIMEOUT_ERROR"
+    }
+}
+```
+
+#### 9.3.2 Provider 层使用统一错误类型
+
+```typescript
+// anthropic-error-handler.ts
+import { 
+    ApiProviderError, 
+    AuthenticationError, 
+    RateLimitError, 
+    ServerError,
+    ConnectionError,
+    RequestTimeoutError 
+} from "@coder/types"
+
+export function handleAnthropicError(error: unknown, ...): Error {
+    if (error instanceof Anthropic.AuthenticationError) {
+        return new AuthenticationError(
+            providerName,
+            error.message,
+            requestId,
+            error
+        )
+    }
+    // ...
+}
+```
+
+### 9.4 错误处理流程
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Provider Layer                           │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
+│  │ Anthropic   │  │   OpenAI    │  │   Gemini    │              │
+│  │   Handler   │  │   Handler   │  │   Handler   │              │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘              │
+│         │                │                │                      │
+│         ▼                ▼                ▼                      │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │           handleXxxError()                              │    │
+│  │  - 识别 SDK 错误类型                                      │    │
+│  │  - 转换为 ApiProviderError 子类                          │    │
+│  │  - 保留元数据 (status, requestId, errorDetails)          │    │
+│  └─────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        Task Layer                               │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │              StreamingErrorHandler                       │    │
+│  │  - 识别错误类型 (通过 code 或 instanceof)                 │    │
+│  │  - 决定是否重试                                          │    │
+│  │  - 调用 backoffAndAnnounce() 显示倒计时                  │    │
+│  └─────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 10. 实施总结
+
+### 10.1 已完成的修改
+
+1. **创建 Anthropic 专用错误处理器**
+   - 文件：`src/api/providers/utils/anthropic-error-handler.ts`
+   - 功能：识别 Anthropic SDK 错误类型，提供定制化错误消息
+
+2. **修改 AnthropicHandler**
+   - 文件：`src/api/providers/anthropic.ts`
+   - 添加 try-catch 错误处理
+   - 提取请求 ID 用于调试
+   - 配置 SDK 重试和超时选项
+
+### 10.2 待完成的修改
+
+1. **扩展错误类型定义**
+   - 文件：`packages/types/src/errors.ts`
+   - 添加 `ApiProviderError` 及其子类
+
+2. **更新错误处理器使用新类型**
+   - 文件：`src/api/providers/utils/anthropic-error-handler.ts`
+   - 使用 `ApiProviderError` 子类替代普通 Error
+
+3. **更新 StreamingErrorHandler**
+   - 文件：`src/core/task/streaming/StreamingErrorHandler.ts`
+   - 支持识别新的错误类型
+
+---
+
+**文档版本：** 1.1
 **创建日期：** 2026-02-27
 **作者：** CodeArts代码智能体
 **最后更新：** 2026-02-27

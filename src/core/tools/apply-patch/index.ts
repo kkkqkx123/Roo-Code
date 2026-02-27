@@ -5,12 +5,12 @@
  * Based on the Codex apply_patch specification.
  */
 
-export { parsePatch, ParseError } from "./parser"
+export { parsePatch } from "./parser"
 export type { Hunk, UpdateFileChunk, ApplyPatchArgs } from "./parser"
 
 export { seekSequence } from "./seek-sequence"
 
-export { applyChunksToContent, processHunk, processAllHunks, ApplyError } from "./apply"
+export { applyChunksToContent, processHunk, processAllHunks } from "./apply"
 export type { ApplyPatchFileChange } from "./apply"
 
 export {
@@ -19,5 +19,7 @@ export {
 	ValidationError,
 	PermissionError,
 	PatchErrors,
+	ParseError,
+	ApplyError,
 } from "./errors"
-export type { ApplyPatchResult, ApplyPatchSummary } from "./types"
+export type { ApplyPatchResult, ApplyPatchSummary, ApplyPatchFileResult } from "./types"

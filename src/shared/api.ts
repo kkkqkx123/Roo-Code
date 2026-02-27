@@ -19,6 +19,10 @@ export type ApiHandlerOptions = Omit<ProviderSettings, "apiProvider"> & {
 	 * OpenAI Native 供应商的自定义 Headers
 	 */
 	openAiNativeHeaders?: Record<string, string>
+	/**
+	 * Anthropic custom model info for custom/compatible endpoints
+	 */
+	anthropicCustomModelInfo?: ModelInfo
 }
 
 // RouterName

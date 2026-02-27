@@ -2,8 +2,7 @@ import type { ToolName } from "@coder/types"
 
 import { Task } from "../task/Task"
 import type { ToolUse, HandleError, PushToolResult, AskApproval, NativeToolArgs } from "../../shared/tools"
-import { formatResponse } from "../prompts/responses"
-import { ValidationError } from "../errors/tools/validation-errors.js"
+import { ValidationError, type LogEntry } from "../errors/tools/validation-errors.js"
 
 /**
  * Callbacks passed to tool execution
@@ -118,7 +117,20 @@ export abstract class BaseTool<TName extends ToolName> {
 			try {
 				await this.handlePartial(task, block)
 			} catch (error) {
-				console.error(`Error in handlePartial:`, error)
+				// Use structured logging for partial message errors
+				const errorMessage = error instanceof Error ? error.message : String(error)
+				const logEntry: LogEntry = {
+					level: "error",
+					category: "tool_execution",
+					tool: this.name,
+					error_type: error instanceof Error ? error.constructor.name : "UnknownError",
+					message: `Error in handlePartial: ${errorMessage}`,
+					timestamp: Date.now(),
+				}
+				if (error instanceof Error && error.stack) {
+					logEntry.stack = error.stack
+				}
+				task.recordToolError(this.name, logEntry)
 				await callbacks.handleError(
 					`handling partial ${this.name}`,
 					error instanceof Error ? error : new Error(String(error)),
@@ -150,19 +162,31 @@ export abstract class BaseTool<TName extends ToolName> {
 				throw new Error("Tool call is missing native arguments (nativeArgs).")
 			}
 		} catch (error) {
-			console.error(`Error parsing parameters:`, error)
+			// Use structured logging for parameter parsing errors
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			const logEntry: LogEntry = {
+				level: "error",
+				category: "tool_execution",
+				tool: this.name,
+				error_type: error instanceof Error ? error.constructor.name : "UnknownError",
+				message: `Error parsing parameters: ${errorMessage}`,
+				timestamp: Date.now(),
+			}
+			if (error instanceof Error && error.stack) {
+				logEntry.stack = error.stack
+			}
+			task.recordToolError(this.name, logEntry)
 			// Use structured error types when possible
 			if (error instanceof ValidationError) {
 				// Structured error with LLM guidance
-				task.recordToolError(this.name, error.toLogEntry())
 				await callbacks.handleError(
 					`parsing ${this.name} args`,
 					error,
 				)
 			} else {
 				// Fallback for generic errors
-				const errorMessage = `Failed to parse ${this.name} parameters: ${error instanceof Error ? error.message : String(error)}`
-				await callbacks.handleError(`parsing ${this.name} args`, new Error(errorMessage))
+				const genericErrorMessage = `Failed to parse ${this.name} parameters: ${errorMessage}`
+				await callbacks.handleError(`parsing ${this.name} args`, new Error(genericErrorMessage))
 			}
 			// Note: handleError already emits a tool_result via formatResponse.toolError in the caller.
 			// Do NOT call pushToolResult here to avoid duplicate tool_result payloads.

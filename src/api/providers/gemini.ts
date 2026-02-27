@@ -23,6 +23,7 @@ import { getModelParams } from "../transform/model-params"
 
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
 import { BaseProvider } from "./base-provider"
+import { handleGeminiError } from "./utils/gemini-error-handler"
 
 type GeminiHandlerOptions = ApiHandlerOptions & {
 	isVertex?: boolean
@@ -53,6 +54,11 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 				googleAuthOptions: {
 					credentials: safeJsonParse<JWTInput>(this.options.vertexJsonCredentials, undefined),
 				},
+				// Configure HTTP options for timeout and retry
+				httpOptions: {
+					timeout: 10 * 60 * 1000, // 10 minutes
+					retryOptions: { attempts: 2 },
+				},
 			})
 			: this.options.vertexKeyFile
 				? new GoogleGenAI({
@@ -60,10 +66,31 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 					project,
 					location,
 					googleAuthOptions: { keyFile: this.options.vertexKeyFile },
+					// Configure HTTP options for timeout and retry
+					httpOptions: {
+						timeout: 10 * 60 * 1000, // 10 minutes
+						retryOptions: { attempts: 2 },
+					},
 				})
 				: isVertex
-					? new GoogleGenAI({ vertexai: true, project, location })
-					: new GoogleGenAI({ apiKey })
+					? new GoogleGenAI({
+						vertexai: true,
+						project,
+						location,
+						// Configure HTTP options for timeout and retry
+						httpOptions: {
+							timeout: 10 * 60 * 1000, // 10 minutes
+							retryOptions: { attempts: 2 },
+						},
+					})
+					: new GoogleGenAI({
+						apiKey,
+						// Configure HTTP options for timeout and retry
+						httpOptions: {
+							timeout: 10 * 60 * 1000, // 10 minutes
+							retryOptions: { attempts: 2 },
+						},
+					})
 	}
 
 	async *createMessage(
@@ -329,11 +356,11 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 				}
 			}
 		} catch (error) {
-			if (error instanceof Error) {
-				throw new Error(t("common:errors.gemini.generate_stream", { error: error.message }), { cause: error })
-			}
-
-			throw error
+			// Use Gemini-specific error handler
+			throw handleGeminiError(error, this.providerName, {
+				messagePrefix: "streaming",
+				requestId: this.lastResponseId,
+			})
 		}
 	}
 
@@ -441,11 +468,11 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 
 			return text
 		} catch (error) {
-			if (error instanceof Error) {
-				throw new Error(t("common:errors.gemini.generate_complete_prompt", { error: error.message }), { cause: error })
-			}
-
-			throw error
+			// Use Gemini-specific error handler
+			throw handleGeminiError(error, this.providerName, {
+				messagePrefix: "completion",
+				requestId: this.lastResponseId,
+			})
 		}
 	}
 

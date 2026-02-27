@@ -17,7 +17,7 @@ import { convertNewFileToUnifiedDiff, computeDiffStats, sanitizeUnifiedDiff } fr
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
-import { MissingParameterError, RooIgnoreViolationError } from "../errors/tools/index.js"
+import { MissingParameterError, RooIgnoreViolationError, DirectoryCreationError } from "../errors/tools/index.js"
 
 interface WriteToFileParams {
 	path: string
@@ -81,11 +81,10 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 				await createDirectoriesForFile(absolutePath, task.cwd)
 			} catch (error) {
 				task.consecutiveMistakeCount++
-				task.recordToolError("write_to_file")
 				const errorDetails = error instanceof Error ? error.message : String(error)
-				const formattedError = `Failed to create directories for file: ${relPath}\n\n<error_details>\n${errorDetails}\n\nRecovery suggestions:\n1. Verify the file path is within the workspace directory\n2. Check that you have permission to create directories\n3. Use a simpler path structure\n</error_details>`
-				await task.say("error", formattedError)
-				pushToolResult(formattedError)
+				const dirError = new DirectoryCreationError("write_to_file", relPath, errorDetails)
+				task.recordToolError("write_to_file", dirError.toLogEntry())
+				pushToolResult(formatResponse.toolErrorFromInstance(dirError.toLLMMessage()))
 				await task.diffViewProvider.reset()
 				return
 			}

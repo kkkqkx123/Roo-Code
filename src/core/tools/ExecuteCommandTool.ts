@@ -110,7 +110,7 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 				// Invalidate pending ask from first execution to prevent race condition
 				task.supersedePendingAsk()
 
-				if (error instanceof ShellIntegrationError) {
+				if (error instanceof ShellIntegrationErrorType) {
 					const [rejected, result] = await executeCommandInTerminal(task, {
 						...options,
 						terminalShellIntegrationDisabled: true,
@@ -398,7 +398,7 @@ export async function executeCommandInTerminal(
 	}
 
 	if (shellIntegrationError) {
-		throw new ShellIntegrationError(shellIntegrationError)
+		throw new ShellIntegrationErrorType("execute_command", shellIntegrationError)
 	}
 
 	// Wait for a short delay to ensure all messages are sent to the webview.

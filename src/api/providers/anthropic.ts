@@ -11,7 +11,7 @@ import type { ApiHandlerOptions } from "../../shared/api"
 import { ApiStream } from "../transform/stream"
 import { getModelParams } from "../transform/model-params"
 import { filterNonAnthropicBlocks } from "../transform/anthropic-filter"
-import { handleProviderError } from "./utils/error-handler"
+import { handleAnthropicError } from "./utils/anthropic-error-handler"
 
 import { BaseProvider } from "./base-provider"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
@@ -36,6 +36,11 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 		this.client = new Anthropic({
 			baseURL: this.options.anthropicBaseUrl || undefined,
 			[apiKeyFieldName]: this.options.apiKey,
+			// Configure SDK retry options (default: 2 retries with exponential backoff)
+			// This works alongside the project's retry logic in Task.ts
+			maxRetries: 2,
+			// Configure timeout (default: 10 minutes, SDK handles dynamic adjustment for large max_tokens)
+			timeout: 10 * 60 * 1000, // 10 minutes
 		})
 	}
 
@@ -71,191 +76,217 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 		// Users can control this through their model configuration
 		const usePromptCaching = this.getModel().info.supportsPromptCache !== false
 
-		if (usePromptCaching) {
-			betas.push("prompt-caching-2024-07-31")
+		// Track request ID for debugging
+		let requestId: string | undefined
 
-			/**
-			 * The latest message will be the new user message, one before
-			 * will be the assistant message from a previous request, and
-			 * the user message before that will be a previously cached user
-			 * message. So we need to mark the latest user message as
-			 * ephemeral to cache it for the next request, and mark the
-			 * second to last user message as ephemeral to let the server
-			 * know the last message to retrieve from the cache for the
-			 * current request.
-			 */
-			const userMsgIndices = sanitizedMessages.reduce(
-				(acc, msg, index) => (msg.role === "user" ? [...acc, index] : acc),
-				[] as number[],
-			)
+		try {
+			if (usePromptCaching) {
+				betas.push("prompt-caching-2024-07-31")
 
-			const lastUserMsgIndex = userMsgIndices[userMsgIndices.length - 1] ?? -1
-			const secondLastMsgUserIndex = userMsgIndices[userMsgIndices.length - 2] ?? -1
+				/**
+				 * The latest message will be the new user message, one before
+				 * will be the assistant message from a previous request, and
+				 * the user message before that will be a previously cached user
+				 * message. So we need to mark the latest user message as
+				 * ephemeral to cache it for the next request, and mark the
+				 * second to last user message as ephemeral to let the server
+				 * know the last message to retrieve from the cache for the
+				 * current request.
+				 */
+				const userMsgIndices = sanitizedMessages.reduce(
+					(acc, msg, index) => (msg.role === "user" ? [...acc, index] : acc),
+					[] as number[],
+				)
 
-			stream = await this.client.messages.create(
-				{
+				const lastUserMsgIndex = userMsgIndices[userMsgIndices.length - 1] ?? -1
+				const secondLastMsgUserIndex = userMsgIndices[userMsgIndices.length - 2] ?? -1
+
+				stream = await this.client.messages.create(
+					{
+						model: modelId,
+						max_tokens: maxTokens ?? 4096,
+						temperature,
+						thinking,
+						// Setting cache breakpoint for system prompt so new tasks can reuse it.
+						system: [{ text: systemPrompt, type: "text", cache_control: cacheControl }],
+						messages: sanitizedMessages.map((message, index) => {
+							if (index === lastUserMsgIndex || index === secondLastMsgUserIndex) {
+								return {
+									...message,
+									content:
+										typeof message.content === "string"
+											? [{ type: "text", text: message.content, cache_control: cacheControl }]
+											: message.content.map((content, contentIndex) =>
+													contentIndex === message.content.length - 1
+														? { ...content, cache_control: cacheControl }
+														: content,
+												),
+								}
+							}
+							return message
+						}),
+						stream: true,
+						...nativeToolParams,
+					},
+					{ headers: { "anthropic-beta": betas.join(",") } },
+				)
+			} else {
+				stream = (await this.client.messages.create({
 					model: modelId,
 					max_tokens: maxTokens ?? 4096,
 					temperature,
-					thinking,
-					// Setting cache breakpoint for system prompt so new tasks can reuse it.
-					system: [{ text: systemPrompt, type: "text", cache_control: cacheControl }],
-					messages: sanitizedMessages.map((message, index) => {
-						if (index === lastUserMsgIndex || index === secondLastMsgUserIndex) {
-							return {
-								...message,
-								content:
-									typeof message.content === "string"
-										? [{ type: "text", text: message.content, cache_control: cacheControl }]
-										: message.content.map((content, contentIndex) =>
-												contentIndex === message.content.length - 1
-													? { ...content, cache_control: cacheControl }
-													: content,
-											),
-							}
-						}
-						return message
-					}),
+					system: [{ text: systemPrompt, type: "text" }],
+					messages: sanitizedMessages,
 					stream: true,
 					...nativeToolParams,
-				},
-				{ headers: { "anthropic-beta": betas.join(",") } },
-			)
-		} else {
-			stream = (await this.client.messages.create({
-				model: modelId,
-				max_tokens: maxTokens ?? 4096,
-				temperature,
-				system: [{ text: systemPrompt, type: "text" }],
-				messages: sanitizedMessages,
-				stream: true,
-				...nativeToolParams,
-			})) as any
-		}
+				})) as any
+			}
 
-		let inputTokens = 0
-		let outputTokens = 0
-		let cacheWriteTokens = 0
-		let cacheReadTokens = 0
+			let inputTokens = 0
+			let outputTokens = 0
+			let cacheWriteTokens = 0
+			let cacheReadTokens = 0
 
-		for await (const chunk of stream) {
-			switch (chunk.type) {
-				case "message_start": {
-					// Tells us cache reads/writes/input/output.
-					const {
-						input_tokens = 0,
-						output_tokens = 0,
-						cache_creation_input_tokens,
-						cache_read_input_tokens,
-					} = chunk.message.usage
-
-					yield {
-						type: "usage",
-						inputTokens: input_tokens,
-						outputTokens: output_tokens,
-						cacheWriteTokens: cache_creation_input_tokens || undefined,
-						cacheReadTokens: cache_read_input_tokens || undefined,
+			// Stream processing with error handling
+			try {
+				for await (const chunk of stream) {
+					// Extract request ID from message_start event for debugging
+					if (chunk.type === "message_start" && (chunk.message as any)._request_id) {
+						requestId = (chunk.message as any)._request_id
+						console.log(`[${this.providerName}] Request ID: ${requestId}`)
 					}
 
-					inputTokens += input_tokens
-					outputTokens += output_tokens
-					cacheWriteTokens += cache_creation_input_tokens || 0
-					cacheReadTokens += cache_read_input_tokens || 0
+					switch (chunk.type) {
+						case "message_start": {
+							// Tells us cache reads/writes/input/output.
+							const {
+								input_tokens = 0,
+								output_tokens = 0,
+								cache_creation_input_tokens,
+								cache_read_input_tokens,
+							} = chunk.message.usage
 
-					break
+							yield {
+								type: "usage",
+								inputTokens: input_tokens,
+								outputTokens: output_tokens,
+								cacheWriteTokens: cache_creation_input_tokens || undefined,
+								cacheReadTokens: cache_read_input_tokens || undefined,
+							}
+
+							inputTokens += input_tokens
+							outputTokens += output_tokens
+							cacheWriteTokens += cache_creation_input_tokens || 0
+							cacheReadTokens += cache_read_input_tokens || 0
+
+							break
+						}
+						case "message_delta":
+							// Tells us stop_reason, stop_sequence, and output tokens
+							// along the way and at the end of the message.
+							yield {
+								type: "usage",
+								inputTokens: 0,
+								outputTokens: chunk.usage.output_tokens || 0,
+							}
+
+							break
+						case "message_stop":
+							// No usage data, just an indicator that the message is done.
+							break
+						case "content_block_start":
+							switch (chunk.content_block.type) {
+								case "thinking":
+									// We may receive multiple text blocks, in which
+									// case just insert a line break between them.
+									if (chunk.index > 0) {
+										yield { type: "reasoning", text: "\n" }
+									}
+
+									yield { type: "reasoning", text: chunk.content_block.thinking }
+									break
+								case "text":
+									// We may receive multiple text blocks, in which
+									// case just insert a line break between them.
+									if (chunk.index > 0) {
+										yield { type: "text", text: "\n" }
+									}
+
+									yield { type: "text", text: chunk.content_block.text }
+									break
+								case "tool_use": {
+									// Emit initial tool call partial with id and name
+									yield {
+										type: "tool_call_partial",
+										index: chunk.index,
+										id: chunk.content_block.id,
+										name: chunk.content_block.name,
+										arguments: undefined,
+									}
+									break
+								}
+							}
+							break
+						case "content_block_delta":
+							switch (chunk.delta.type) {
+								case "thinking_delta":
+									yield { type: "reasoning", text: chunk.delta.thinking }
+									break
+								case "text_delta":
+									yield { type: "text", text: chunk.delta.text }
+									break
+								case "input_json_delta": {
+									// Emit tool call partial chunks as arguments stream in
+									yield {
+										type: "tool_call_partial",
+										index: chunk.index,
+										id: undefined,
+										name: undefined,
+										arguments: chunk.delta.partial_json,
+									}
+									break
+								}
+							}
+
+							break
+						case "content_block_stop":
+							// Block complete - no action needed for now.
+							// NativeToolCallParser handles tool call completion
+							// Note: Signature for multi-turn thinking would require using stream.finalMessage()
+							// after iteration completes, which requires restructuring the streaming approach.
+							break
+					}
 				}
-				case "message_delta":
-					// Tells us stop_reason, stop_sequence, and output tokens
-					// along the way and at the end of the message.
-					yield {
-						type: "usage",
-						inputTokens: 0,
-						outputTokens: chunk.usage.output_tokens || 0,
-					}
-
-					break
-				case "message_stop":
-					// No usage data, just an indicator that the message is done.
-					break
-				case "content_block_start":
-					switch (chunk.content_block.type) {
-						case "thinking":
-							// We may receive multiple text blocks, in which
-							// case just insert a line break between them.
-							if (chunk.index > 0) {
-								yield { type: "reasoning", text: "\n" }
-							}
-
-							yield { type: "reasoning", text: chunk.content_block.thinking }
-							break
-						case "text":
-							// We may receive multiple text blocks, in which
-							// case just insert a line break between them.
-							if (chunk.index > 0) {
-								yield { type: "text", text: "\n" }
-							}
-
-							yield { type: "text", text: chunk.content_block.text }
-							break
-						case "tool_use": {
-							// Emit initial tool call partial with id and name
-							yield {
-								type: "tool_call_partial",
-								index: chunk.index,
-								id: chunk.content_block.id,
-								name: chunk.content_block.name,
-								arguments: undefined,
-							}
-							break
-						}
-					}
-					break
-				case "content_block_delta":
-					switch (chunk.delta.type) {
-						case "thinking_delta":
-							yield { type: "reasoning", text: chunk.delta.thinking }
-							break
-						case "text_delta":
-							yield { type: "text", text: chunk.delta.text }
-							break
-						case "input_json_delta": {
-							// Emit tool call partial chunks as arguments stream in
-							yield {
-								type: "tool_call_partial",
-								index: chunk.index,
-								id: undefined,
-								name: undefined,
-								arguments: chunk.delta.partial_json,
-							}
-							break
-						}
-					}
-
-					break
-				case "content_block_stop":
-					// Block complete - no action needed for now.
-					// NativeToolCallParser handles tool call completion
-					// Note: Signature for multi-turn thinking would require using stream.finalMessage()
-					// after iteration completes, which requires restructuring the streaming approach.
-					break
+			} catch (streamError) {
+				// Stream processing error: wrap with request ID for debugging
+				throw handleAnthropicError(streamError, this.providerName, {
+					messagePrefix: "streaming",
+					requestId,
+				})
 			}
-		}
 
-		if (inputTokens > 0 || outputTokens > 0 || cacheWriteTokens > 0 || cacheReadTokens > 0) {
-			const { totalCost } = calculateApiCostAnthropic(
-				this.getModel().info,
-				inputTokens,
-				outputTokens,
-				cacheWriteTokens,
-				cacheReadTokens,
-			)
+			if (inputTokens > 0 || outputTokens > 0 || cacheWriteTokens > 0 || cacheReadTokens > 0) {
+				const { totalCost } = calculateApiCostAnthropic(
+					this.getModel().info,
+					inputTokens,
+					outputTokens,
+					cacheWriteTokens,
+					cacheReadTokens,
+				)
 
-			yield {
-				type: "usage",
-				inputTokens: 0,
-				outputTokens: 0,
-				totalCost,
+				yield {
+					type: "usage",
+					inputTokens: 0,
+					outputTokens: 0,
+					totalCost,
+				}
 			}
+		} catch (error) {
+			// API call error: use Anthropic-specific error handler
+			throw handleAnthropicError(error, this.providerName, {
+				messagePrefix: "streaming",
+				requestId,
+			})
 		}
 	}
 
@@ -303,14 +334,26 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 
 		let message
 
-		message = await this.client.messages.create({
-			model,
-			max_tokens: 4096,
-			thinking: undefined,
-			temperature,
-			messages: [{ role: "user", content: prompt }],
-			stream: false,
-		})
+		try {
+			message = await this.client.messages.create({
+				model,
+				max_tokens: 4096,
+				thinking: undefined,
+				temperature,
+				messages: [{ role: "user", content: prompt }],
+				stream: false,
+			})
+		} catch (error) {
+			// Use Anthropic-specific error handler
+			throw handleAnthropicError(error, this.providerName, {
+				messagePrefix: "completion",
+			})
+		}
+
+		// Extract request ID for debugging
+		if ((message as any)._request_id) {
+			console.log(`[${this.providerName}] Request ID: ${(message as any)._request_id}`)
+		}
 
 		const content = message.content.find(({ type }) => type === "text")
 		return content?.type === "text" ? content.text : ""
