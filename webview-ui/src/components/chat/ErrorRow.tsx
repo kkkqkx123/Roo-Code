@@ -69,6 +69,12 @@ export interface ErrorRowProps {
 	code?: number
 	docsURL?: string // Optional documentation link
 	errorDetails?: string // Optional detailed error message shown in modal
+	/** Request ID for debugging and support */
+	requestId?: string
+	/** Provider name (e.g., "Anthropic", "OpenAI") */
+	providerName?: string
+	/** Retry-after delay in seconds for rate limit errors */
+	retryAfter?: number
 }
 
 /**
@@ -88,6 +94,9 @@ export const ErrorRow = memo(
 		docsURL,
 		code,
 		errorDetails,
+		requestId,
+		providerName,
+		retryAfter,
 	}: ErrorRowProps) => {
 		const { t } = useTranslation()
 		const [isExpanded, setIsExpanded] = useState(defaultExpanded)
@@ -102,19 +111,30 @@ export const ErrorRow = memo(
 
 		// Format error details with metadata prepended
 		const formattedErrorDetails = useMemo(() => {
-			if (!errorDetails) return undefined
+			if (!errorDetails && !requestId && !providerName) return undefined
 
 			const metadata = [
 				`Date/time: ${new Date().toISOString()}`,
 				`Extension version: ${version}`,
-				`Provider: ${provider}${usesProxy ? " (proxy)" : ""}`,
+				`Provider: ${providerName || provider}${usesProxy ? " (proxy)" : ""}`,
 				`Model: ${modelId}`,
-				"",
-				"",
-			].join("\n")
+			]
 
-			return metadata + errorDetails
-		}, [errorDetails, version, provider, modelId, usesProxy])
+			// Add request ID if available
+			if (requestId) {
+				metadata.push(`Request ID: ${requestId}`)
+			}
+
+			// Add retry-after if available
+			if (retryAfter) {
+				metadata.push(`Retry After: ${retryAfter}s`)
+			}
+
+			metadata.push("", "")
+
+			const errorText = errorDetails || message
+			return metadata.join("\n") + errorText
+		}, [errorDetails, version, provider, modelId, usesProxy, requestId, providerName, retryAfter, message])
 
 		const handleDownloadDiagnostics = useCallback(
 			(e: React.MouseEvent) => {
@@ -124,13 +144,15 @@ export const ErrorRow = memo(
 					values: {
 						timestamp: new Date().toISOString(),
 						version,
-						provider,
+						provider: providerName || provider,
 						model: modelId,
-						details: errorDetails || "",
+						requestId: requestId || "",
+						retryAfter: retryAfter || 0,
+						details: errorDetails || message,
 					},
 				})
 			},
-			[version, provider, modelId, errorDetails],
+			[version, provider, providerName, modelId, errorDetails, message, requestId, retryAfter],
 		)
 
 		// Default titles for different error types

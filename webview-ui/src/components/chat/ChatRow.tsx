@@ -1095,6 +1095,8 @@ export const ChatRowContent = ({
 				case "api_req_retry_delayed":
 					let body = t(`chat:apiRequest.failed`)
 					let retryInfo, rawError, code, docsURL
+					// Use structured errorInfo from message if available
+					const messageErrorInfo = message.errorInfo
 					if (message.text !== undefined) {
 						// Try to show richer error message for that code, if available
 						const potentialCode = parseInt(message.text.substring(0, 3))
@@ -1124,6 +1126,7 @@ export const ChatRowContent = ({
 						const retryTimerMatch = message.text.match(/<retry_timer>(.*?)<\/retry_timer>/)
 						const retryTimer = retryTimerMatch && retryTimerMatch[1] ? parseInt(retryTimerMatch[1], 10) : 0
 						rawError = message.text.replace(/<retry_timer>(.*?)<\/retry_timer>/, "").trim()
+
 						retryInfo = retryTimer > 0 && (
 							<p
 								className={cn(
@@ -1143,6 +1146,9 @@ export const ChatRowContent = ({
 							docsURL={docsURL}
 							additionalContent={retryInfo}
 							errorDetails={rawError}
+							requestId={messageErrorInfo?.requestId}
+							providerName={messageErrorInfo?.providerName}
+							retryAfter={messageErrorInfo?.retryAfter}
 						/>
 					)
 				case "api_req_rate_limit_wait": {

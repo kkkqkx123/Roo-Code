@@ -15,7 +15,7 @@
 
 import type Anthropic from "@anthropic-ai/sdk"
 import type { AssistantMessageContent } from "../../assistant-message/types"
-import type { ModelInfo, ClineMessage } from "@coder/types"
+import type { ModelInfo, ClineMessage, ExtractedErrorInfo } from "@coder/types"
 import { ApiMessage, StreamChunk, StreamingErrorType, TokenBreakdown } from "@coder/types"
 import { GroundingSource, TokenUsage } from "."
 
@@ -86,6 +86,11 @@ export interface StreamingResult {
 	aborted: boolean
 	abortReason?: string
 	error: StreamingErrorType | null
+	/**
+	 * Extracted error information for easier consumption by Task layer.
+	 * This is populated when error is not null.
+	 */
+	extractedErrorInfo?: ExtractedErrorInfo
 }
 
 // ============================================================================

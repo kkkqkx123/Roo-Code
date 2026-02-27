@@ -26,6 +26,7 @@ import {
 	InvalidStreamError,
 	StreamAbortedError,
 	StreamingRetryError,
+	extractErrorInfo,
 } from "@coder/types"
 
 export class StreamingProcessor {
@@ -348,6 +349,12 @@ export class StreamingProcessor {
 		// Update the assistant message in state
 		this.stateManager.setAssistantMessage(assistantMessage)
 
+		// Determine the final error
+		const finalError = error || this.stateManager.getError() || null
+
+		// Extract error information if there's an error
+		const extractedErrorInfo = finalError ? extractErrorInfo(finalError) : undefined
+
 		return {
 			assistantMessage: assistantMessage,
 			reasoningMessage: this.stateManager.getReasoningMessage(),
@@ -359,7 +366,8 @@ export class StreamingProcessor {
 			didRejectTool: this.stateManager.didRejectTool,
 			aborted: this.stateManager.isAborted(),
 			abortReason: this.stateManager.getAbortReason(),
-			error: error || this.stateManager.getError() || null,
+			error: finalError,
+			extractedErrorInfo,
 		}
 	}
 

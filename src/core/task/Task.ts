@@ -48,6 +48,11 @@ import {
 	MIN_CHECKPOINT_TIMEOUT_SECONDS,
 	MAX_MCP_TOOLS_THRESHOLD,
 	countEnabledMcpTools,
+	// Error handling imports
+	extractErrorInfo,
+	formatErrorForDisplay,
+	ErrorCategory,
+	type ExtractedErrorInfo,
 } from "@coder/types"
 
 // api
@@ -1724,6 +1729,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		} = {},
 		contextCondense?: ContextCondense,
 		contextTruncation?: ContextTruncation,
+		errorInfo?: { requestId?: string; providerName?: string; retryAfter?: number; statusCode?: number },
 	): Promise<undefined> {
 		if (this.abort) {
 			throw new Error(`[Coder#say] task ${this.taskId}.${this.instanceId} aborted`)
@@ -1760,6 +1766,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						partial,
 						contextCondense,
 						contextTruncation,
+						errorInfo,
 					})
 				}
 			} else {
@@ -1798,6 +1805,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						images,
 						contextCondense,
 						contextTruncation,
+						errorInfo,
 					})
 				}
 			}
@@ -1822,6 +1830,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				checkpoint,
 				contextCondense,
 				contextTruncation,
+				errorInfo,
 			})
 		}
 	}
@@ -2976,6 +2985,32 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						await this.updateClineMessage(apiReqMessage)
 					}
 
+					// Check for errors in the streaming result
+					if (result.error && result.extractedErrorInfo) {
+						const errorInfo = result.extractedErrorInfo
+						console.error(
+							`[Task#${this.taskId}.${this.instanceId}] Streaming error: ${formatErrorForDisplay(result.error)}`,
+						)
+
+						// Handle authentication errors - abort immediately
+						if (errorInfo.category === ErrorCategory.AUTHENTICATION) {
+							const authErrorMessage = errorInfo.message || "Authentication failed. Please check your API key."
+							await this.say("error", authErrorMessage)
+							await abortStream("authentication_failed", authErrorMessage)
+							await this.abortTask()
+							break
+						}
+
+						// Handle permission errors - abort immediately
+						if (errorInfo.category === ErrorCategory.PERMISSION) {
+							const permErrorMessage = errorInfo.message || "Permission denied. Please check your API permissions."
+							await this.say("error", permErrorMessage)
+							await abortStream("permission_denied", permErrorMessage)
+							await this.abortTask()
+							break
+						}
+					}
+
 					if (this.abort || this.abandoned || result.aborted) {
 						const cancelReason: ClineApiReqCancelReason =
 							this.abort || result.abortReason === "user_cancelled" ? "user_cancelled" : "streaming_failed"
@@ -3160,15 +3195,36 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						}
 					}
 
+					// Determine the error to use for backoff/announcement
+					// Priority: result.error > result.extractedErrorInfo > generic error
+					let errorForBackoff: Error
+					let errorMessageForUser: string
+
+					if (result.error && result.extractedErrorInfo) {
+						// Use the extracted error info from the streaming result
+						const errorInfo = result.extractedErrorInfo
+						errorForBackoff = new Error(formatErrorForDisplay(result.error))
+						errorForBackoff = Object.assign(errorForBackoff, {
+							status: errorInfo.status,
+							message: errorInfo.message,
+							requestId: errorInfo.requestId,
+						})
+						errorMessageForUser = errorInfo.message || "The model returned no assistant messages."
+					} else {
+						// Fallback to generic error message
+						errorForBackoff = new Error(
+							"Unexpected API Response: The language model did not provide any assistant messages. This may indicate an issue with the API or the model's output.",
+						)
+						errorMessageForUser = "The model returned no assistant messages. This may indicate an issue with the API or the model's output."
+					}
+
 					// Check if we should auto-retry or prompt the user
 					// Reuse the state variable from above
 					if (state?.autoApprovalEnabled) {
 						// Auto-retry with backoff - don't persist failure message when retrying
 						await this.backoffAndAnnounce(
 							currentItem.retryAttempt ?? 0,
-							new Error(
-								"Unexpected API Response: The language model did not provide any assistant messages. This may indicate an issue with the API or the model's output.",
-							),
+							errorForBackoff,
 						)
 
 						// Check if task was aborted during the backoff
@@ -3194,7 +3250,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						// Prompt the user for retry decision
 						const { response } = await this.ask(
 							"api_req_failed",
-							"The model returned no assistant messages. This may indicate an issue with the API or the model's output.",
+							errorMessageForUser,
 						)
 
 						if (response === "yesButtonClicked") {
@@ -3219,7 +3275,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 							await this.say(
 								"error",
-								"Unexpected API Response: The language model did not provide any assistant messages. This may indicate an issue with the API or the model's output.",
+								errorMessageForUser,
 							)
 
 							await this.addToApiConversationHistory({
@@ -3925,7 +3981,15 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				rateLimitDelay = Math.ceil(Math.min(rateLimit, Math.max(0, rateLimit * 1000 - elapsed) / 1000))
 			}
 
-			// Prefer RetryInfo on 429 if present
+			// Extract error info for better handling
+			const errorInfo = extractErrorInfo(error)
+
+			// Use retryAfter from error info if available (for rate limit errors)
+			if (errorInfo.retryAfter && errorInfo.retryAfter > 0) {
+				exponentialDelay = Math.max(exponentialDelay, errorInfo.retryAfter)
+			}
+
+			// Prefer RetryInfo on 429 if present (legacy support)
 			if (error?.status === 429) {
 				const retryInfo = error?.errorDetails?.find(
 					(d: any) => d["@type"] === "type.googleapis.com/google.rpc.RetryInfo",
@@ -3941,21 +4005,27 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				return
 			}
 
-			// Build header text; fall back to error message if none provided
-			let headerText
-			if (error.status) {
-				// Include both status code (for ChatRow parsing) and detailed message (for error details)
-				// Format: "<status>\n<message>" allows ChatRow to extract status via parseInt(text.substring(0,3))
-				// while preserving the full error message in errorDetails for debugging
-				const errorMessage = error?.message || "Unknown error"
-				headerText = `${error.status}\n${errorMessage}`
-			} else if (error?.message) {
-				headerText = error.message
+			// Build header text using extracted error info
+			// Format: "<status>\n<message>" for ChatRow to extract status
+			let headerText: string
+			if (errorInfo.status) {
+				const errorMessage = errorInfo.message || "Unknown error"
+				headerText = `${errorInfo.status}\n${errorMessage}`
+			} else if (errorInfo.message) {
+				headerText = errorInfo.message
 			} else {
 				headerText = "Unknown error"
 			}
 
 			headerText = headerText ? `${headerText}\n` : ""
+
+			// Build structured error info for the message
+			const structuredErrorInfo = {
+				requestId: errorInfo.requestId,
+				providerName: errorInfo.providerName,
+				retryAfter: errorInfo.retryAfter,
+				statusCode: errorInfo.status,
+			}
 
 			// Show countdown timer with exponential backoff
 			for (let i = finalDelay; i > 0; i--) {
@@ -3964,11 +4034,33 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					throw new Error(`[Task#${this.taskId}] Aborted during retry countdown`)
 				}
 
-				await this.say("api_req_retry_delayed", `${headerText}<retry_timer>${i}</retry_timer>`, undefined, true)
+				await this.say(
+					"api_req_retry_delayed",
+					`${headerText}<retry_timer>${i}</retry_timer>`,
+					undefined,
+					true,
+					undefined,
+					undefined,
+					{},
+					undefined,
+					undefined,
+					structuredErrorInfo,
+				)
 				await delay(1000)
 			}
 
-			await this.say("api_req_retry_delayed", headerText, undefined, false)
+			await this.say(
+				"api_req_retry_delayed",
+				headerText,
+				undefined,
+				false,
+				undefined,
+				undefined,
+				{},
+				undefined,
+				undefined,
+				structuredErrorInfo,
+			)
 		} catch (err) {
 			console.error("Exponential backoff failed:", err)
 		}

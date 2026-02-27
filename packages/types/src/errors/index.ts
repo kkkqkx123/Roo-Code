@@ -78,3 +78,20 @@ export {
 	getErrorContext,
 	type ErrorHandlingResult,
 } from "./utils.js"
+
+// Error extractor
+export {
+	extractErrorInfo,
+	formatErrorForDisplay,
+	formatErrorForLog,
+	categorizeError,
+	isErrorRetryable,
+	getErrorRetryDelay,
+	isAuthenticationError,
+	isRateLimitError,
+	isServerError,
+	isConnectionError,
+	isUserCancellation,
+	ErrorCategory,
+	type ExtractedErrorInfo,
+} from "./extractor.js"

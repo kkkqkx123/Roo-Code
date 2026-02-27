@@ -31,6 +31,9 @@ import {
 	UnprocessableEntityError,
 	isApiProviderError,
 	isRetryableError,
+	extractErrorInfo,
+	formatErrorForDisplay,
+	ErrorCategory,
 } from "@coder/types"
 
 export class StreamingErrorHandler {
@@ -91,6 +94,9 @@ export class StreamingErrorHandler {
 			}
 		}
 
+		// Extract error information using the new extractor
+		const errorInfo = extractErrorInfo(error)
+
 		// Determine error type and handle accordingly
 		const streamingError = this.normalizeError(error)
 		let cancelReason: string
@@ -110,6 +116,7 @@ export class StreamingErrorHandler {
 			shouldRetry = result.shouldRetry
 		}
 
+		// Use extracted error info for better message formatting
 		const rawErrorMessage = this.extractErrorMessage(error)
 		const streamingFailedMessage = this.stateManager?.isAborted()
 			? undefined
@@ -125,10 +132,13 @@ export class StreamingErrorHandler {
 			}
 		}
 
+		// Use retryAfter from extracted error info if available
+		const finalRetryDelay = retryDelay ?? errorInfo.retryAfter ? (errorInfo.retryAfter! * 1000) : await this.calculateBackoffDelay()
+
 		// Stream failed, should retry
 		return {
 			shouldRetry,
-			retryDelay: retryDelay ?? (await this.calculateBackoffDelay()),
+			retryDelay: finalRetryDelay,
 			abortReason: cancelReason,
 			errorMessage: streamingFailedMessage,
 		}
@@ -336,16 +346,9 @@ export class StreamingErrorHandler {
 	 * Extract error message from error object
 	 */
 	private extractErrorMessage(error: unknown): string {
+		// Use the new formatErrorForDisplay for consistent formatting
 		if (error instanceof Error) {
-			// For ApiProviderError, include provider name and request ID
-			if (isApiProviderError(error)) {
-				let message = error.message
-				if (error.requestId) {
-					message += ` (Request ID: ${error.requestId})`
-				}
-				return message
-			}
-			return error.message
+			return formatErrorForDisplay(error)
 		}
 		return JSON.stringify(serializeError(error), null, 2)
 	}

@@ -235,6 +235,27 @@ export const contextTruncationSchema = z.object({
 export type ContextTruncation = z.infer<typeof contextTruncationSchema>
 
 /**
+ * ErrorInfo
+ *
+ * Structured error information attached to messages for rich error display.
+ * This allows the frontend to display detailed error information without
+ * parsing error message strings.
+ *
+ * @property requestId - Request ID for debugging and support
+ * @property providerName - Provider name (e.g., "Anthropic", "OpenAI")
+ * @property retryAfter - Retry-after delay in seconds for rate limit errors
+ * @property statusCode - HTTP status code if applicable
+ */
+export const errorInfoSchema = z.object({
+	requestId: z.string().optional(),
+	providerName: z.string().optional(),
+	retryAfter: z.number().optional(),
+	statusCode: z.number().optional(),
+})
+
+export type ErrorInfo = z.infer<typeof errorInfoSchema>
+
+/**
  * ClineMessage
  *
  * The main message type used for communication between the extension and webview.
@@ -268,6 +289,11 @@ export const clineMessageSchema = z.object({
 	 * Present when `say: "sliding_window_truncation"`.
 	 */
 	contextTruncation: contextTruncationSchema.optional(),
+	/**
+	 * Structured error information for rich error display.
+	 * Present when `say: "api_req_retry_delayed"` or other error-related messages.
+	 */
+	errorInfo: errorInfoSchema.optional(),
 	isProtected: z.boolean().optional(),
 	apiProtocol: z.union([z.literal("openai"), z.literal("anthropic")]).optional(),
 	isAnswered: z.boolean().optional(),
