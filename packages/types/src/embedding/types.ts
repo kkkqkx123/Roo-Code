@@ -1,3 +1,7 @@
+/**
+ * Embedding types and model profiles
+ */
+
 export type EmbedderProvider =
 	| "openai"
 	| "openai-compatible"

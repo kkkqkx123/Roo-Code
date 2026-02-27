@@ -1,9 +1,9 @@
 /**
- * Defines profiles for different embedding models, including their dimensions.
+ * Embedding model utility functions
  * All model profiles are now user-defined - no hardcoded defaults.
  */
 
-import type { EmbedderProvider, EmbeddingModelProfiles } from "./embedding.js"
+import type { EmbedderProvider, EmbeddingModelProfiles } from "./types.js"
 
 /**
  * Retrieves the embedding dimension for a given provider and model ID from user-defined profiles.

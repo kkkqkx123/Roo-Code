@@ -1,11 +1,11 @@
 /**
- * Streaming Module Types
+ * Streaming Module - Core Types
  *
  * This file contains core types and interfaces for the streaming processing system.
  * These types are used across all streaming modules to ensure type safety and consistency.
  */
 
-import type { StreamingErrorType } from "./errors/index.js"
+import type { StreamingErrorType } from "../errors/index.js"
 
 // ============================================================================
 // Grounding Types

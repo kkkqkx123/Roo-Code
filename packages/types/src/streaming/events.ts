@@ -1,12 +1,12 @@
 /**
- * Streaming Event Types
+ * Streaming Module - Event Types
  *
  * This file contains all event types used in the streaming processing system.
  * These types represent different types of chunks and events that can occur
  * during streaming API responses.
  */
 
-import type { StreamingGroundingSource } from "./streaming.js"
+import type { StreamingGroundingSource } from "./types.js"
 
 // ============================================================================
 // Stream Chunk Types
