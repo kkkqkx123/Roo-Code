@@ -3,7 +3,7 @@ import { AxiosError } from "axios"
 import { createHash } from "crypto"
 import * as path from "path"
 import { v5 as uuidv5 } from "uuid"
-import { IVectorStore } from "../interfaces/vector-store"
+import { IVectorStore, IndexMetadata } from "../interfaces/vector-store"
 import { Payload, VectorStoreSearchResult } from "../interfaces"
 import { DEFAULT_MAX_SEARCH_RESULTS, DEFAULT_SEARCH_MIN_SCORE, QDRANT_CODE_BLOCK_NAMESPACE } from "../constants"
 import { t } from "../../../i18n"
@@ -227,20 +227,20 @@ export class QdrantVectorStore implements IVectorStore {
 						},
 						quantization_config: config.vectors.quantization?.enabled
 							? {
-									scalar: config.vectors.quantization.type === "scalar"
-										? {
-												type: "int8",
-												always_ram: false,
-										  }
-										: undefined,
-									product: config.vectors.quantization.type === "product"
-										? {
-												product: {
-													always_ram: false,
-												},
-										  }
-										: undefined,
-							  }
+								scalar: config.vectors.quantization.type === "scalar"
+									? {
+										type: "int8",
+										always_ram: false,
+									}
+									: undefined,
+								product: config.vectors.quantization.type === "product"
+									? {
+										product: {
+											always_ram: false,
+										},
+									}
+									: undefined,
+							}
 							: undefined,
 						optimizers_config: config.wal && {
 							indexing_threshold: 0,
@@ -272,20 +272,20 @@ export class QdrantVectorStore implements IVectorStore {
 						},
 						quantization_config: config.vectors.quantization?.enabled
 							? {
-									scalar: config.vectors.quantization.type === "scalar"
-										? {
-												type: "int8",
-												always_ram: false,
-										  }
-										: undefined,
-									product: config.vectors.quantization.type === "product"
-										? {
-												product: {
-													always_ram: false,
-												},
-										  }
-										: undefined,
-							  }
+								scalar: config.vectors.quantization.type === "scalar"
+									? {
+										type: "int8",
+										always_ram: false,
+									}
+									: undefined,
+								product: config.vectors.quantization.type === "product"
+									? {
+										product: {
+											always_ram: false,
+										},
+									}
+									: undefined,
+							}
 							: undefined,
 						optimizers_config: config.wal && {
 							indexing_threshold: 0,
@@ -400,20 +400,20 @@ export class QdrantVectorStore implements IVectorStore {
 				},
 				quantization_config: config.vectors.quantization?.enabled
 					? {
-							scalar: config.vectors.quantization.type === "scalar"
-								? {
-										type: "int8",
-										always_ram: false,
-								  }
-								: undefined,
-							product: config.vectors.quantization.type === "product"
-								? {
-										product: {
-											always_ram: false,
-										},
-								  }
-								: undefined,
-					  }
+						scalar: config.vectors.quantization.type === "scalar"
+							? {
+								type: "int8",
+								always_ram: false,
+							}
+							: undefined,
+						product: config.vectors.quantization.type === "product"
+							? {
+								product: {
+									always_ram: false,
+								},
+							}
+							: undefined,
+					}
 					: undefined,
 				optimizers_config: config.wal && {
 					indexing_threshold: 0,
@@ -766,7 +766,7 @@ export class QdrantVectorStore implements IVectorStore {
 	async hasIndexedData(): Promise<boolean> {
 		try {
 			const collectionInfo = await this.getCollectionInfo()
-			
+
 			// Check if the collection has any points indexed
 			const pointsCount = collectionInfo.points_count ?? 0
 			if (pointsCount === 0) {
@@ -782,15 +782,34 @@ export class QdrantVectorStore implements IVectorStore {
 
 			// If marker exists, use it to determine completion status
 			if (metadataPoints.length > 0 && metadataPoints[0]) {
-				return metadataPoints[0].payload?.indexing_complete === true
+				const isComplete = metadataPoints[0].payload?.indexing_complete === true
+				if (isComplete) {
+					console.log(
+						"[QdrantVectorStore] Index metadata found: indexing is complete.",
+					)
+				} else {
+					console.log(
+						"[QdrantVectorStore] Index metadata found: indexing is incomplete (was interrupted).",
+					)
+				}
+				return isComplete
 			}
 
-			// Backward compatibility: No marker exists (old index or pre-marker version)
-			// Fall back to old logic - assume complete if collection has points
+			// No metadata marker found - this indicates either:
+			// 1. Old index from pre-metadata version (backward compatibility)
+			// 2. Index was interrupted before any metadata was written
+			// 
+			// We need to distinguish these cases. If there are many points, it's likely
+			// an old complete index. If there are few points, it might be incomplete.
+			// 
+			// For safety, we now require the metadata marker to consider an index complete.
+			// This prevents the bug where a partially indexed collection was incorrectly
+			// considered complete.
 			console.log(
-				"[QdrantVectorStore] No indexing metadata marker found. Using backward compatibility mode (checking points_count > 0).",
+				"[QdrantVectorStore] No indexing metadata marker found. Collection has %d points but no completion marker. Treating as incomplete to ensure data integrity.",
+				pointsCount,
 			)
-			return pointsCount > 0
+			return false
 		} catch (error) {
 			if (error instanceof QdrantConnectionError) {
 				throw error
@@ -829,6 +848,73 @@ export class QdrantVectorStore implements IVectorStore {
 			console.log("[QdrantVectorStore] Marked indexing as complete")
 		} catch (error) {
 			console.error("[QdrantVectorStore] Failed to mark indexing as complete:", error)
+			throw error
+		}
+	}
+
+	/**
+	 * Marks the indexing process as complete with additional metadata
+	 * Should be called after a successful full workspace scan or incremental scan
+	 * @param additionalMetadata Additional metadata to store
+	 */
+	async markIndexingCompleteWithMetadata(additionalMetadata: {
+		indexed_file_count?: number
+		config_version?: string
+		vector_dimension?: number
+		embedder_provider?: string
+		model_id?: string
+	}): Promise<void> {
+		try {
+			const metadataId = uuidv5("__indexing_metadata__", QDRANT_CODE_BLOCK_NAMESPACE)
+			const workspaceHash = createHash("sha256").update(this.workspacePath).digest("hex").substring(0, 16)
+
+			await this.client.upsert(this.collectionName, {
+				points: [
+					{
+						id: metadataId,
+						vector: new Array(this.vectorSize).fill(0),
+						payload: {
+							type: "metadata",
+							indexing_complete: true,
+							completed_at: Date.now(),
+							workspace_hash: workspaceHash,
+							...additionalMetadata,
+						},
+					},
+				],
+				wait: true,
+			})
+			console.log("[QdrantVectorStore] Marked indexing as complete with metadata:", additionalMetadata)
+		} catch (error) {
+			console.error("[QdrantVectorStore] Failed to mark indexing as complete with metadata:", error)
+			throw error
+		}
+	}
+
+	/**
+	 * Gets the index metadata from the vector store
+	 * @returns Promise resolving to the index metadata or null if not found
+	 */
+	async getIndexMetadata(): Promise<IndexMetadata | null> {
+		try {
+			const metadataId = uuidv5("__indexing_metadata__", QDRANT_CODE_BLOCK_NAMESPACE)
+			const metadataPoints = await this.client.retrieve(this.collectionName, {
+				ids: [metadataId],
+			})
+
+			if (metadataPoints.length > 0 && metadataPoints[0]?.payload) {
+				return metadataPoints[0].payload as unknown as IndexMetadata
+			}
+
+			return null
+		} catch (error) {
+			if (error instanceof QdrantConnectionError) {
+				throw error
+			}
+			if (error instanceof QdrantCollectionNotFoundError) {
+				return null
+			}
+			console.error("[QdrantVectorStore] Failed to get index metadata:", error)
 			throw error
 		}
 	}

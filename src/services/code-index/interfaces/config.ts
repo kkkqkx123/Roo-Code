@@ -37,3 +37,18 @@ export type PreviousConfigSnapshot = {
 	qdrantApiKey?: string
 	vectorStorageMode?: string
 }
+
+/**
+ * Result of configuration change analysis
+ * Used to determine what action is needed when configuration changes
+ */
+export interface ConfigChangeResult {
+	/** Whether any restart is needed */
+	requiresRestart: boolean
+	/** Whether the index data needs to be rebuilt (e.g., vector dimension changed) */
+	requiresReindex: boolean
+	/** Whether only the service needs to be restarted (e.g., API key changed) */
+	requiresServiceRestart: boolean
+	/** Human-readable reason for the restart requirement */
+	reason?: string
+}

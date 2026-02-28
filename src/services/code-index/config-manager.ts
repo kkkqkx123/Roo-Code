@@ -1,7 +1,7 @@
 import { ApiHandlerOptions } from "../../shared/api"
 import { ContextProxy } from "../../core/config/ContextProxy"
 import { EmbedderProvider } from "./interfaces/manager"
-import { CodeIndexConfig, PreviousConfigSnapshot } from "./interfaces/config"
+import { CodeIndexConfig, PreviousConfigSnapshot, ConfigChangeResult } from "./interfaces/config"
 import { DEFAULT_SEARCH_MIN_SCORE, DEFAULT_MAX_SEARCH_RESULTS } from "./constants"
 import { getModelDimension, getModelScoreThreshold, getDefaultModelId, type EmbeddingModelProfiles } from "@coder/types"
 import { VectorStorageConfig, DEFAULT_VECTOR_STORAGE_CONFIG } from "./interfaces/vector-storage-config"
@@ -209,6 +209,8 @@ export class CodeIndexConfigManager {
 			searchMinScore?: number
 		}
 		requiresRestart: boolean
+		requiresReindex: boolean
+		configChangeResult: ConfigChangeResult
 	}> {
 		// Capture the ACTUAL previous state before loading new configuration
 		const previousConfigSnapshot: PreviousConfigSnapshot = {
@@ -249,7 +251,7 @@ export class CodeIndexConfigManager {
 		} : "undefined")
 		console.log("  isConfigured():", this.isConfigured())
 
-		const requiresRestart = this.doesConfigChangeRequireRestart(previousConfigSnapshot)
+		const configChangeResult = this.analyzeConfigChange(previousConfigSnapshot)
 
 		return {
 			configSnapshot: previousConfigSnapshot,
@@ -265,7 +267,9 @@ export class CodeIndexConfigManager {
 				qdrantApiKey: this.qdrantApiKey,
 				searchMinScore: this.currentSearchMinScore,
 			},
-			requiresRestart,
+			requiresRestart: configChangeResult.requiresRestart,
+			requiresReindex: configChangeResult.requiresReindex,
+			configChangeResult,
 		}
 	}
 
@@ -293,22 +297,27 @@ export class CodeIndexConfigManager {
 	}
 
 	/**
-	 * Determines if a configuration change requires restarting the indexing process.
-	 * Simplified logic: only restart for critical changes that affect service functionality.
+	 * Analyzes configuration changes and determines what action is needed.
+	 * This is an improved version that distinguishes between:
+	 * - requiresReindex: Index data needs to be rebuilt (e.g., vector dimension changed)
+	 * - requiresServiceRestart: Only service needs restart, index data can be preserved
+	 * - requiresRestart: Any restart (either reindex or service restart)
 	 *
-	 * CRITICAL CHANGES (require restart):
-	 * - Provider changes (openai -> gemini, openai-compatible, etc.)
-	 * - Authentication changes (API keys, base URLs)
+	 * REINDEX REQUIRED (data incompatible):
+	 * - Embedder provider changes (openai -> gemini, etc.)
 	 * - Vector dimension changes (model changes that affect embedding size)
+	 *
+	 * SERVICE RESTART REQUIRED (data compatible):
+	 * - Authentication changes (API keys)
 	 * - Qdrant connection changes (URL, API key)
 	 * - Feature enable/disable transitions
 	 *
-	 * MINOR CHANGES (no restart needed):
+	 * NO RESTART NEEDED:
 	 * - Search minimum score adjustments
 	 * - UI-only settings
-	 * - Non-functional configuration tweaks
+	 * - Vector storage mode changes (doesn't affect existing data)
 	 */
-	doesConfigChangeRequireRestart(prev: PreviousConfigSnapshot): boolean {
+	analyzeConfigChange(prev: PreviousConfigSnapshot): ConfigChangeResult {
 		const nowConfigured = this.isConfigured()
 
 		// Handle null/undefined values safely
@@ -325,78 +334,146 @@ export class CodeIndexConfigManager {
 
 		// 1. Transition from disabled/unconfigured to enabled/configured
 		if ((!prevEnabled || !prevConfigured) && this.codebaseIndexEnabled && nowConfigured) {
-			return true
+			return {
+				requiresRestart: true,
+				requiresReindex: false,
+				requiresServiceRestart: true,
+				reason: "Feature enabled and configured",
+			}
 		}
 
 		// 2. Transition from enabled to disabled
 		if (prevEnabled && !this.codebaseIndexEnabled) {
-			return true
+			return {
+				requiresRestart: true,
+				requiresReindex: false,
+				requiresServiceRestart: true,
+				reason: "Feature disabled",
+			}
 		}
 
 		// 3. If wasn't ready before and isn't ready now, no restart needed
 		if ((!prevEnabled || !prevConfigured) && (!this.codebaseIndexEnabled || !nowConfigured)) {
-			return false
+			return {
+				requiresRestart: false,
+				requiresReindex: false,
+				requiresServiceRestart: false,
+			}
 		}
 
-		// 4. CRITICAL CHANGES - Always restart for these
-		// Only check for critical changes if feature is enabled
+		// 4. If feature is disabled, no restart needed
 		if (!this.codebaseIndexEnabled) {
-			return false
+			return {
+				requiresRestart: false,
+				requiresReindex: false,
+				requiresServiceRestart: false,
+			}
 		}
 
-		// Provider change
+		// 5. REINDEX REQUIRED: Provider change (embeddings are incompatible)
 		if (prevProvider !== this.embedderProvider) {
-			return true
+			return {
+				requiresRestart: true,
+				requiresReindex: true,
+				requiresServiceRestart: true,
+				reason: `Embedder provider changed from ${prevProvider} to ${this.embedderProvider}`,
+			}
 		}
 
-		// Authentication changes (API keys)
+		// 6. REINDEX REQUIRED: Vector dimension changed
+		if (this._hasVectorDimensionChanged(prevProvider, prev?.modelId)) {
+			return {
+				requiresRestart: true,
+				requiresReindex: true,
+				requiresServiceRestart: true,
+				reason: "Vector dimension changed",
+			}
+		}
+
+		// 7. REINDEX REQUIRED: Model dimension explicitly changed
+		const currentModelDimension = this.modelDimension
+		if (prevModelDimension !== currentModelDimension) {
+			return {
+				requiresRestart: true,
+				requiresReindex: true,
+				requiresServiceRestart: true,
+				reason: "Model dimension changed",
+			}
+		}
+
+		// 8. SERVICE RESTART ONLY: Authentication changes (API keys)
 		const currentOpenAiKey = this.openAiOptions?.openAiNativeApiKey ?? ""
 		const currentOpenAiCompatibleBaseUrl = this.openAiCompatibleOptions?.baseUrl ?? ""
 		const currentOpenAiCompatibleApiKey = this.openAiCompatibleOptions?.apiKey ?? ""
-		const currentModelDimension = this.modelDimension
 		const currentGeminiApiKey = this.geminiOptions?.apiKey ?? ""
 		const currentQdrantUrl = this.qdrantUrl ?? ""
 		const currentQdrantApiKey = this.qdrantApiKey ?? ""
 
 		if (prevOpenAiKey !== currentOpenAiKey) {
-			return true
+			return {
+				requiresRestart: true,
+				requiresReindex: false,
+				requiresServiceRestart: true,
+				reason: "OpenAI API key changed",
+			}
 		}
 
 		if (
 			prevOpenAiCompatibleBaseUrl !== currentOpenAiCompatibleBaseUrl ||
 			prevOpenAiCompatibleApiKey !== currentOpenAiCompatibleApiKey
 		) {
-			return true
+			return {
+				requiresRestart: true,
+				requiresReindex: false,
+				requiresServiceRestart: true,
+				reason: "OpenAI-compatible configuration changed",
+			}
 		}
 
 		if (prevGeminiApiKey !== currentGeminiApiKey) {
-			return true
+			return {
+				requiresRestart: true,
+				requiresReindex: false,
+				requiresServiceRestart: true,
+				reason: "Gemini API key changed",
+			}
 		}
 
-		// Check for model dimension changes (generic for all providers)
-		if (prevModelDimension !== currentModelDimension) {
-			return true
-		}
-
+		// 9. SERVICE RESTART ONLY: Qdrant connection changes
 		if (prevQdrantUrl !== currentQdrantUrl || prevQdrantApiKey !== currentQdrantApiKey) {
-			return true
+			return {
+				requiresRestart: true,
+				requiresReindex: false,
+				requiresServiceRestart: true,
+				reason: "Qdrant connection configuration changed",
+			}
 		}
 
-		// Vector storage configuration changes
-		// With the new design, mode directly contains the preset (auto/tiny/small/medium/large/custom)
+		// 10. NO RESTART: Vector storage mode changes (doesn't affect existing data)
+		// This is a configuration optimization that only affects new collections
 		const prevVectorStorageMode = prev?.vectorStorageMode ?? "auto"
 		const currentVectorStorageMode = this._vectorStorageConfig.mode
-
 		if (prevVectorStorageMode !== currentVectorStorageMode) {
-			return true
+			console.log(
+				`[CodeIndexConfigManager] Vector storage mode changed from ${prevVectorStorageMode} to ${currentVectorStorageMode}, but no restart needed (only affects new collections)`,
+			)
 		}
 
-		// Vector dimension changes (still important for compatibility)
-		if (this._hasVectorDimensionChanged(prevProvider, prev?.modelId)) {
-			return true
+		// No changes requiring restart
+		return {
+			requiresRestart: false,
+			requiresReindex: false,
+			requiresServiceRestart: false,
 		}
+	}
 
-		return false
+	/**
+	 * Determines if a configuration change requires restarting the indexing process.
+	 * @deprecated Use analyzeConfigChange() instead for more granular control
+	 */
+	doesConfigChangeRequireRestart(prev: PreviousConfigSnapshot): boolean {
+		const result = this.analyzeConfigChange(prev)
+		return result.requiresRestart
 	}
 
 	/**

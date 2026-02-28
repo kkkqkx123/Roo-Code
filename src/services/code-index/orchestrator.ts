@@ -25,7 +25,7 @@ export class CodeIndexOrchestrator {
 		private readonly vectorStore: IVectorStore,
 		private readonly scanner: DirectoryScanner,
 		private readonly fileWatcher: IFileWatcher,
-	) {}
+	) { }
 
 	/**
 	 * Starts the file watcher if not already running.
@@ -48,7 +48,7 @@ export class CodeIndexOrchestrator {
 			await this.fileWatcher.initialize()
 
 			this._fileWatcherSubscriptions = [
-				this.fileWatcher.onDidStartBatchProcessing((filePaths: string[]) => {}),
+				this.fileWatcher.onDidStartBatchProcessing((filePaths: string[]) => { }),
 				this.fileWatcher.onBatchProgressUpdate(({ processedInBatch, totalInBatch, currentFile }) => {
 					if (totalInBatch > 0 && this.stateManager.state !== "Indexing") {
 						this.stateManager.setSystemState("Indexing", "Processing file changes...")
@@ -100,7 +100,7 @@ export class CodeIndexOrchestrator {
 	 */
 	public async startIndexing(isRetryAfterError: boolean = false): Promise<void> {
 		console.log("[CodeIndexOrchestrator] startIndexing called, isRetryAfterError:", isRetryAfterError)
-		
+
 		// Check if workspace is available first
 		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
 			this.stateManager.setSystemState("Error", t("embeddings:orchestrator.indexingRequiresWorkspace"))
@@ -142,6 +142,13 @@ export class CodeIndexOrchestrator {
 		}
 		console.log("[CodeIndexOrchestrator] State check passed, current state:", this.stateManager.state)
 
+		// Try fast start first - check if we can skip the scan
+		const fastStartResult = await this._tryFastStart()
+		if (fastStartResult) {
+			console.log("[CodeIndexOrchestrator] Fast start successful, skipping full scan")
+			return
+		}
+
 		this._isProcessing = true
 		this._abortController = new AbortController()
 		const signal = this._abortController.signal
@@ -158,7 +165,7 @@ export class CodeIndexOrchestrator {
 			if (isRetryAfterError) {
 				try {
 					const collectionExists = await this.vectorStore.collectionExists()
-					
+
 					if (collectionExists) {
 						hasExistingData = await this.vectorStore.hasIndexedData()
 						if (hasExistingData) {
@@ -289,7 +296,16 @@ export class CodeIndexOrchestrator {
 				await this._startWatcher()
 
 				// Mark indexing as complete after successful incremental scan
-				await this.vectorStore.markIndexingComplete()
+				// Use enhanced metadata method if available
+				if (this.vectorStore.markIndexingCompleteWithMetadata) {
+					await this.vectorStore.markIndexingCompleteWithMetadata({
+						vector_dimension: this.configManager.currentModelDimension,
+						embedder_provider: this.configManager.currentEmbedderProvider,
+						model_id: this.configManager.currentModelId,
+					})
+				} else {
+					await this.vectorStore.markIndexingComplete()
+				}
 
 				this.stateManager.setSystemState("Indexed", t("embeddings:orchestrator.fileWatcherStarted"))
 			} else {
@@ -383,7 +399,16 @@ export class CodeIndexOrchestrator {
 				await this._startWatcher()
 
 				// Mark indexing as complete after successful full scan
-				await this.vectorStore.markIndexingComplete()
+				// Use enhanced metadata method if available
+				if (this.vectorStore.markIndexingCompleteWithMetadata) {
+					await this.vectorStore.markIndexingCompleteWithMetadata({
+						vector_dimension: this.configManager.currentModelDimension,
+						embedder_provider: this.configManager.currentEmbedderProvider,
+						model_id: this.configManager.currentModelId,
+					})
+				} else {
+					await this.vectorStore.markIndexingComplete()
+				}
 
 				this.stateManager.setSystemState("Indexed", t("embeddings:orchestrator.fileWatcherStarted"))
 			}
@@ -498,5 +523,69 @@ export class CodeIndexOrchestrator {
 	 */
 	public get state(): IndexingState {
 		return this.stateManager.state
+	}
+
+	/**
+	 * Attempts a fast start by checking if the existing index is complete and valid.
+	 * If successful, starts the file watcher without performing a full scan.
+	 * @returns true if fast start was successful, false otherwise
+	 */
+	private async _tryFastStart(): Promise<boolean> {
+		try {
+			console.log("[CodeIndexOrchestrator] Attempting fast start...")
+
+			// Check if collection exists
+			const collectionExists = await this.vectorStore.collectionExists()
+			if (!collectionExists) {
+				console.log("[CodeIndexOrchestrator] Fast start: Collection does not exist")
+				return false
+			}
+
+			// Get index metadata
+			const metadata = await this.vectorStore.getIndexMetadata()
+			if (!metadata) {
+				console.log("[CodeIndexOrchestrator] Fast start: No metadata found")
+				return false
+			}
+
+			// Check if indexing is complete
+			if (!metadata.indexing_complete) {
+				console.log("[CodeIndexOrchestrator] Fast start: Indexing was not complete")
+				return false
+			}
+
+			// Check if configuration matches (if metadata has config info)
+			if (metadata.vector_dimension && metadata.vector_dimension !== this.configManager.currentModelDimension) {
+				console.log(
+					`[CodeIndexOrchestrator] Fast start: Vector dimension mismatch (stored: ${metadata.vector_dimension}, current: ${this.configManager.currentModelDimension})`,
+				)
+				return false
+			}
+
+			// Check if embedder provider matches (if metadata has provider info)
+			if (metadata.embedder_provider && metadata.embedder_provider !== this.configManager.currentEmbedderProvider) {
+				console.log(
+					`[CodeIndexOrchestrator] Fast start: Embedder provider mismatch (stored: ${metadata.embedder_provider}, current: ${this.configManager.currentEmbedderProvider})`,
+				)
+				return false
+			}
+
+			// All checks passed - we can do a fast start
+			console.log(
+				`[CodeIndexOrchestrator] Fast start: Index is complete and valid. Last completed at: ${metadata.completed_at ? new Date(metadata.completed_at).toISOString() : 'unknown'}`,
+			)
+
+			// Start the file watcher directly
+			await this._startWatcher()
+
+			// Set state to Indexed
+			this.stateManager.setSystemState("Indexed", t("embeddings:orchestrator.fileWatcherStarted"))
+
+			return true
+		} catch (error) {
+			// If any error occurs during fast start, fall back to normal start
+			console.warn("[CodeIndexOrchestrator] Fast start failed, falling back to normal start:", error)
+			return false
+		}
 	}
 }

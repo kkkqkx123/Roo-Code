@@ -195,27 +195,32 @@ export class CodeIndexManager {
 	 * Must be called before using any other methods.
 	 * @returns Object indicating if a restart is needed
 	 */
-	public async initialize(contextProxy: ContextProxy): Promise<{ requiresRestart: boolean }> {
+	public async initialize(contextProxy: ContextProxy): Promise<{ requiresRestart: boolean; requiresReindex: boolean }> {
 		// 1. ConfigManager Initialization and Configuration Loading
 		if (!this._configManager) {
 			this._configManager = new CodeIndexConfigManager(contextProxy)
 		}
 		// Load configuration once to get current state and restart requirements
-		const { requiresRestart } = await this._configManager.loadConfiguration()
+		const { requiresRestart, requiresReindex, configChangeResult } = await this._configManager.loadConfiguration()
+
+		// Log the reason for restart if any
+		if (configChangeResult.reason) {
+			console.log(`[CodeIndexManager] Config change: ${configChangeResult.reason}`)
+		}
 
 		// 2. Check if feature is enabled
 		if (!this.isFeatureEnabled) {
 			if (this._orchestrator) {
 				this._orchestrator.stopWatcher()
 			}
-			return { requiresRestart }
+			return { requiresRestart, requiresReindex }
 		}
 
 		// 3. Check if workspace is available
 		const workspacePath = this.workspacePath
 		if (!workspacePath) {
 			this._stateManager.setSystemState("Standby", "No workspace folder open")
-			return { requiresRestart }
+			return { requiresRestart, requiresReindex }
 		}
 
 		// 4. CacheManager Initialization
@@ -225,6 +230,7 @@ export class CodeIndexManager {
 		}
 
 		// 5. Determine if Core Services Need Recreation
+		// Only recreate services if restart is needed (not just for reindex)
 		const needsServiceRecreation = !this._serviceFactory || requiresRestart
 
 		if (needsServiceRecreation) {
@@ -245,7 +251,7 @@ export class CodeIndexManager {
 			this._orchestrator?.startIndexing()
 		}
 
-		return { requiresRestart }
+		return { requiresRestart, requiresReindex }
 	}
 
 	/**

@@ -21,6 +21,33 @@ export interface SizeEstimationResult {
 	totalFileSize: number
 }
 
+/**
+ * Index metadata stored in the vector store
+ * Used to track indexing state and enable fast-start optimization
+ */
+export interface IndexMetadata {
+	/** Type identifier for metadata points */
+	type: "metadata"
+	/** Whether indexing is complete */
+	indexing_complete: boolean
+	/** Timestamp when indexing completed (milliseconds since epoch) */
+	completed_at?: number
+	/** Timestamp when indexing started */
+	started_at?: number
+	/** Number of files that were indexed */
+	indexed_file_count?: number
+	/** Hash of the workspace path for verification */
+	workspace_hash?: string
+	/** Configuration version hash to detect config changes */
+	config_version?: string
+	/** Vector dimension used for this index */
+	vector_dimension?: number
+	/** Embedder provider used */
+	embedder_provider?: string
+	/** Model ID used for embeddings */
+	model_id?: string
+}
+
 export interface IVectorStore {
 	/**
 	 * Initializes the vector store
@@ -94,6 +121,25 @@ export interface IVectorStore {
 	 * Should be called at the start of indexing to indicate work in progress
 	 */
 	markIndexingIncomplete(): Promise<void>
+
+	/**
+	 * Gets the index metadata from the vector store
+	 * @returns Promise resolving to the index metadata or null if not found
+	 */
+	getIndexMetadata(): Promise<IndexMetadata | null>
+
+	/**
+	 * Marks the indexing process as complete with additional metadata
+	 * Should be called after a successful full workspace scan or incremental scan
+	 * @param additionalMetadata Optional additional metadata to store
+	 */
+	markIndexingCompleteWithMetadata?(additionalMetadata: {
+		indexed_file_count?: number
+		config_version?: string
+		vector_dimension?: number
+		embedder_provider?: string
+		model_id?: string
+	}): Promise<void>
 
 	/**
 	 * Sets collection configuration based on estimation result
