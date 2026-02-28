@@ -12,6 +12,7 @@ vi.mock("../../core/prompts/sections/custom-instructions", () => ({
 import { FileRestrictionError, getFullModeDetails, modes, getModeSelection } from "../modes"
 import { isToolAllowedForMode } from "../../core/tools/validateToolUse"
 import { addCustomInstructions } from "../../core/prompts/sections/custom-instructions"
+import { vi, describe, it, expect, beforeEach, test } from "vitest"
 
 describe("isToolAllowedForMode", () => {
 	const customModes: ModeConfig[] = [
@@ -267,8 +268,8 @@ describe("isToolAllowedForMode", () => {
 			).toThrow(/Markdown files only/)
 		})
 
-		it("applies restrictions to apply_patch (custom tool)", () => {
-			// Test that apply_patch respects file restrictions when included
+		it("applies restrictions to apply_patch", () => {
+			// Test that apply_patch respects file restrictions
 			// Note: apply_patch only accepts { patch: string } - file paths are embedded in patch content
 			const patchResult = isToolAllowedForMode(
 				"apply_patch",
@@ -278,8 +279,6 @@ describe("isToolAllowedForMode", () => {
 				{
 					patch: "*** Begin Patch\n*** Update File: test.md\n@@ \n-old\n+new\n*** End Patch",
 				},
-				undefined,
-				["apply_patch"], // Include custom tool
 			)
 			expect(patchResult).toBe(true)
 
@@ -293,8 +292,6 @@ describe("isToolAllowedForMode", () => {
 					{
 						patch: "*** Begin Patch\n*** Update File: test.js\n@@ \n-old\n+new\n*** End Patch",
 					},
-					undefined,
-					["apply_patch"], // Include custom tool
 				),
 			).toThrow(FileRestrictionError)
 			expect(() =>
@@ -306,8 +303,6 @@ describe("isToolAllowedForMode", () => {
 					{
 						patch: "*** Begin Patch\n*** Update File: test.js\n@@ \n-old\n+new\n*** End Patch",
 					},
-					undefined,
-					["apply_patch"], // Include custom tool
 				),
 			).toThrow(/\\.md\$/)
 		})
@@ -412,7 +407,7 @@ describe("isToolAllowedForMode", () => {
 			).toThrow(/\\.md\$/)
 		})
 
-		it("applies restrictions to all editing tools in architect mode (custom tools)", () => {
+		it("applies restrictions to all editing tools in architect mode", () => {
 			// Test apply_patch in architect mode
 			// Note: apply_patch only accepts { patch: string } - file paths are embedded in patch content
 			expect(
@@ -424,8 +419,6 @@ describe("isToolAllowedForMode", () => {
 					{
 						patch: "*** Begin Patch\n*** Update File: test.md\n@@ \n-old\n+new\n*** End Patch",
 					},
-					undefined,
-					["apply_patch"], // Include custom tool
 				),
 			).toBe(true)
 
@@ -438,8 +431,6 @@ describe("isToolAllowedForMode", () => {
 					{
 						patch: "*** Begin Patch\n*** Update File: test.js\n@@ \n-old\n+new\n*** End Patch",
 					},
-					undefined,
-					["apply_patch"], // Include custom tool
 				),
 			).toThrow(FileRestrictionError)
 

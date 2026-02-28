@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { parseMarkdownChecklist } from "../UpdateTodoListTool"
+import { parseMarkdownChecklist, validateTodos } from "../UpdateTodoListTool"
 import { TodoItem } from "@coder/types"
 
 describe("parseMarkdownChecklist", () => {
@@ -329,6 +329,194 @@ Just some text
 			expect(result[1]!.status).toBe("in_progress")
 			expect(result[2]!.content).toBe("修复 Boolean 类型调用错误")
 			expect(result[2]!.status).toBe("pending")
+		})
+	})
+
+	describe("double-quoted string handling (LLM bug workaround)", () => {
+		it("should parse markdown wrapped in double quotes", () => {
+			// This is the exact format from the user's bug report
+			const doubleQuoted = '"[ ] Task 1\\n[ ] Task 2\\n[x] Task 3"'
+			const result = parseMarkdownChecklist(doubleQuoted)
+			expect(result).toHaveLength(3)
+			expect(result[0]!.content).toBe("Task 1")
+			expect(result[0]!.status).toBe("pending")
+			expect(result[1]!.content).toBe("Task 2")
+			expect(result[1]!.status).toBe("pending")
+			expect(result[2]!.content).toBe("Task 3")
+			expect(result[2]!.status).toBe("completed")
+		})
+
+		it("should handle double-quoted string with Chinese characters", () => {
+			// Real-world case from user report
+			const doubleQuoted = '"[ ] 查看 apply_patch 工具的使用说明\\n[ ] 在 temp 目录创建几个有内容的 txt 文件"'
+			const result = parseMarkdownChecklist(doubleQuoted)
+			expect(result).toHaveLength(2)
+			expect(result[0]!.content).toBe("查看 apply_patch 工具的使用说明")
+			expect(result[0]!.status).toBe("pending")
+			expect(result[1]!.content).toBe("在 temp 目录创建几个有内容的 txt 文件")
+			expect(result[1]!.status).toBe("pending")
+		})
+
+		it("should handle double-quoted string with in-progress status", () => {
+			const doubleQuoted = '"[-] In progress task\\n[ ] Pending task"'
+			const result = parseMarkdownChecklist(doubleQuoted)
+			expect(result).toHaveLength(2)
+			expect(result[0]!.content).toBe("In progress task")
+			expect(result[0]!.status).toBe("in_progress")
+			expect(result[1]!.content).toBe("Pending task")
+			expect(result[1]!.status).toBe("pending")
+		})
+
+		it("should handle double-quoted string with dash prefix", () => {
+			const doubleQuoted = '"- [ ] Task 1\\n- [x] Task 2"'
+			const result = parseMarkdownChecklist(doubleQuoted)
+			expect(result).toHaveLength(2)
+			expect(result[0]!.content).toBe("Task 1")
+			expect(result[0]!.status).toBe("pending")
+			expect(result[1]!.content).toBe("Task 2")
+			expect(result[1]!.status).toBe("completed")
+		})
+
+		it("should handle malformed double-quoted string (fallback to manual strip)", () => {
+			// Invalid JSON but has quotes at start and end
+			const malformed = '"[ ] Task 1\n[ ] Task 2"'
+			const result = parseMarkdownChecklist(malformed)
+			expect(result).toHaveLength(2)
+			expect(result[0]!.content).toBe("Task 1")
+			expect(result[1]!.content).toBe("Task 2")
+		})
+
+		it("should not affect normal markdown without quotes", () => {
+			const normal = "[ ] Task 1\n[ ] Task 2"
+			const result = parseMarkdownChecklist(normal)
+			expect(result).toHaveLength(2)
+		})
+	})
+})
+
+describe("validateTodos", () => {
+	describe("basic validation", () => {
+		it("should validate a valid todo list", () => {
+			const todos: TodoItem[] = [
+				{ id: "1", content: "Task 1", status: "pending" },
+				{ id: "2", content: "Task 2", status: "completed" },
+			]
+			const result = validateTodos(todos)
+			expect(result.valid).toBe(true)
+		})
+
+		it("should reject non-array input", () => {
+			const result = validateTodos("not an array" as any)
+			expect(result.valid).toBe(false)
+			expect(result.error).toBe("todos must be an array")
+		})
+
+		it("should reject item without id", () => {
+			const todos = [{ content: "Task 1", status: "pending" }]
+			const result = validateTodos(todos)
+			expect(result.valid).toBe(false)
+			expect(result.error).toBe("Item 1 is missing id")
+		})
+
+		it("should reject item without content", () => {
+			const todos = [{ id: "1", status: "pending" }]
+			const result = validateTodos(todos)
+			expect(result.valid).toBe(false)
+			expect(result.error).toBe("Item 1 is missing content")
+		})
+
+		it("should reject item with invalid status", () => {
+			const todos = [{ id: "1", content: "Task 1", status: "invalid" }]
+			const result = validateTodos(todos)
+			expect(result.valid).toBe(false)
+			expect(result.error).toBe("Item 1 has invalid status")
+		})
+	})
+
+	describe("empty array validation with raw input", () => {
+		it("should allow empty array when input is empty string", () => {
+			const result = validateTodos([], "")
+			expect(result.valid).toBe(true)
+		})
+
+		it("should allow empty array when input is whitespace only", () => {
+			const result = validateTodos([], "   ")
+			expect(result.valid).toBe(true)
+		})
+
+		it("should allow empty array when input is empty JSON array", () => {
+			const result = validateTodos([], "[]")
+			expect(result.valid).toBe(true)
+		})
+
+		it("should reject empty array when input is non-empty but unparseable", () => {
+			// This is the key bug case: LLM sent data but parsing failed
+			const result = validateTodos([], "some random text that is not a todo")
+			expect(result.valid).toBe(false)
+			expect(result.error).toContain("could not be parsed")
+		})
+
+		it("should reject empty array when input is double-quoted but still unparseable", () => {
+			// Double-quoted string that doesn't contain valid markdown
+			const result = validateTodos([], '"not a valid todo format"')
+			expect(result.valid).toBe(false)
+			expect(result.error).toContain("could not be parsed")
+		})
+
+		it("should include the raw input in error message (truncated)", () => {
+			const longInput = "a".repeat(200)
+			const result = validateTodos([], longInput)
+			expect(result.valid).toBe(false)
+			expect(result.error).toContain("a".repeat(100))
+			expect(result.error).toContain("...")
+		})
+
+		it("should not truncate short input in error message", () => {
+			const shortInput = "short input"
+			const result = validateTodos([], shortInput)
+			expect(result.valid).toBe(false)
+			expect(result.error).toContain(shortInput)
+			expect(result.error).not.toContain("...")
+		})
+	})
+
+	describe("integration with parseMarkdownChecklist", () => {
+		it("should validate successfully after parsing valid markdown", () => {
+			const raw = "[ ] Task 1\n[x] Task 2"
+			const todos = parseMarkdownChecklist(raw)
+			const result = validateTodos(todos, raw)
+			expect(result.valid).toBe(true)
+		})
+
+		it("should validate successfully after parsing double-quoted markdown", () => {
+			const raw = '"[ ] Task 1\\n[x] Task 2"'
+			const todos = parseMarkdownChecklist(raw)
+			const result = validateTodos(todos, raw)
+			expect(result.valid).toBe(true)
+		})
+
+		it("should fail validation when parsing invalid format returns empty array", () => {
+			// This simulates the original bug: LLM sent data but it couldn't be parsed
+			const raw = '"this is not a valid todo format"'
+			const todos = parseMarkdownChecklist(raw)
+			// After the fix, parseMarkdownChecklist should handle double-quoted strings
+			// But if the content inside is still invalid, it should return empty array
+			const result = validateTodos(todos, raw)
+			// The raw input is double-quoted, so parseMarkdownChecklist will strip quotes
+			// and try to parse "this is not a valid todo format" as markdown
+			// Since it doesn't match the checklist pattern, it returns empty array
+			expect(todos).toHaveLength(0)
+			expect(result.valid).toBe(false)
+			expect(result.error).toContain("could not be parsed")
+		})
+
+		it("should handle the exact user-reported bug case", () => {
+			// The exact format from the user's bug report
+			const raw = '"[ ] 查看 apply_patch 工具的使用说明\\n[ ] 在 temp 目录创建几个有内容的 txt 文件\\n[ ] 尝试使用 apply_patch 编辑文件\\n[ ] 尝试使用 apply_patch 移动/重命名文件\\n[ ] 尝试其他操作（删除、新建等）\\n[ ] 整理工具逻辑与预期不符的地方\\n[ ] 将结果写入 docs 目录的 md 文件"'
+			const todos = parseMarkdownChecklist(raw)
+			const result = validateTodos(todos, raw)
+			expect(result.valid).toBe(true)
+			expect(todos).toHaveLength(7)
 		})
 	})
 })

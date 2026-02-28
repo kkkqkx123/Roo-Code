@@ -33,7 +33,7 @@ export class UpdateTodoListTool extends BaseTool<"update_todo_list"> {
 				return
 			}
 
-			const { valid, error } = validateTodos(todos)
+			const { valid, error } = validateTodos(todos, todosRaw)
 			if (!valid) {
 				task.consecutiveMistakeCount++
 				task.recordToolError("update_todo_list")
@@ -180,6 +180,20 @@ function normalizeStatus(status: string | undefined): TodoStatus {
 export function parseMarkdownChecklist(md: string): TodoItem[] {
 	if (typeof md !== "string") return []
 
+	// Handle double-quoted strings (LLM sometimes wraps markdown in quotes)
+	// e.g., "\"[ ] Task 1\n[ ] Task 2\"" -> "[ ] Task 1\n[ ] Task 2"
+	if (md.startsWith('"') && md.endsWith('"')) {
+		try {
+			const unquoted = JSON.parse(md)
+			if (typeof unquoted === "string") {
+				md = unquoted
+			}
+		} catch {
+			// If JSON parse fails, try stripping quotes manually
+			md = md.slice(1, -1)
+		}
+	}
+
 	// Try to parse as JSON array format first (LLMs sometimes use this format)
 	// Format: [{"id": "1", "content": "Task 1", "status": "completed"}, ...]
 	if (md.trim().startsWith("[")) {
@@ -240,8 +254,22 @@ export function setPendingTodoList(todos: TodoItem[]) {
 	approvedTodoList = todos
 }
 
-function validateTodos(todos: any[]): { valid: boolean; error?: string } {
+export function validateTodos(todos: any[], rawInput?: string): { valid: boolean; error?: string } {
 	if (!Array.isArray(todos)) return { valid: false, error: "todos must be an array" }
+
+	// Check if the input was non-empty but parsing resulted in empty array
+	// This indicates a format error rather than intentional clearing
+	if (todos.length === 0 && rawInput && rawInput.trim().length > 0) {
+		// Check if the input was intentionally empty (empty string or empty JSON array)
+		const trimmedInput = rawInput.trim()
+		if (trimmedInput !== "" && trimmedInput !== "[]") {
+			return {
+				valid: false,
+				error: `The todos parameter could not be parsed. Expected markdown checklist format (e.g., "[ ] Task 1") or JSON array format. Received: "${trimmedInput.substring(0, 100)}${trimmedInput.length > 100 ? "..." : ""}"`
+			}
+		}
+	}
+
 	for (const [i, t] of todos.entries()) {
 		if (!t || typeof t !== "object") return { valid: false, error: `Item ${i + 1} is not an object` }
 		if (!t.id || typeof t.id !== "string") return { valid: false, error: `Item ${i + 1} is missing id` }
