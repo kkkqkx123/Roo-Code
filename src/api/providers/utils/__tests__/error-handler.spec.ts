@@ -48,6 +48,76 @@ describe("handleProviderError", () => {
 		})
 	})
 
+	describe("provider-specific metadata preservation", () => {
+		it("should preserve providerName in wrapped error", () => {
+			const error = new Error("API request failed") as any
+			error.status = 401
+
+			const result = handleProviderError(error, providerName)
+
+			expect((result as any).providerName).toBe(providerName)
+		})
+
+		it("should preserve requestId from original error", () => {
+			const error = new Error("API request failed") as any
+			error.status = 401
+			error.requestId = "req_test_12345"
+
+			const result = handleProviderError(error, providerName)
+
+			expect((result as any).requestId).toBe("req_test_12345")
+		})
+
+		it("should preserve retryAfter from original error", () => {
+			const error = new Error("Rate limit exceeded") as any
+			error.status = 429
+			error.retryAfter = 60
+
+			const result = handleProviderError(error, providerName)
+
+			expect((result as any).retryAfter).toBe(60)
+		})
+
+		it("should preserve all metadata together", () => {
+			const error = new Error("Rate limit exceeded") as any
+			error.status = 429
+			error.requestId = "req_all_123"
+			error.retryAfter = 30
+
+			const result = handleProviderError(error, providerName)
+
+			expect((result as any).status).toBe(429)
+			expect((result as any).providerName).toBe(providerName)
+			expect((result as any).requestId).toBe("req_all_123")
+			expect((result as any).retryAfter).toBe(30)
+		})
+
+		it("should preserve metadata for non-Error exceptions", () => {
+			const error = {
+				status: 500,
+				requestId: "req_non_error_456",
+				retryAfter: 10,
+			}
+
+			const result = handleProviderError(error, providerName)
+
+			expect((result as any).status).toBe(500)
+			expect((result as any).providerName).toBe(providerName)
+			expect((result as any).requestId).toBe("req_non_error_456")
+			expect((result as any).retryAfter).toBe(10)
+		})
+
+		it("should handle missing metadata gracefully", () => {
+			const error = new Error("Generic error")
+
+			const result = handleProviderError(error, providerName)
+
+			expect((result as any).providerName).toBe(providerName)
+			expect((result as any).requestId).toBeUndefined()
+			expect((result as any).retryAfter).toBeUndefined()
+		})
+	})
+
 	describe("errorDetails preservation", () => {
 		it("should preserve errorDetails array from original error", () => {
 			const error = new Error("Rate limited") as any

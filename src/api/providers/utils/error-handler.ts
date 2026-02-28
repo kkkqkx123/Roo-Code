@@ -89,6 +89,15 @@ export function handleProviderError(
 			;(wrapped as any).$metadata = anyErr.$metadata
 		}
 
+		// Preserve provider-specific metadata for error extraction
+		;(wrapped as any).providerName = providerName
+		if (anyErr.requestId !== undefined) {
+			;(wrapped as any).requestId = anyErr.requestId
+		}
+		if (anyErr.retryAfter !== undefined) {
+			;(wrapped as any).retryAfter = anyErr.retryAfter
+		}
+
 		return wrapped
 	}
 
@@ -100,6 +109,15 @@ export function handleProviderError(
 	const anyErr = error as any
 	if (typeof anyErr?.status === "number") {
 		;(wrapped as any).status = anyErr.status
+	}
+
+	// Preserve provider-specific metadata for non-Error exceptions
+	;(wrapped as any).providerName = providerName
+	if (anyErr?.requestId !== undefined) {
+		;(wrapped as any).requestId = anyErr.requestId
+	}
+	if (anyErr?.retryAfter !== undefined) {
+		;(wrapped as any).retryAfter = anyErr.retryAfter
 	}
 
 	return wrapped

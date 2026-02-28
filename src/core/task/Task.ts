@@ -2955,8 +2955,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				const streamingConfig = this.createStreamingProcessorConfig(() => processor)
 				processor = new StreamingProcessor(streamingConfig)
 
+				// Store streaming result for later use in error handling
+				let streamResult: Awaited<ReturnType<typeof processor.processStream>> | undefined
+
 				try {
-					const result = await processor.processStream(
+					streamResult = await processor.processStream(
 						stream,
 						this.currentRequestAbortController,
 						[
@@ -2965,18 +2968,18 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						],
 					)
 
-					assistantMessage = result.assistantMessage
-					reasoningMessage = result.reasoningMessage
-					pendingGroundingSources = result.groundingSources
-					this.assistantMessageContent = result.assistantMessageContent
-					this.didRejectTool = result.didRejectTool
+					assistantMessage = streamResult.assistantMessage
+					reasoningMessage = streamResult.reasoningMessage
+					pendingGroundingSources = streamResult.groundingSources
+					this.assistantMessageContent = streamResult.assistantMessageContent
+					this.didRejectTool = streamResult.didRejectTool
 					this.didCompleteReadingStream = true
 
-					inputTokens = result.tokens.input
-					outputTokens = result.tokens.output
-					cacheWriteTokens = result.tokens.cacheWrite
-					cacheReadTokens = result.tokens.cacheRead
-					totalCost = result.tokens.totalCost
+					inputTokens = streamResult.tokens.input
+					outputTokens = streamResult.tokens.output
+					cacheWriteTokens = streamResult.tokens.cacheWrite
+					cacheReadTokens = streamResult.tokens.cacheRead
+					totalCost = streamResult.tokens.totalCost
 
 					updateApiReqMsg()
 					await this.saveClineMessages()
@@ -2986,34 +2989,25 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					}
 
 					// Check for errors in the streaming result
-					if (result.error && result.extractedErrorInfo) {
-						const errorInfo = result.extractedErrorInfo
+					if (streamResult.error && streamResult.extractedErrorInfo) {
+						const errorInfo = streamResult.extractedErrorInfo
 						console.error(
-							`[Task#${this.taskId}.${this.instanceId}] Streaming error: ${formatErrorForDisplay(result.error)}`,
+							`[Task#${this.taskId}.${this.instanceId}] Streaming error: ${formatErrorForDisplay(streamResult.error)}`,
 						)
 
 						// Handle authentication errors - abort immediately
 						if (errorInfo.category === ErrorCategory.AUTHENTICATION) {
 							const authErrorMessage = errorInfo.message || "Authentication failed. Please check your API key."
 							await this.say("error", authErrorMessage)
-							await abortStream("authentication_failed", authErrorMessage)
-							await this.abortTask()
-							break
-						}
-
-						// Handle permission errors - abort immediately
-						if (errorInfo.category === ErrorCategory.PERMISSION) {
-							const permErrorMessage = errorInfo.message || "Permission denied. Please check your API permissions."
-							await this.say("error", permErrorMessage)
-							await abortStream("permission_denied", permErrorMessage)
+							await abortStream("streaming_failed", authErrorMessage)
 							await this.abortTask()
 							break
 						}
 					}
 
-					if (this.abort || this.abandoned || result.aborted) {
+					if (this.abort || this.abandoned || streamResult.aborted) {
 						const cancelReason: ClineApiReqCancelReason =
-							this.abort || result.abortReason === "user_cancelled" ? "user_cancelled" : "streaming_failed"
+							this.abort || streamResult.abortReason === "user_cancelled" ? "user_cancelled" : "streaming_failed"
 						this.abortReason = cancelReason
 						await abortStream(cancelReason)
 						await this.abortTask()
@@ -3196,14 +3190,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					}
 
 					// Determine the error to use for backoff/announcement
-					// Priority: result.error > result.extractedErrorInfo > generic error
+					// Priority: streamResult.error > streamResult.extractedErrorInfo > generic error
 					let errorForBackoff: Error
 					let errorMessageForUser: string
 
-					if (result.error && result.extractedErrorInfo) {
+					if (streamResult?.error && streamResult?.extractedErrorInfo) {
 						// Use the extracted error info from the streaming result
-						const errorInfo = result.extractedErrorInfo
-						errorForBackoff = new Error(formatErrorForDisplay(result.error))
+						const errorInfo = streamResult.extractedErrorInfo
+						errorForBackoff = new Error(formatErrorForDisplay(streamResult.error))
 						errorForBackoff = Object.assign(errorForBackoff, {
 							status: errorInfo.status,
 							message: errorInfo.message,

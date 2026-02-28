@@ -30,6 +30,9 @@ export * from "./tool-params.js"
 export * from "./vscode.js"
 export * from "./worktree.js"
 
+// Token statistics module
+export * from "./token-stats.js"
+
 // Refactored modules (new directory structure)
 export * from "./embedding/index.js"
 export * from "./streaming/index.js"

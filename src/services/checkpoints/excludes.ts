@@ -198,7 +198,9 @@ const getLfsPatterns = async (workspacePath: string) => {
 				})
 				.filter((pattern) => pattern !== "")
 		}
-	} catch (error) {}
+	} catch (error) {
+		console.error("Failed to load exclude patterns:", error)
+	}
 
 	return []
 }
