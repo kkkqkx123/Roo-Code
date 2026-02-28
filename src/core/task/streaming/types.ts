@@ -109,6 +109,11 @@ export interface StreamingProcessorConfig {
 	onSaveMessages: () => Promise<void>
 	onAddToHistory: (message: ApiMessage, reasoning?: string) => Promise<void>
 	onPresentAssistant: () => void
+	/**
+	 * Optional event bus for publishing streaming events
+	 * Enables decoupled communication with Task and other components
+	 */
+	eventBus?: import("../TaskEventBus").TaskEventBus
 }
 
 /**
@@ -140,6 +145,7 @@ export interface ChunkHandlerContext {
 	stateManager: StreamingStateManager
 	tokenManager: StreamingTokenManager
 	config: StreamingProcessorConfig
+	eventBus?: import("../TaskEventBus").TaskEventBus
 }
 
 // ============================================================================

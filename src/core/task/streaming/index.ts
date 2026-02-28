@@ -1,6 +1,6 @@
 /**
  * Streaming Module
- * 
+ *
  * Exports all streaming processing components for easy import.
  */
 
@@ -29,11 +29,12 @@ export { StreamingStateManager } from "./StreamingStateManager"
 export { StreamingTokenManager } from "./StreamingTokenManager"
 export { StreamingErrorHandler } from "./StreamingErrorHandler"
 
-// Handlers
-export { BaseChunkHandler } from "./handlers/ChunkHandler"
-export type { ChunkHandler } from "./handlers/ChunkHandler"
-export { ReasoningHandler } from "./handlers/ReasoningHandler"
-export { TextHandler } from "./handlers/TextHandler"
-export { ToolCallHandler } from "./handlers/ToolCallHandler"
-export { UsageHandler } from "./handlers/UsageHandler"
-export { GroundingHandler } from "./handlers/GroundingHandler"
+// Handler functions
+export { handleReasoningChunk } from "./handlers/ReasoningHandler"
+export { handleTextChunk } from "./handlers/TextHandler"
+export { handleToolCallChunk, finalizeToolCall } from "./handlers/ToolCallHandler"
+export { handleUsageChunk } from "./handlers/UsageHandler"
+export { handleGroundingChunk } from "./handlers/GroundingHandler"
+
+// Handler types
+export type { ChunkHandlerFn, ChunkHandlerMap } from "./handlers/ChunkHandler"

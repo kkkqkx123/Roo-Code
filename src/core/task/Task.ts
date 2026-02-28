@@ -130,6 +130,7 @@ import {
 	StreamingRetryError,
 	type StreamingProcessorConfig,
 } from "./streaming"
+import { TaskEventBus } from "./TaskEventBus"
 
 const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
 const FORCED_CONTEXT_REDUCTION_PERCENT = 75 // Keep 75% of context (remove 25%) on context window errors
@@ -399,6 +400,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	// MessageManager for high-level message operations (lazy initialized)
 	private _messageManager?: MessageManager
 
+	// Event Bus for streaming and tool events
+	private eventBus?: TaskEventBus
+
 	constructor({
 		provider,
 		apiConfiguration,
@@ -541,6 +545,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 		onCreated?.(this)
 
+		// Initialize event bus
+		this.initializeEventBus()
+
 		if (startTask) {
 			this._started = true
 			if (task || images) {
@@ -574,6 +581,98 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 * @param provider - The ClineProvider instance to fetch state from
 	 * @returns Promise that resolves when initialization is complete
 	 */
+	private async initializeEventBus(): Promise<void> {
+		try {
+			this.eventBus = new TaskEventBus({
+				maxHistorySize: 1000,
+				enableHistory: true,
+				concurrency: 1,
+			})
+
+			// Set up event subscriptions
+			this.setupStreamingEventSubscriptions()
+			this.setupToolEventSubscriptions()
+			this.setupTokenEventSubscriptions()
+		} catch (error) {
+			console.error(
+				`[Task#${this.taskId}.${this.instanceId}] Failed to initialize event bus:`,
+				error,
+			)
+		}
+	}
+
+	/**
+	 * Set up subscriptions to streaming events
+	 */
+	private setupStreamingEventSubscriptions(): void {
+		if (!this.eventBus) return
+
+		// Stream start
+		this.eventBus.subscribe('stream:start', (data) => {
+			console.log(`[Task#${this.taskId}] Stream started: ${data.requestId}`)
+			this.isStreaming = true
+		})
+
+		// Stream chunk - handled by StreamingProcessor
+		// Individual chunk events are published by handlers
+
+		// Stream complete
+		this.eventBus.subscribe('stream:complete', async (result) => {
+			console.log(`[Task#${this.taskId}] Stream completed`)
+			this.isStreaming = false
+
+			// Update state from result (already done via return value, but kept for consistency)
+			// Note: result.assistantMessageContent is unknown[], cast to AssistantMessageContent[]
+			this.assistantMessageContent = result.assistantMessageContent as AssistantMessageContent[]
+			this.didRejectTool = result.didRejectTool
+			this.didCompleteReadingStream = true
+		})
+
+		// Stream error
+		this.eventBus.subscribe('stream:error', (data) => {
+			console.error(`[Task#${this.taskId}] Stream error:`, data.error)
+		})
+	}
+
+	/**
+	 * Set up subscriptions to tool events
+	 */
+	private setupToolEventSubscriptions(): void {
+		if (!this.eventBus) return
+
+		// Tool call start
+		this.eventBus.subscribe('tool:call:start', (data) => {
+			console.log(`[Task#${this.taskId}] Tool called: ${data.toolCall.name} (${data.toolCall.id})`)
+		})
+
+		// Tool call progress
+		this.eventBus.subscribe('tool:call:progress', (data) => {
+			// Can be used for real-time tool progress UI updates
+		})
+
+		// Tool call complete
+		this.eventBus.subscribe('tool:call:complete', async (data) => {
+			if (data.result.success) {
+				console.log(`[Task#${this.taskId}] Tool completed: ${data.toolCallId}`)
+			} else {
+				console.error(`[Task#${this.taskId}] Tool failed: ${data.toolCallId}`, data.result.error)
+			}
+		})
+	}
+
+	/**
+	 * Set up subscriptions to token events
+	 */
+	private setupTokenEventSubscriptions(): void {
+		if (!this.eventBus) return
+
+		// Token update
+		this.eventBus.subscribe('token:update', (data) => {
+			// Can be used for real-time token usage UI updates
+			// For now, token counts are still updated via the streaming result
+		})
+	}
+
 	private async initializeTaskMode(provider: ClineProvider): Promise<void> {
 		try {
 			const state = await provider.getState()
@@ -2304,6 +2403,16 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			console.error("Error disposing metrics service:", error)
 		}
 
+		// Dispose event bus
+		try {
+			if (this.eventBus) {
+				this.eventBus.dispose()
+				this.eventBus = undefined
+			}
+		} catch (error) {
+			console.error("Error disposing event bus:", error)
+		}
+
 		// Remove all event listeners to prevent memory leaks.
 		try {
 			this.removeAllListeners()
@@ -2519,6 +2628,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					stateManager.setDidAlreadyUseTool(this.didAlreadyUseTool)
 				}
 			},
+			eventBus: this.eventBus,
 		}
 	}
 

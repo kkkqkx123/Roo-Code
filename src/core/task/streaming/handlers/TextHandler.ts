@@ -1,53 +1,60 @@
 /**
  * Text Handler
- * 
+ *
  * Handles text content chunks from the streaming API.
  * Accumulates text and updates the assistant message content blocks.
  */
 
-import { BaseChunkHandler } from "./ChunkHandler"
 import type { ChunkHandlerContext, StreamChunk } from "../types"
+import type { AssistantMessageContent } from "../../../assistant-message/types"
 
-export class TextHandler extends BaseChunkHandler {
-	/**
-	 * Handle text stream chunks
-	 */
-	async handle(chunk: StreamChunk): Promise<void> {
-		if (chunk.type !== "text") {
-			return
-		}
+/**
+ * Handle text stream chunks
+ */
+export async function handleTextChunk(
+  context: ChunkHandlerContext,
+  chunk: StreamChunk
+): Promise<void> {
+  if (chunk.type !== "text") {
+    return
+  }
 
-		// Accumulate text
-		this.stateManager.appendAssistantMessage(chunk.text)
+  // Accumulate text
+  context.stateManager.appendAssistantMessage(chunk.text)
 
-		// Accumulate tokens
-		this.tokenManager.addTextTokens(chunk.text)
+  // Accumulate tokens
+  context.tokenManager.addTextTokens(chunk.text)
 
-		// Create or update text block
-		this.updateTextBlock()
+  // Create or update text block
+  updateTextBlock(context)
 
-		// Present assistant message
-		this.config.onPresentAssistant()
-	}
+  // Present assistant message
+  context.config.onPresentAssistant()
 
-	/**
-	 * Update the text content block in the assistant message
-	 * Either updates the last block if it's a partial text block,
-	 * or creates a new text block
-	 */
-	private updateTextBlock(): void {
-		const lastBlock = this.stateManager.getAssistantMessageContent().at(-1)
+  // Publish text chunk event
+  await context.eventBus?.publish('stream:chunk', {
+    type: 'text',
+    data: { type: 'text', text: chunk.text },
+  })
+}
 
-		if (lastBlock?.type === "text" && lastBlock.partial) {
-			// Update existing partial text block
-			lastBlock.content = this.stateManager.getAssistantMessage()
-		} else {
-			// Create new text block
-			this.stateManager.addAssistantContentBlock({
-				type: "text",
-				content: this.stateManager.getAssistantMessage(),
-				partial: true,
-			})
-		}
-	}
+/**
+ * Update the text content block in the assistant message
+ * Either updates the last block if it's a partial text block,
+ * or creates a new text block
+ */
+function updateTextBlock(context: ChunkHandlerContext): void {
+  const lastBlock = context.stateManager.getAssistantMessageContent().at(-1)
+
+  if (lastBlock?.type === "text" && lastBlock.partial) {
+    // Update existing partial text block
+    lastBlock.content = context.stateManager.getAssistantMessage()
+  } else {
+    // Create new text block
+    context.stateManager.addAssistantContentBlock({
+      type: "text",
+      content: context.stateManager.getAssistantMessage(),
+      partial: true,
+    } satisfies AssistantMessageContent)
+  }
 }

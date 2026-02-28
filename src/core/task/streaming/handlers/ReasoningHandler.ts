@@ -1,94 +1,90 @@
 /**
  * Reasoning Handler
- * 
+ *
  * Handles reasoning message chunks from the streaming API.
  * Includes dead loop detection to prevent infinite loops in reasoning.
  */
 
 import { DeadLoopDetector } from "../../../../utils/deadLoopDetector"
-import { BaseChunkHandler } from "./ChunkHandler"
 import type { ChunkHandlerContext, StreamChunk } from "../types"
 
-export class ReasoningHandler extends BaseChunkHandler {
-	private deadLoopDetector: DeadLoopDetector
+/**
+ * Handle reasoning stream chunks
+ */
+export async function handleReasoningChunk(
+  context: ChunkHandlerContext,
+  chunk: StreamChunk,
+  deadLoopDetector: DeadLoopDetector
+): Promise<void> {
+  if (chunk.type !== "reasoning") {
+    return
+  }
 
-	constructor(context: ChunkHandlerContext) {
-		super(context)
-		this.deadLoopDetector = new DeadLoopDetector()
-	}
+  // Accumulate reasoning message
+  context.stateManager.appendReasoningMessage(chunk.text)
 
-	/**
-	 * Handle reasoning stream chunks
-	 */
-	async handle(chunk: StreamChunk): Promise<void> {
-		if (chunk.type !== "reasoning") {
-			return
-		}
+  // Accumulate tokens
+  context.tokenManager.addReasoningTokens(chunk.text)
 
-		// Accumulate reasoning message
-		this.stateManager.appendReasoningMessage(chunk.text)
+  // Format reasoning message for display
+  const formattedReasoning = formatReasoningMessage(
+    context.stateManager.getReasoningMessage()
+  )
 
-		// Accumulate tokens
-		this.tokenManager.addReasoningTokens(chunk.text)
+  // Dead loop detection
+  const detectionResult = deadLoopDetector.detect(
+    context.stateManager.getReasoningMessage()
+  )
 
-		// Format reasoning message for display
-		const formattedReasoning = this.formatReasoningMessage(
-			this.stateManager.getReasoningMessage()
-		)
+  console.log('[ReasoningHandler] detectionResult:', detectionResult, 'reasoningLength:', context.stateManager.getReasoningMessage().length)
 
-		// Dead loop detection
-		const detectionResult = this.deadLoopDetector.detect(
-		  this.stateManager.getReasoningMessage()
-		)
+  if (detectionResult.detected) {
+    console.log('[ReasoningHandler] Dead loop detected!')
+    await handleDeadLoop(context, detectionResult)
+    return
+  }
 
-		console.log('[ReasoningHandler.handle] detectionResult:', detectionResult, 'reasoningLength:', this.stateManager.getReasoningMessage().length)
+  // Display reasoning message
+  await context.config.onSay("reasoning", formattedReasoning, undefined, true)
 
-		if (detectionResult.detected) {
-		  console.log('[ReasoningHandler.handle] Dead loop detected!')
-		  await this.handleDeadLoop(detectionResult)
-		  return
-		}
+  // Publish reasoning chunk event
+  await context.eventBus?.publish('stream:chunk', {
+    type: 'reasoning',
+    data: { type: 'reasoning', text: chunk.text },
+  })
+}
 
-		// Display reasoning message
-		await this.config.onSay("reasoning", formattedReasoning, undefined, true)
-	}
+/**
+ * Format reasoning message for better readability
+ * Adds line breaks before headings that follow sentence endings
+ */
+function formatReasoningMessage(message: string): string {
+  if (message.includes("**")) {
+    return message.replace(/([.!?])\*\*([^*\n]+)\*\*/g, "$1\n\n**$2**")
+  }
+  return message
+}
 
-	/**
-	 * Format reasoning message for better readability
-	 * Adds line breaks before headings that follow sentence endings
-	 */
-	private formatReasoningMessage(message: string): string {
-		if (message.includes("**")) {
-			return message.replace(/([.!?])\*\*([^*\n]+)\*\*/g, "$1\n\n**$2**")
-		}
-		return message
-	}
+/**
+ * Handle dead loop detection
+ * Aborts the stream and notifies the user
+ */
+async function handleDeadLoop(
+  context: ChunkHandlerContext,
+  result: { detected: boolean; details?: string }
+): Promise<void> {
+  const errorMessage = `检测到死循环：${result.details}。任务已终止，请尝试重新描述任务或调整提示词。`
 
-	/**
-	 * Handle dead loop detection
-	 * Aborts the stream and notifies the user
-	 */
-	private async handleDeadLoop(result: { detected: boolean; details?: string }): Promise<void> {
-	  const errorMessage = `检测到死循环：${result.details}。任务已终止，请尝试重新描述任务或调整提示词。`
+  console.log('[ReasoningHandler] handleDeadLoop:', errorMessage)
 
-	  console.log('[ReasoningHandler.handleDeadLoop] About to call onSay with:', errorMessage)
-	  
-	  // Display error message first
-	  await this.config.onSay("error", errorMessage)
-	  
-	  console.log('[ReasoningHandler.handleDeadLoop] onSay completed, clineMessages should have error')
+  // Display error message first
+  await context.config.onSay("error", errorMessage)
 
-	  // Set aborted state
-	  this.stateManager.setAborted(true, "streaming_failed")
+  console.log('[ReasoningHandler] handleDeadLoop completed')
 
-	  // Throw error to stop stream processing
-	  throw new Error(errorMessage)
-	}
+  // Set aborted state
+  context.stateManager.setAborted(true, "streaming_failed")
 
-	/**
-	 * Reset the dead loop detector
-	 */
-	resetDeadLoopDetector(): void {
-		this.deadLoopDetector.reset()
-	}
+  // Throw error to stop stream processing
+  throw new Error(errorMessage)
 }
