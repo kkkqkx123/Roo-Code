@@ -92,7 +92,7 @@ describe("TerminalProcess.interpretExitCode with real commands", () => {
 			expect(result).toEqual({ exitCode: 0 })
 		} catch (error: any) {
 			// This should not happen for a successful command
-			throw new Error("Command should have succeeded: " + error.message)
+			throw new Error("Command should have succeeded: " + error.message, { cause: error })
 		}
 	})
 

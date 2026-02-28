@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 import * as path from "path";
 import os from "os";
 import * as vscode from "vscode";

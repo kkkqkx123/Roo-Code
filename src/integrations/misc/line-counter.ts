@@ -14,7 +14,7 @@ export async function countFileLines(filePath: string): Promise<number> {
 	try {
 		await fs.promises.access(filePath, fs.constants.F_OK)
 	} catch (error) {
-		throw new Error(`File not found: ${filePath}`)
+		throw new Error(`File not found: ${filePath}`, { cause: error })
 	}
 
 	return new Promise((resolve, reject) => {
@@ -78,7 +78,7 @@ export async function countFileLinesAndTokens(
 	try {
 		await fs.promises.access(filePath, fs.constants.F_OK)
 	} catch (error) {
-		throw new Error(`File not found: ${filePath}`)
+		throw new Error(`File not found: ${filePath}`, { cause: error })
 	}
 
 	return new Promise((resolve, reject) => {

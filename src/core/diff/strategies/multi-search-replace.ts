@@ -422,13 +422,9 @@ export class MultiSearchReplaceDiffStrategy implements DiffStrategy {
 				} = fuzzySearch(resultLines, aggressiveSearchChunk, searchStartIndex, searchEndIndex)
 				if (bestMatchIndex !== -1 && bestScore >= this.fuzzyThreshold) {
 					matchIndex = bestMatchIndex
-					bestMatchScore = bestScore
-					bestMatchContent = aggContent
 					// Replace the original search/replace with their stripped versions
-					searchContent = aggressiveSearchContent
-					replaceContent = aggressiveReplaceContent
 					searchLines = aggressiveSearchLines
-					replaceLines = replaceContent ? replaceContent.split(/\r?\n/) : []
+					replaceLines = aggressiveReplaceContent ? aggressiveReplaceContent.split(/\r?\n/) : []
 				} else {
 					// No match found with either method
 					const originalContentSection =

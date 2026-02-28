@@ -266,6 +266,7 @@ export class McpHub {
 					serverName
 						? `Invalid configuration for server "${serverName}": ${errorMessages}`
 						: `Invalid server configuration: ${errorMessages}`,
+					{ cause: validationError },
 				)
 			}
 			throw validationError
@@ -1512,7 +1513,7 @@ export class McpHub {
 			await fs.access(configPath)
 		} catch (error) {
 			console.error("Settings file not accessible:", error)
-			throw new Error("Settings file not accessible")
+			throw new Error("Settings file not accessible", { cause: error })
 		}
 
 		// Read and parse the config file
@@ -1564,7 +1565,7 @@ export class McpHub {
 			await fs.access(configPath)
 		} catch (error) {
 			console.error("Settings file not accessible:", error)
-			throw new Error("Settings file not accessible")
+			throw new Error("Settings file not accessible", { cause: error })
 		}
 
 		// Read and parse the config file
@@ -1669,7 +1670,7 @@ export class McpHub {
 			try {
 				await fs.access(configPath)
 			} catch (error) {
-				throw new Error("Settings file not accessible")
+				throw new Error("Settings file not accessible", { cause: error })
 			}
 
 			const content = await fs.readFile(configPath, "utf-8")

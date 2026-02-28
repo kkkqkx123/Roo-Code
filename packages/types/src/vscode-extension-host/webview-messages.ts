@@ -10,7 +10,6 @@ import type { ModeConfig, PromptComponent } from "../mode.js"
 import type { TodoItem } from "../todo.js"
 import type { QueuedMessage } from "../message.js"
 import type { CoderSettings } from "../global-settings.js"
-import type { Command } from "./commands.js"
 import type { IndexingStatusPayload, IndexClearedPayload } from "./indexing.js"
 
 /**

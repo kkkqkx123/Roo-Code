@@ -463,7 +463,7 @@ export class CustomModesManager {
 	}
 
 	private async updateModesInFile(filePath: string, operation: (modes: ModeConfig[]) => ModeConfig[]): Promise<void> {
-		let content = "{}"
+		let content: string
 
 		try {
 			content = await fs.readFile(filePath, "utf-8")

@@ -34,7 +34,8 @@ export interface SafeWriteJsonOptions {
 
 async function safeWriteJson(filePath: string, data: any, options?: SafeWriteJsonOptions): Promise<void> {
 	const absoluteFilePath = path.resolve(filePath)
-	let releaseLock = async () => {} // Initialized to a no-op
+	// eslint-disable-next-line no-useless-assignment
+	let releaseLock: (() => Promise<void>) | undefined = async () => {} // Initialized to a no-op function
 
 	// For directory creation
 	const dirPath = path.dirname(absoluteFilePath)

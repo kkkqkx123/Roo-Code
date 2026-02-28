@@ -22,18 +22,8 @@ import { fileURLToPath } from "node:url"
 // Use __filename and __dirname from globalThis (set by esbuild banner)
 // This is needed because import.meta.url is not available in bundled CJS
 // @ts-ignore - globalThis.__filename and globalThis.__dirname are set by the esbuild banner
-let __filename;
-let __dirname;
-
-if (globalThis.__filename && globalThis.__dirname) {
-	// Use values from globalThis when bundled (CJS context)
-	__filename = globalThis.__filename;
-	__dirname = globalThis.__dirname;
-} else {
-	// Use import.meta.url when running as ESM (development context)
-	__filename = fileURLToPath(import.meta.url);
-	__dirname = path.dirname(__filename);
-}
+const __filename = globalThis.__filename || fileURLToPath(import.meta.url);
+const __dirname = globalThis.__dirname || path.dirname(__filename);
 
 // Load environment variables from .env file
 // The extension-level .env is optional (not shipped in production builds).

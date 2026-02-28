@@ -343,7 +343,7 @@ export async function summarizeConversation(options: SummarizeConversationOption
 		const errorMessage = error instanceof Error ? error.message : String(error)
 
 		// Capture detailed error information for debugging
-		let errorDetails = ""
+		let errorDetails: string
 		if (error instanceof Error) {
 			errorDetails = `Error: ${error.message}`
 			// Capture any additional API error properties

@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 import { defineConfig } from "vitest/config";
 import path from "path";
 import { resolveVerbosity } from "./utils/vitest-verbosity";

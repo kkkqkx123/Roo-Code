@@ -63,8 +63,8 @@ export function consolidateApiRequests(messages: ClineMessage[]): ClineMessage[]
 			const startMessage = result[startIndex]
 			if (!startMessage) continue
 
-			let startData: Record<string, any> = {}
-			let finishData: Record<string, any> = {}
+			let startData: Record<string, unknown> = {}
+			let finishData: Record<string, unknown> = {}
 
 			try {
 				if (startMessage.text) {

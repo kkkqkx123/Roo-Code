@@ -78,11 +78,11 @@ export function extractErrorInfo(error: unknown): ExtractedErrorInfo {
 		}
 	} else if (error instanceof Error) {
 		// Extract from generic Error objects that might have these properties attached
-		const anyErr = error as any;
-		requestId = anyErr.requestId;
-		providerName = anyErr.providerName;
-		status = anyErr.status || anyErr.statusCode;
-		retryAfter = anyErr.retryAfter;
+		const anyErr = error as unknown as Record<string, unknown>;
+		requestId = anyErr.requestId as string | undefined;
+		providerName = anyErr.providerName as string | undefined;
+		status = (anyErr.status || anyErr.statusCode) as number | undefined;
+		retryAfter = anyErr.retryAfter as number | undefined;
 	}
 
 	return {

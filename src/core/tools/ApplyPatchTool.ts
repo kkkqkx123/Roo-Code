@@ -338,7 +338,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			case PatchErrorCode.INVALID_FORMAT:
 			case PatchErrorCode.HUNK_APPLY_FAILED:
 				return new PatchParseError("apply_patch", errorMessage)
-			default:
+			default: {
 				// Create a generic execution error
 				const execError = new (class extends Error {
 					toLLMMessage() {
@@ -362,6 +362,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 				})(errorMessage)
 				execError.name = "PatchExecutionError"
 				return execError as unknown as ToolError
+			}
 		}
 	}
 

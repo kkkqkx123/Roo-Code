@@ -73,9 +73,9 @@ export class CompactTransport implements ICompactTransport {
 			writeFileSync(this.filePath, JSON.stringify(sessionStart) + "\n", { flag: "w" })
 
 			this.initialized = true
-		} catch (err) {
-			throw new Error(`Failed to initialize log file: ${(err as Error).message}`)
-		}
+			} catch (err) {
+			throw new Error(`Failed to initialize log file: ${(err as Error).message}`, { cause: err })
+			}
 	}
 
 	/**

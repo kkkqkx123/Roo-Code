@@ -106,7 +106,7 @@ const processQueue = async (): Promise<void> => {
 		const { message: nextUtterance, options } = item
 
 		await new Promise<void>((resolve, reject) => {
-			let say: Say | undefined = undefined
+			let say: Say | undefined
 
 			try {
 				say = require("say")

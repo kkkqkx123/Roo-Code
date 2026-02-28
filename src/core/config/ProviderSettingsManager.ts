@@ -168,11 +168,9 @@ export class ProviderSettingsManager {
 						const config = apiConfig as unknown as Record<string, unknown>
 						if ("claudeCodePath" in config) {
 							delete config.claudeCodePath
-							isDirty = true
 						}
 						if ("claudeCodeMaxOutputTokens" in config) {
 							delete config.claudeCodeMaxOutputTokens
-							isDirty = true
 						}
 					}
 
@@ -185,7 +183,7 @@ export class ProviderSettingsManager {
 				}
 			})
 		} catch (error) {
-			throw new Error(`Failed to initialize config: ${error}`)
+			throw new Error(`Failed to initialize config: ${error}`, { cause: error })
 		}
 	}
 
@@ -330,7 +328,7 @@ export class ProviderSettingsManager {
 				}))
 			})
 		} catch (error) {
-			throw new Error(`Failed to list configs: ${error}`)
+			throw new Error(`Failed to list configs: ${error}`, { cause: error })
 		}
 	}
 
@@ -354,7 +352,7 @@ export class ProviderSettingsManager {
 				return id
 			})
 		} catch (error) {
-			throw new Error(`Failed to save config: ${error}`)
+			throw new Error(`Failed to save config: ${error}`, { cause: error })
 		}
 	}
 
@@ -393,7 +391,7 @@ export class ProviderSettingsManager {
 				return { name, ...providerSettings }
 			})
 		} catch (error) {
-			throw new Error(`Failed to get profile: ${error instanceof Error ? error.message : error}`)
+			throw new Error(`Failed to get profile: ${error instanceof Error ? error.message : error}`, { cause: error })
 		}
 	}
 
@@ -413,7 +411,7 @@ export class ProviderSettingsManager {
 				return { name, ...providerSettings }
 			})
 		} catch (error) {
-			throw new Error(`Failed to activate profile: ${error instanceof Error ? error.message : error}`)
+			throw new Error(`Failed to activate profile: ${error instanceof Error ? error.message : error}`, { cause: error })
 		}
 	}
 
@@ -437,7 +435,7 @@ export class ProviderSettingsManager {
 				await this.store(providerProfiles)
 			})
 		} catch (error) {
-			throw new Error(`Failed to delete config: ${error}`)
+			throw new Error(`Failed to delete config: ${error}`, { cause: error })
 		}
 	}
 
@@ -451,7 +449,7 @@ export class ProviderSettingsManager {
 				return name in providerProfiles.apiConfigs
 			})
 		} catch (error) {
-			throw new Error(`Failed to check config existence: ${error}`)
+			throw new Error(`Failed to check config existence: ${error}`, { cause: error })
 		}
 	}
 
@@ -471,7 +469,7 @@ export class ProviderSettingsManager {
 				await this.store(providerProfiles)
 			})
 		} catch (error) {
-			throw new Error(`Failed to set mode config: ${error}`)
+			throw new Error(`Failed to set mode config: ${error}`, { cause: error })
 		}
 	}
 
@@ -485,7 +483,7 @@ export class ProviderSettingsManager {
 				return modeApiConfigs?.[mode]
 			})
 		} catch (error) {
-			throw new Error(`Failed to get mode config: ${error}`)
+			throw new Error(`Failed to get mode config: ${error}`, { cause: error })
 		}
 	}
 
@@ -531,7 +529,7 @@ export class ProviderSettingsManager {
 				return profiles
 			})
 		} catch (error) {
-			throw new Error(`Failed to export provider profiles: ${error}`)
+			throw new Error(`Failed to export provider profiles: ${error}`, { cause: error })
 		}
 	}
 
@@ -539,7 +537,7 @@ export class ProviderSettingsManager {
 		try {
 			return await this.lock(() => this.store(providerProfiles))
 		} catch (error) {
-			throw new Error(`Failed to import provider profiles: ${error}`)
+			throw new Error(`Failed to import provider profiles: ${error}`, { cause: error })
 		}
 	}
 
@@ -599,7 +597,7 @@ export class ProviderSettingsManager {
 				),
 			}
 		} catch (error) {
-			throw new Error(`Failed to read provider profiles from secrets: ${error}`)
+			throw new Error(`Failed to read provider profiles from secrets: ${error}`, { cause: error })
 		}
 	}
 
@@ -636,7 +634,7 @@ export class ProviderSettingsManager {
 		try {
 			await this.context.secrets.store(this.secretsKey, JSON.stringify(providerProfiles, null, 2))
 		} catch (error) {
-			throw new Error(`Failed to write provider profiles to secrets: ${error}`)
+			throw new Error(`Failed to write provider profiles to secrets: ${error}`, { cause: error })
 		}
 	}
 

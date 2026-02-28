@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 export function resolveVerbosity(argv = process.argv, env = process.env) {
     // Check if --no-silent flag is used (native vitest flag)
     const cliNoSilent = argv.includes("--no-silent") || argv.includes("--silent=false");

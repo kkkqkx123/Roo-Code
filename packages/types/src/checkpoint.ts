@@ -22,6 +22,6 @@ export type CheckpointDiffOptions = {
 	mode: "from-init" | "checkpoint" | "to-current" | "full"
 }
 
-export type CheckpointResult = any
+export type CheckpointResult = unknown
 
-export type DiffResult = any
+export type DiffResult = unknown

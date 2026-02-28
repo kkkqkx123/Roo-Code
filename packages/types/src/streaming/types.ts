@@ -18,7 +18,7 @@ export interface StreamingGroundingSource {
 	title: string
 	url: string
 	snippet?: string
-	[key: string]: any
+	[key: string]: unknown
 }
 
 // ============================================================================
@@ -30,7 +30,7 @@ export interface StreamingGroundingSource {
  */
 export interface ApiMessage {
 	role: "user" | "assistant"
-	content: any
+	content: unknown
 	reasoning?: string
 }
 
@@ -69,8 +69,8 @@ export interface TokenBreakdown {
 export interface StreamingResult {
 	assistantMessage: string
 	reasoningMessage: string
-	assistantMessageContent: any[]
-	userMessageContent: any[]
+	assistantMessageContent: unknown[]
+	userMessageContent: unknown[]
 	groundingSources: StreamingGroundingSource[]
 	tokens: StreamingTokenUsage
 	didUseTool: boolean

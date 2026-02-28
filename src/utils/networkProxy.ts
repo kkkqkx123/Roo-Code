@@ -232,10 +232,8 @@ async function configureGlobalProxy(config: ProxyConfig): Promise<void> {
 
 	let bootstrap: (() => void) | undefined
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 		const mod = (await import("global-agent")) as any
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-		bootstrap = mod.bootstrap
+		bootstrap = mod.bootstrap as typeof bootstrap
 	} catch (error) {
 		log(
 			`Failed to load global-agent (proxy support is only available in debug/dev builds): ${error instanceof Error ? error.message : String(error)}`,

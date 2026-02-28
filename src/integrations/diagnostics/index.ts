@@ -138,7 +138,7 @@ export async function diagnosticsToProblemsString(
 			const source = item.diagnostic.source ? `${item.diagnostic.source} ` : ""
 
 			// Pre-format the diagnostic text
-			let diagnosticText = ""
+			let diagnosticText: string
 			try {
 				let fileStat = fileStats.get(item.uri)
 				if (!fileStat) {

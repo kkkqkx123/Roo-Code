@@ -373,7 +373,7 @@ async function getFileOrFolderContentWithMetadata(
 		}
 	} catch (error) {
 		const errorMsg = error instanceof Error ? error.message : String(error)
-		throw new Error(`Failed to access path "${mentionPath}": ${errorMsg}`)
+		throw new Error(`Failed to access path "${mentionPath}": ${errorMsg}`, { cause: error })
 	}
 }
 

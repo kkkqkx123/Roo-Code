@@ -34,25 +34,26 @@ vi.mock("../../prompts/responses", () => ({
 }))
 
 vi.mock("../updateTodoListTool", () => ({
-	parseMarkdownChecklist: vi.fn((md: string) => {
-		// Simple mock implementation
-		const lines = md.split("\n").filter((line) => line.trim())
-		return lines.map((line, index) => {
-			let status = "pending"
-			let content = line
+parseMarkdownChecklist: vi.fn((md: string) => {
+	// Simple mock implementation
+	const lines = md.split("\n").filter((line) => line.trim())
+	return lines.map((line, index) => {
+		let status: string
+		let content: string
 
-			if (line.includes("[x]") || line.includes("[X]")) {
-				status = "completed"
-				content = line.replace(/^\[x\]\s*/i, "")
-			} else if (line.includes("[-]") || line.includes("[~]")) {
-				status = "in_progress"
-				content = line.replace(/^\[-\]\s*/, "").replace(/^\[~\]\s*/, "")
-			} else {
-				content = line.replace(/^\[\s*\]\s*/, "")
-			}
+		if (line.includes("[x]") || line.includes("[X]")) {
+			status = "completed"
+			content = line.replace(/^\[x\]\s*/i, "")
+		} else if (line.includes("[-]") || line.includes("[~]")) {
+			status = "in_progress"
+			content = line.replace(/^\[-\]\s*/, "").replace(/^\[~\]\s*/, "")
+		} else {
+			status = "pending"
+			content = line.replace(/^\[\s*\]\s*/, "")
+		}
 
-			return {
-				id: `todo-${index}`,
+		return {
+			id: `todo-${index}`,
 				content,
 				status,
 			}

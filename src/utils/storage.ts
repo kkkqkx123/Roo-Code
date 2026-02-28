@@ -13,7 +13,7 @@ import { t } from "../i18n"
  */
 export async function getStorageBasePath(defaultPath: string): Promise<string> {
 	// Get user-configured custom storage path
-	let customStoragePath = ""
+	let customStoragePath: string
 
 	try {
 		// This is the line causing the error in tests
@@ -87,7 +87,7 @@ export async function promptForCustomStoragePath(): Promise<void> {
 		return
 	}
 
-	let currentPath = ""
+	let currentPath: string
 	try {
 		const currentConfig = vscode.workspace.getConfiguration(Package.name)
 		currentPath = currentConfig.get<string>("customStoragePath", "")

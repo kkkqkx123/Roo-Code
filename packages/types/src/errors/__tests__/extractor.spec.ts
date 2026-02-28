@@ -6,7 +6,6 @@ import { describe, it, expect } from "vitest"
 import {
 	extractErrorInfo,
 	ErrorCategory,
-	type ExtractedErrorInfo,
 } from "../extractor.js"
 import {
 	ApiProviderError,
@@ -201,7 +200,7 @@ describe("extractErrorInfo", () => {
 
 	describe("Generic Error extraction", () => {
 		it("should extract properties from generic Error with attached metadata", () => {
-			const error = new Error("Generic error") as any
+			const error = new Error("Generic error") as unknown as Record<string, unknown>
 			error.providerName = "GenericProvider"
 			error.status = 500
 			error.requestId = "req_generic_123"
