@@ -111,4 +111,5 @@ export interface GroundingSource {
 	title: string
 	url: string
 	snippet?: string
+	[key: string]: unknown
 }

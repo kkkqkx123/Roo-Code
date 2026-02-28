@@ -27,18 +27,11 @@ export async function handleUsageChunk(
     chunk.totalCost ?? 0
   )
 
-  // Publish token update event
+  // Publish token update event (matching TaskEventMap definition)
   const tokens = context.tokenManager.getTokens()
   const breakdown = context.tokenManager.getTokenBreakdown()
   await context.eventBus?.publish('token:update', {
-    tokens: {
-      totalTokensIn: tokens.input,
-      totalTokensOut: tokens.output,
-      totalCost: tokens.totalCost,
-      contextTokens: 0,
-      totalCacheWrites: tokens.cacheWrite,
-      totalCacheReads: tokens.cacheRead,
-    },
+    tokens,
     breakdown,
     isFinal: false,
   })

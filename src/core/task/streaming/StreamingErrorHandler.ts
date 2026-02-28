@@ -15,6 +15,7 @@ import type {
 	ClineMessage,
 	StreamingErrorType,
 } from "./types"
+import type { TaskEventBus } from "../TaskEventBus"
 import {
 	StreamAbortedError,
 	StreamProviderError,
@@ -39,6 +40,7 @@ import {
 export class StreamingErrorHandler {
 	private config: StreamingProcessorConfig
 	private stateManager: any // Will be set properly when integrated
+	private eventBus?: TaskEventBus
 
 	constructor(config: StreamingProcessorConfig) {
 		this.config = config
@@ -49,6 +51,13 @@ export class StreamingErrorHandler {
 	 */
 	setStateManager(stateManager: any): void {
 		this.stateManager = stateManager
+	}
+
+	/**
+	 * Set the event bus for publishing error events
+	 */
+	setEventBus(eventBus?: TaskEventBus): void {
+		this.eventBus = eventBus
 	}
 
 	/**
@@ -135,6 +144,9 @@ export class StreamingErrorHandler {
 		// Use retryAfter from extracted error info if available
 		const finalRetryDelay = retryDelay ?? errorInfo.retryAfter ? (errorInfo.retryAfter! * 1000) : await this.calculateBackoffDelay()
 
+		// Publish stream error event
+		await this.publishErrorEvent(streamingError, shouldRetry, finalRetryDelay)
+
 		// Stream failed, should retry
 		return {
 			shouldRetry,
@@ -142,6 +154,22 @@ export class StreamingErrorHandler {
 			abortReason: cancelReason,
 			errorMessage: streamingFailedMessage,
 		}
+	}
+
+	/**
+	 * Publish stream error event to the event bus
+	 */
+	private async publishErrorEvent(
+		error: StreamingErrorType,
+		shouldRetry: boolean,
+		retryDelay: number
+	): Promise<void> {
+		await this.eventBus?.publishAsync('stream:error', {
+			error,
+			retryAttempt: 0,
+			isRetryable: shouldRetry,
+			retryDelay,
+		})
 	}
 
 	/**

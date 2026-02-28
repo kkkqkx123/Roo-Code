@@ -18,6 +18,7 @@ import type { AssistantMessageContent } from "../../assistant-message/types"
 import type { ModelInfo, ClineMessage, ExtractedErrorInfo } from "@coder/types"
 import { ApiMessage, StreamChunk, StreamingErrorType, TokenBreakdown } from "@coder/types"
 import { GroundingSource, TokenUsage } from "."
+import type { TaskEventBus } from "../TaskEventBus"
 
 // ============================================================================
 // Re-exported Types and Values from @coder/types
@@ -107,13 +108,13 @@ export interface StreamingProcessorConfig {
 	onSay: (type: string, text?: string, images?: string[], partial?: boolean) => Promise<void>
 	onUpdateMessage: (message: ClineMessage) => Promise<void>
 	onSaveMessages: () => Promise<void>
-	onAddToHistory: (message: ApiMessage, reasoning?: string) => Promise<void>
+	onAddToHistory: (message: Anthropic.MessageParam, reasoning?: string) => Promise<void>
 	onPresentAssistant: () => void
 	/**
 	 * Optional event bus for publishing streaming events
 	 * Enables decoupled communication with Task and other components
 	 */
-	eventBus?: import("../TaskEventBus").TaskEventBus
+	eventBus?: TaskEventBus
 }
 
 /**
@@ -139,13 +140,48 @@ export interface DiffViewProvider {
 // ============================================================================
 
 /**
+ * Handler Context Types (Module-specific)
+ * ============================================================================
+ */
+
+/**
  * Context passed to chunk handlers
  */
 export interface ChunkHandlerContext {
 	stateManager: StreamingStateManager
 	tokenManager: StreamingTokenManager
 	config: StreamingProcessorConfig
-	eventBus?: import("../TaskEventBus").TaskEventBus
+	eventBus?: TaskEventBus
+}
+
+// ============================================================================
+// Event Data Types (aligned with TaskEventMap in ../types.ts)
+// ============================================================================
+
+/**
+ * Tool call progress status for tool:call:progress events
+ */
+export interface ToolCallProgressStatus {
+	/** Progress percentage (0-100) */
+	percentage?: number
+	/** Progress message */
+	message?: string
+	/** Progress details */
+	details?: unknown
+}
+
+/**
+ * Tool result for tool:call:complete events
+ */
+export interface ToolResult {
+	/** Tool call identifier */
+	toolCallId: string
+	/** Tool execution result (success) */
+	result?: unknown
+	/** Tool execution error */
+	error?: Error
+	/** Whether the tool call was successful */
+	success: boolean
 }
 
 // ============================================================================

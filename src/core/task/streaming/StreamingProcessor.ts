@@ -61,6 +61,7 @@ export class StreamingProcessor {
     this.tokenManager = new StreamingTokenManager(config.api)
     this.errorHandler = new StreamingErrorHandler(config)
     this.errorHandler.setStateManager(this.stateManager)
+    this.errorHandler.setEventBus(config.eventBus)
     this.eventBus = config.eventBus
     this.deadLoopDetector = new DeadLoopDetector()
     this.handlers = this.initializeHandlers()
@@ -420,13 +421,6 @@ export class StreamingProcessor {
     this.stateManager.setError(streamingError)
 
     const result = await this.errorHandler.handleError(error)
-
-    // Publish stream error event
-    this.eventBus?.publishAsync('stream:error', {
-      error: streamingError,
-      retryAttempt: 0,
-      isRetryable: false,
-    })
 
     if (result.shouldRetry) {
       throw new StreamingRetryError(result.retryDelay || 1000, error)

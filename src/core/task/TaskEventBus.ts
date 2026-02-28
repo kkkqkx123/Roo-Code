@@ -35,16 +35,7 @@ import EventEmitter from 'events'
 // Import types
 import type {
   TaskEventMap,
-  TaskEvent,
-  StreamingErrorType,
-  ToolCallEvent,
-  ToolResult,
-  ToolProgressStatus,
-  TokenBreakdown,
-  TaskState,
 } from './types'
-import type { StreamingResult } from './streaming/types'
-import type { TokenUsage } from '@coder/types'
 
 /**
  * Subscription interface for managing event listeners
@@ -95,26 +86,24 @@ export interface TaskEventBusConfig {
 }
 
 /**
- * Simple queue for event processing (replaces p-queue dependency)
+ * Event queue with backpressure control for TaskEventBus.
+ *
+ * Provides concurrency-limited event processing to prevent overwhelming subscribers.
+ * Events are processed in order with configurable concurrency.
  */
-class SimpleEventQueue {
+class PooledEventQueue {
   private queue: Array<() => Promise<void>> = []
-  private processing = false
   private concurrency: number
   private activeCount = 0
+  private pendingResolves: Array<() => void> = []
 
   constructor(concurrency: number = 1) {
     this.concurrency = concurrency
   }
 
   async add(task: () => Promise<void>): Promise<void> {
-    // Wait for queue to have room based on concurrency
-    while (this.activeCount >= this.concurrency) {
-      await new Promise(resolve => setTimeout(resolve, 1))
-    }
-
     return new Promise((resolve, reject) => {
-      this.queue.push(async () => {
+      const wrappedTask = async () => {
         try {
           this.activeCount++
           await task()
@@ -123,28 +112,39 @@ class SimpleEventQueue {
           reject(error)
         } finally {
           this.activeCount--
+          this.tryStartNext()
         }
-      })
-      this.processQueue()
+      }
+
+      this.queue.push(wrappedTask)
+      this.tryStartNext()
     })
   }
 
-  private async processQueue(): Promise<void> {
-    if (this.processing || this.queue.length === 0) {
+  private tryStartNext(): void {
+    // Check if we can start more tasks
+    if (this.queue.length === 0 || this.activeCount >= this.concurrency) {
+      // No tasks to process or at concurrency limit
+      // Signal idle waiters if queue is empty and no active tasks
+      if (this.queue.length === 0 && this.activeCount === 0) {
+        this.notifyIdle()
+      }
       return
     }
 
-    this.processing = true
-
-    while (this.queue.length > 0) {
-      const task = this.queue.shift()
-      if (task) {
-        // Fire and forget for async processing
-        task().catch(console.error)
-      }
+    // Start a new task
+    const task = this.queue.shift()
+    if (task) {
+      // Execute task asynchronously
+      task().catch(console.error)
     }
+  }
 
-    this.processing = false
+  private notifyIdle(): void {
+    while (this.pendingResolves.length > 0) {
+      const res = this.pendingResolves.shift()
+      if (res) res()
+    }
   }
 
   get size(): number {
@@ -156,13 +156,20 @@ class SimpleEventQueue {
   }
 
   clear(): void {
-    this.queue = []
+    this.queue.splice(0)
   }
 
   async onIdle(): Promise<void> {
-    while (this.queue.length > 0 || this.activeCount > 0) {
-      await new Promise(resolve => setTimeout(resolve, 10))
+    // Always wait at least one tick to ensure pending tasks are processed
+    await new Promise<void>(resolve => setImmediate(resolve))
+
+    if (this.queue.length === 0 && this.activeCount === 0) {
+      return
     }
+
+    return new Promise<void>(resolve => {
+      this.pendingResolves.push(resolve)
+    })
   }
 }
 
@@ -174,7 +181,7 @@ class SimpleEventQueue {
  */
 export class TaskEventBus extends EventEmitter {
   private config: Required<TaskEventBusConfig>
-  private queue: SimpleEventQueue
+  private queue: PooledEventQueue
   private eventHistory: EventRecord[]
   private sequenceNumber: number
   private subscriptions: Set<Subscription>
@@ -188,7 +195,7 @@ export class TaskEventBus extends EventEmitter {
       concurrency: config.concurrency ?? 1,
     }
 
-    this.queue = new SimpleEventQueue(this.config.concurrency)
+    this.queue = new PooledEventQueue(this.config.concurrency)
 
     this.eventHistory = []
     this.sequenceNumber = 0
@@ -230,8 +237,8 @@ export class TaskEventBus extends EventEmitter {
         this.recordEvent(type, data)
       }
 
-      // Emit event to subscribers
-      this.emit(type, data)
+      // Emit event and wait for all listeners to complete
+      await this.emitAsync(type, data)
 
       // Also emit generic event for monitoring
       this.emit('*', { type, data, timestamp: Date.now() })
@@ -242,6 +249,7 @@ export class TaskEventBus extends EventEmitter {
    * Publish an event without waiting for processing
    *
    * Use this for fire-and-forget events where ordering doesn't matter.
+   * The event is queued and will be processed asynchronously.
    *
    * @param type - Event type
    * @param data - Event data
@@ -250,15 +258,38 @@ export class TaskEventBus extends EventEmitter {
     type: K,
     data: TaskEventMap[K]
   ): void {
-    this.queue.add(async () => {
+    // Fire and forget - add to queue but don't wait for completion
+    const promise = this.queue.add(async () => {
       if (this.config.enableHistory) {
         this.recordEvent(type, data)
       }
-      this.emit(type, data)
+      // Emit event and wait for all listeners to complete
+      await this.emitAsync(type, data)
       this.emit('*', { type, data, timestamp: Date.now() })
-    }).catch((error: any) => {
+    })
+
+    // Catch errors to prevent unhandled promise rejection
+    promise.catch((error: any) => {
       console.error('[TaskEventBus] Async publish error:', error)
     })
+  }
+
+  /**
+   * Emit event and wait for all listeners to complete
+   */
+  private async emitAsync<K extends keyof TaskEventMap>(
+    type: K,
+    data: TaskEventMap[K]
+  ): Promise<void> {
+    const listeners = this.listeners(type as string | symbol)
+    if (listeners.length === 0) {
+      return
+    }
+
+    // Wait for all listeners to complete
+    await Promise.all(
+      listeners.map(listener => Promise.resolve().then(() => listener(data)))
+    )
   }
 
   // ============================================================================
@@ -314,9 +345,18 @@ export class TaskEventBus extends EventEmitter {
     type: K,
     handler: (data: TaskEventMap[K]) => void | Promise<void>
   ): Subscription {
+    let called = false
+    const wrappedHandler = async (data: TaskEventMap[K]) => {
+      if (called) return
+      called = true
+      await handler(data)
+      // Unsubscribe after first call
+      subscription.unsubscribe()
+    }
+
     const subscription: Subscription = {
       unsubscribe: () => {
-        this.off(type, handler)
+        this.off(type, wrappedHandler)
         this.subscriptions.delete(subscription)
           ; (subscription as any)._active = false
       },
@@ -325,7 +365,7 @@ export class TaskEventBus extends EventEmitter {
       },
     }
 
-    this.once(type as string, handler)
+    this.on(type as string, wrappedHandler)
     this.subscriptions.add(subscription)
 
     return subscription
@@ -442,8 +482,12 @@ export class TaskEventBus extends EventEmitter {
 
   /**
    * Clear the event queue
+   * Note: This only clears pending tasks that haven't started execution.
+   * Tasks already being executed will complete.
    */
   clearQueue(): void {
+    // Only clear tasks that haven't started execution
+    // Tasks already in activeCount will complete
     this.queue.clear()
   }
 
@@ -512,78 +556,4 @@ export class TaskEventBus extends EventEmitter {
       this.eventHistory = this.eventHistory.slice(-this.config.maxHistorySize)
     }
   }
-}
-
-// ============================================================================
-// Convenience types for event data
-// ============================================================================
-
-/**
- * Stream start event data
- */
-export interface StreamStartEvent {
-  requestId: string
-  systemPrompt: string
-  messages: any[]
-}
-
-/**
- * Stream chunk event data
- */
-export interface StreamChunkEvent {
-  type: 'text' | 'reasoning' | 'tool_call' | 'usage' | 'grounding'
-  data: unknown
-}
-
-/**
- * Tool call start event data
- */
-export interface ToolCallStartEvent {
-  toolCall: ToolCallEvent
-}
-
-/**
- * Tool call progress event data
- */
-export interface ToolCallProgressEvent {
-  toolCallId: string
-  progress: ToolProgressStatus
-}
-
-/**
- * Tool call complete event data
- */
-export interface ToolCallCompleteEvent {
-  toolCallId: string
-  result: ToolResult
-}
-
-/**
- * Tool call error event data
- */
-export interface ToolCallErrorEvent {
-  toolCallId: string
-  error: Error
-}
-
-/**
- * Token update event data
- */
-export interface TokenUpdateEvent {
-  tokens: TokenUsage
-  breakdown: TokenBreakdown
-}
-
-/**
- * Task state change event data
- */
-export interface TaskStateChangeEvent {
-  state: TaskState
-}
-
-/**
- * Task abort event data
- */
-export interface TaskAbortEvent {
-  reason: string
 }

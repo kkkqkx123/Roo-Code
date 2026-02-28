@@ -7,7 +7,7 @@
  */
 
 import { NativeToolCallParser } from "../../../assistant-message/NativeToolCallParser"
-import type { ChunkHandlerContext, StreamChunk, ToolCallEvent } from "../types"
+import type { ChunkHandlerContext, StreamChunk, ToolCallEvent, ToolCallProgressStatus, ToolResult } from "../types"
 import type { ToolName } from "../../../../shared/tools"
 
 /**
@@ -179,9 +179,20 @@ async function handleToolCallEnd(
     }
 
     context.stateManager.removeToolCallIndex(event.id)
+
+    // Publish tool call complete event
+    await context.eventBus?.publish('tool:call:complete', {
+      toolCallId: event.id,
+      result: {
+        toolCallId: event.id,
+        result: finalToolUse,
+        success: true,
+      },
+    })
   } else if (toolUseIndex !== undefined) {
-    // JSON format error or missing parameters
+    // JSON format error or missing parameters - publish error event
     const existingToolUse = context.stateManager.getAssistantMessageContent()[toolUseIndex]
+    const errorMessage = 'Tool call finalization failed: invalid JSON or missing parameters'
 
     if (existingToolUse && existingToolUse.type === "tool_use") {
       existingToolUse.partial = false
@@ -189,20 +200,23 @@ async function handleToolCallEnd(
     }
 
     context.stateManager.removeToolCallIndex(event.id)
+
+    // Publish tool call error event
+    await context.eventBus?.publish('tool:call:error', {
+      toolCallId: event.id,
+      error: new Error(errorMessage),
+      isRetryable: false,
+    })
+
+    console.error(`[ToolCallHandler] ${errorMessage} for ID: ${event.id}`)
+  } else {
+    // Tool call index not found - this is an error condition
+    const errorMessage = `Tool call end received without matching start for ID: ${event.id}`
+    console.warn(`[ToolCallHandler] ${errorMessage}`)
   }
 
   // Present assistant message
   context.config.onPresentAssistant()
-
-  // Publish tool call complete event
-  await context.eventBus?.publish('tool:call:complete', {
-    toolCallId: event.id,
-    result: {
-      toolCallId: event.id,
-      result: finalToolUse,
-      success: true,
-    },
-  })
 }
 
 /**
@@ -364,9 +378,15 @@ async function handleDirectToolCallEnd(
   const toolUseIndex = context.stateManager.getToolCallIndex(chunk.id)
 
   if (toolUseIndex === undefined) {
-    console.warn(
-      `[Task#${context.config.taskId}] Received tool_call_end without tool_call_start for ID: ${chunk.id}`
-    )
+    const errorMessage = `Received tool_call_end without tool_call_start for ID: ${chunk.id}`
+    console.warn(`[ToolCallHandler] ${errorMessage}`)
+    
+    // Publish tool call error event
+    await context.eventBus?.publish('tool:call:error', {
+      toolCallId: chunk.id,
+      error: new Error(errorMessage),
+      isRetryable: false,
+    })
     return
   }
 
@@ -409,7 +429,15 @@ async function handleCompleteToolCall(
   })
 
   if (!toolUse) {
-    console.error(`Failed to parse tool call for task ${context.config.taskId}:`, chunk)
+    const errorMessage = `Failed to parse tool call for task ${context.config.taskId}`
+    console.error(`[ToolCallHandler] ${errorMessage}:`, chunk)
+    
+    // Publish tool call error event
+    await context.eventBus?.publish('tool:call:error', {
+      toolCallId: chunk.id,
+      error: new Error(errorMessage),
+      isRetryable: false,
+    })
     return
   }
 
@@ -418,6 +446,16 @@ async function handleCompleteToolCall(
 
   // Present assistant message
   context.config.onPresentAssistant()
+
+  // Publish tool call complete event for backward compatibility
+  await context.eventBus?.publish('tool:call:complete', {
+    toolCallId: chunk.id,
+    result: {
+      toolCallId: chunk.id,
+      result: toolUse,
+      success: true,
+    },
+  })
 }
 
 /**

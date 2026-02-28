@@ -6,7 +6,6 @@
  */
 
 import type { GroundingSource } from "../../api/transform/stream"
-import type { TokenUsage } from "@coder/types"
 
 /**
  * Token breakdown by category
@@ -112,7 +111,13 @@ export interface StreamCompleteEvent {
   /** Grounding sources if any */
   groundingSources: GroundingSource[]
   /** Token usage statistics */
-  tokens: TokenUsage
+  tokens: {
+    input: number
+    output: number
+    cacheWrite: number
+    cacheRead: number
+    totalCost: number
+  }
   /** Whether any tool was called */
   didUseTool: boolean
   /** Whether the stream was rejected by user */
@@ -239,10 +244,20 @@ export interface ToolCallErrorEvent {
  * Emitted when token counts are updated during streaming
  */
 export interface TokenUpdateEvent {
-  /** Current token usage */
-  tokens: TokenUsage
+  /** Current token usage (using StreamingTokenUsage format) */
+  tokens: {
+    input: number
+    output: number
+    cacheWrite: number
+    cacheRead: number
+    totalCost: number
+  }
   /** Detailed token breakdown */
-  breakdown: TokenBreakdown
+  breakdown: {
+    text: number
+    reasoning: number
+    toolCalls: number
+  }
   /** Whether this is the final token count */
   isFinal: boolean
 }

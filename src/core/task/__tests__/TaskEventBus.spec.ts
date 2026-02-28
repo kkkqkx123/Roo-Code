@@ -495,7 +495,7 @@ describe('TaskEventBus', () => {
       const events: string[] = []
 
       eventBus.subscribe('stream:start', () => { events.push('start') })
-      eventBus.subscribe('stream:chunk', () => { events.push('chunk') })
+      // Single subscriber for stream:chunk
       eventBus.subscribe('stream:chunk', () => { events.push('chunk') })
       eventBus.subscribe('stream:complete', () => { events.push('complete') })
 

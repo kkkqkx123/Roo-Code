@@ -129,8 +129,10 @@ import {
 	StreamingProcessor,
 	StreamingRetryError,
 	type StreamingProcessorConfig,
+	type StreamingResult,
 } from "./streaming"
 import { TaskEventBus } from "./TaskEventBus"
+import type { TaskState } from "./types"
 
 const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
 const FORCED_CONTEXT_REDUCTION_PERCENT = 75 // Keep 75% of context (remove 25%) on context window errors
@@ -351,6 +353,12 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	userMessageContentReady = false
 
 	/**
+	 * Current task state for event bus integration
+	 * Tracks state changes: idle → running → completed/error/aborted
+	 */
+	private taskState: TaskState = "idle"
+
+	/**
 	 * Flag indicating whether the assistant message for the current streaming session
 	 * has been saved to API conversation history.
 	 *
@@ -392,6 +400,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	private _started = false
 	// No streaming parser is required.
 	assistantMessageParser?: undefined
+
+	/**
+	 * Last streaming result from event bus subscription.
+	 * Used to access streaming results after event-driven processing.
+	 * @private
+	 */
+	private _lastStreamingResult?: import("./streaming").StreamingResult
 	private providerProfileChangeListener?: (config: { name: string; provider?: string }) => void
 
 	// Initial status for the task's history item (set at creation time to avoid race conditions)
@@ -611,6 +626,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.eventBus.subscribe('stream:start', (data) => {
 			console.log(`[Task#${this.taskId}] Stream started: ${data.requestId}`)
 			this.isStreaming = true
+			this.setTaskState('running')
 		})
 
 		// Stream chunk - handled by StreamingProcessor
@@ -621,11 +637,23 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			console.log(`[Task#${this.taskId}] Stream completed`)
 			this.isStreaming = false
 
-			// Update state from result (already done via return value, but kept for consistency)
+			if (result.aborted) {
+				this.setTaskState('aborted', result.abortReason)
+			} else if (result.error) {
+				const errorMessage = result.error instanceof Error ? result.error.message : String(result.error)
+				this.setTaskState('error', errorMessage)
+			} else {
+				this.setTaskState('completed')
+			}
+
+			// Update all state from streaming result
 			// Note: result.assistantMessageContent is unknown[], cast to AssistantMessageContent[]
 			this.assistantMessageContent = result.assistantMessageContent as AssistantMessageContent[]
 			this.didRejectTool = result.didRejectTool
 			this.didCompleteReadingStream = true
+
+			// Store streaming result for later access in recursivelyMakeClineRequests
+			this._lastStreamingResult = result as StreamingResult
 		})
 
 		// Stream error
@@ -635,28 +663,68 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	/**
+	 * Set the task state and publish state change event
+	 */
+	private setTaskState(newState: TaskState, reason?: string): void {
+		const previousState = this.taskState
+		if (previousState === newState) {
+			return // No change, skip event
+		}
+
+		this.taskState = newState
+		console.log(`[Task#${this.taskId}] State changed: ${previousState} → ${newState}${reason ? ` (${reason})` : ''}`)
+
+		// Publish state change event
+		this.eventBus?.publishAsync('task:state:change', {
+			previousState,
+			newState,
+			timestamp: Date.now(),
+			reason,
+		})
+	}
+
+	/**
 	 * Set up subscriptions to tool events
 	 */
 	private setupToolEventSubscriptions(): void {
 		if (!this.eventBus) return
 
-		// Tool call start
-		this.eventBus.subscribe('tool:call:start', (data) => {
+		// Tool call start - track tool invocation
+		this.eventBus.subscribe('tool:call:start', async (data) => {
 			console.log(`[Task#${this.taskId}] Tool called: ${data.toolCall.name} (${data.toolCall.id})`)
+			// Note: Tool repetition detection is handled in the tool execution flow,
+			// not at the event subscription level
 		})
 
-		// Tool call progress
-		this.eventBus.subscribe('tool:call:progress', (data) => {
-			// Can be used for real-time tool progress UI updates
+		// Tool call progress - update UI for long-running tools
+		this.eventBus.subscribe('tool:call:progress', async (data) => {
+			// For tools with progress status, update UI in real-time
+			if (data.progress.message) {
+				// Update the partial message in UI
+				const lastMessage = this.clineMessages.at(-1)
+				if (lastMessage && lastMessage.partial) {
+					lastMessage.text = data.progress.message
+					await this.updateClineMessage(lastMessage)
+				}
+			}
 		})
 
-		// Tool call complete
+		// Tool call complete - handle success/failure and trigger presentation
 		this.eventBus.subscribe('tool:call:complete', async (data) => {
 			if (data.result.success) {
 				console.log(`[Task#${this.taskId}] Tool completed: ${data.toolCallId}`)
 			} else {
 				console.error(`[Task#${this.taskId}] Tool failed: ${data.toolCallId}`, data.result.error)
+				// Track tool failure for retry logic
+				this.didToolFailInCurrentTurn = true
 			}
+		})
+
+		// Tool call error - handle error cases
+		this.eventBus.subscribe('tool:call:error', async (data) => {
+			console.error(`[Task#${this.taskId}] Tool error: ${data.toolCallId}`, data.error.message)
+			// Track tool failure for retry logic
+			this.didToolFailInCurrentTurn = true
 		})
 	}
 
@@ -666,10 +734,36 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	private setupTokenEventSubscriptions(): void {
 		if (!this.eventBus) return
 
-		// Token update
-		this.eventBus.subscribe('token:update', (data) => {
-			// Can be used for real-time token usage UI updates
-			// For now, token counts are still updated via the streaming result
+		// Token update - accumulate real-time token updates during streaming
+		// Final token counts are applied to clineMessages in stream:complete handler
+		let lastApiReqIndex = -1
+		
+		this.eventBus.subscribe('token:update', async (data) => {
+			// Find the current api_req_started message
+			if (lastApiReqIndex < 0 || !this.clineMessages[lastApiReqIndex]) {
+				lastApiReqIndex = this.clineMessages.findIndex(m => m.say === 'api_req_started')
+			}
+			
+			if (lastApiReqIndex < 0 || !this.clineMessages[lastApiReqIndex]) {
+				return
+			}
+
+			// Update token data in the api_req_started message
+			const msg = this.clineMessages[lastApiReqIndex]
+			if (!msg || !msg.text) {
+				return
+			}
+
+			const existingData = JSON.parse(msg.text || '{}')
+			const tokens = data.tokens
+			msg.text = JSON.stringify({
+				...existingData,
+				tokensIn: tokens.input,
+				tokensOut: tokens.output,
+				cacheWrites: tokens.cacheWrite ?? 0,
+				cacheReads: tokens.cacheRead ?? 0,
+				cost: tokens.totalCost,
+			} satisfies ClineApiReqInfo)
 		})
 	}
 
@@ -2344,7 +2438,15 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// Force final token usage update before abort event
 		this.emitFinalTokenUsageUpdate()
 
+		// Emit legacy event for backward compatibility
 		this.emit(CoderEventName.TaskAborted)
+
+		// Publish task:abort event to event bus
+		this.setTaskState('aborted', isAbandoned ? 'abandoned' : 'user_cancelled')
+		await this.eventBus?.publishAsync('task:abort', {
+			reason: isAbandoned ? 'abandoned' : 'user_cancelled',
+			timestamp: Date.now(),
+		})
 
 		try {
 			this.dispose() // Call the centralized dispose method
@@ -3058,9 +3160,6 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				// allow the user to retry the request (most likely due to rate
 				// limit error, which gets thrown on the first chunk).
 				const stream = this.attemptApiRequest(currentItem.retryAttempt ?? 0, { skipProviderRateLimit: true })
-				let assistantMessage = ""
-				let reasoningMessage = ""
-				let pendingGroundingSources: GroundingSource[] = []
 				let hasTextContent = false
 				let hasToolUses = false
 				this.isStreaming = true
@@ -3073,7 +3172,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				let streamResult: Awaited<ReturnType<typeof processor.processStream>> | undefined
 
 				try {
-					streamResult = await processor.processStream(
+					// Process stream - state will be updated via event bus subscription
+					await processor.processStream(
 						stream,
 						this.currentRequestAbortController,
 						[
@@ -3083,12 +3183,20 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						systemPromptForTokenEstimation,
 					)
 
-					assistantMessage = streamResult.assistantMessage
-					reasoningMessage = streamResult.reasoningMessage
-					pendingGroundingSources = streamResult.groundingSources
-					this.assistantMessageContent = streamResult.assistantMessageContent
-					this.didRejectTool = streamResult.didRejectTool
-					this.didCompleteReadingStream = true
+					// Wait for event bus to process stream:complete event
+					await this.eventBus?.drain()
+
+					// Get streaming result from event bus subscription
+					streamResult = this._lastStreamingResult
+					if (!streamResult) {
+						throw new Error("Streaming completed but no result was captured")
+					}
+
+					// Extract values needed for subsequent processing
+					// Note: State has already been updated via event bus subscription
+					const assistantMessage = streamResult.assistantMessage
+					const reasoningMessage = streamResult.reasoningMessage
+					const pendingGroundingSources = streamResult.groundingSources
 
 					inputTokens = streamResult.tokens.input
 					outputTokens = streamResult.tokens.output
