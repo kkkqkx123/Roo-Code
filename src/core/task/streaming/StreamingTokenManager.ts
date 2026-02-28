@@ -169,9 +169,14 @@ export class StreamingTokenManager {
 	 * Check if tiktoken fallback is needed and apply it
 	 */
 	async checkTiktokenFallback(): Promise<void> {
-		const isApiUsageInvalid = !this.hasApiUsageData || (this.tokens.input === 0 && this.tokens.output === 0)
+		const estimatedTokens = this.tokenCounter.getTotalTokens()
+		// Trigger fallback when:
+		// 1. API didn't provide valid usage data (outputTokens was 0), OR
+		// 2. Both input and output tokens are 0 but we have estimated tokens
+		const isApiUsageInvalid = !this.hasApiUsageData ||
+			(this.tokens.input === 0 && this.tokens.output === 0 && estimatedTokens > 0)
 
-		if (isApiUsageInvalid && this.tokenCounter.getTotalTokens() > 0) {
+		if (isApiUsageInvalid && estimatedTokens > 0) {
 			await this.applyTiktokenFallback()
 		}
 	}

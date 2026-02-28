@@ -74,12 +74,15 @@ export function consolidateTokenUsage(messages: ClineMessage[]): TokenUsage {
 	// The context tokens represent the total tokens used in the current context window.
 	// Priority order:
 	// 1. condense_context messages: Contains authoritative token count after context compression
-	// 2. api_req_started messages: Accumulate all tokensIn + tokensOut from all API requests
-	//    (tokensIn includes all input tokens: system prompt + conversation history + current message)
+	// 2. api_req_started messages: Use the LAST request's tokensIn + tokensOut
+	//    (tokensIn already includes all input tokens: system prompt + conversation history + current message)
+	//    DO NOT accumulate all requests - that would cause double counting since tokensIn
+	//    already contains the full context history for each request.
 	result.contextTokens = 0
 
 	// First, check for condense_context message which has authoritative token count
 	let lastCondenseTokens = 0
+	let lastCondenseIndex = -1
 	for (let i = messages.length - 1; i >= 0; i--) {
 		const message = messages[i]
 		if (!message) continue
@@ -88,27 +91,42 @@ export function consolidateTokenUsage(messages: ClineMessage[]): TokenUsage {
 			const condenseTokens = message.contextCondense?.newContextTokens ?? 0
 			if (condenseTokens > 0) {
 				lastCondenseTokens = condenseTokens
+				lastCondenseIndex = i
 				break
 			}
 		}
 	}
 
 	// If we have a condense message, use its token count as the base
-	// and accumulate all api_req_started messages after it
+	// and add tokens from api_req_started messages AFTER the condense
 	if (lastCondenseTokens > 0) {
 		result.contextTokens = lastCondenseTokens
+		// Find the last api_req_started after the condense and add its output tokens
+		// (input tokens are already included in condense count)
+		for (let i = messages.length - 1; i > lastCondenseIndex; i--) {
+			const message = messages[i]
+			if (message && message.type === "say" && message.say === "api_req_started" && message.text) {
+				try {
+					const parsedText: ParsedApiReqStartedTextType = JSON.parse(message.text)
+					// Only add output tokens since input is already in condense
+					result.contextTokens += parsedText.tokensOut || 0
+				} catch {
+					// Ignore JSON parse errors
+				}
+			}
+		}
 	} else {
-		// No condense message: accumulate all api_req_started messages
-		// This handles multi-turn conversations where each API request contributes to context
-		for (const message of messages) {
-			if (message.type === "say" && message.say === "api_req_started" && message.text) {
+		// No condense message: use the LAST api_req_started message's tokens
+		// tokensIn already contains the full context, so we don't need to accumulate
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const message = messages[i]
+			if (message && message.type === "say" && message.say === "api_req_started" && message.text) {
 				try {
 					const parsedText: ParsedApiReqStartedTextType = JSON.parse(message.text)
 					const { tokensIn, tokensOut } = parsedText
-
-					// Accumulate all tokens from all API requests
-					// (tokensIn now stores cumulative input tokens after fix)
-					result.contextTokens += (tokensIn || 0) + (tokensOut || 0)
+					// Use the last request's tokens - tokensIn already includes full context
+					result.contextTokens = (tokensIn || 0) + (tokensOut || 0)
+					break
 				} catch {
 					// Ignore JSON parse errors
 					continue

@@ -2895,14 +2895,15 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 							)
 
 					// Note: inputTokens/outputTokens are accumulated totals from
-					// streaming usage chunks. The costResult already contains the
-					// cumulative totals, so we overwrite rather than accumulate.
+					// streaming usage chunks. We accumulate rather than overwrite
+					// to handle cases where updateApiReqMsg is called multiple times
+					// (e.g., during abort scenarios).
 					this.clineMessages[lastApiReqIndex].text = JSON.stringify({
 						...existingData,
-						tokensIn: costResult.totalInputTokens,
-						tokensOut: costResult.totalOutputTokens,
-						cacheWrites: cacheWriteTokens,
-						cacheReads: cacheReadTokens,
+						tokensIn: (existingData.tokensIn || 0) + costResult.totalInputTokens,
+						tokensOut: (existingData.tokensOut || 0) + costResult.totalOutputTokens,
+						cacheWrites: (existingData.cacheWrites || 0) + cacheWriteTokens,
+						cacheReads: (existingData.cacheReads || 0) + cacheReadTokens,
 						cost: totalCost ?? costResult.totalCost,
 						cancelReason,
 						streamingFailedMessage,
