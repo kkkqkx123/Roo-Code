@@ -32,12 +32,21 @@ Example patch:
 *** Begin Patch
 *** Add File: hello.txt
 +Hello world
-*** End of File
++Second line
 *** Update File: src/app.py
 *** Move to: src/main.py
 @@ def greet():
--print("Hi")
-+print("Hello, world!")
+ def greet():
+-    print("Hi")
++    print("Hello, world!")
+     return
+*** End of File
+*** Update File: src/utils.py
+@@
+ import os
+-import sys
++import sys, json
+ def helper():
 *** Delete File: obsolete.txt
 *** End Patch`
 

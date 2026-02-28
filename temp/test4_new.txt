@@ -1,0 +1,4 @@
+这是新创建的文件 4。
+通过 apply_patch 的 Add File 操作创建。
+行 1: New Content
+行 2: More Content

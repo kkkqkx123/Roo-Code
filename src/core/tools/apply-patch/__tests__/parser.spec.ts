@@ -1,3 +1,4 @@
+import { describe, it, expect } from "vitest"
 import { parsePatch, ParseError } from "../parser"
 
 describe("apply_patch parser", () => {
@@ -311,6 +312,76 @@ EOF`)
 						isEndOfFile: false,
 					},
 				],
+			})
+		})
+
+		it("should parse the example patch from apply_patch.ts prompt", () => {
+			// This test verifies the example in the tool description is valid
+			const result = parsePatch(`*** Begin Patch
+*** Add File: hello.txt
++Hello world
++Second line
+*** Update File: src/app.py
+*** Move to: src/main.py
+@@ def greet():
+ def greet():
+-    print("Hi")
++    print("Hello, world!")
+     return
+*** End of File
+*** Update File: src/utils.py
+@@
+ import os
+-import sys
++import sys, json
+ def helper():
+*** Delete File: obsolete.txt
+*** End Patch`)
+
+			// Verify structure
+			expect(result.hunks).toHaveLength(4)
+
+			// Add File
+			expect(result.hunks[0]).toEqual({
+				type: "AddFile",
+				path: "hello.txt",
+				contents: "Hello world\nSecond line\n",
+			})
+
+			// Update File with Move to and End of File marker
+			expect(result.hunks[1]).toEqual({
+				type: "UpdateFile",
+				path: "src/app.py",
+				movePath: "src/main.py",
+				chunks: [
+					{
+						changeContext: "def greet():",
+						oldLines: ["def greet():", '    print("Hi")', "    return"],
+						newLines: ["def greet():", '    print("Hello, world!")', "    return"],
+						isEndOfFile: true,
+					},
+				],
+			})
+
+			// Update File with empty @@ and context lines
+			expect(result.hunks[2]).toEqual({
+				type: "UpdateFile",
+				path: "src/utils.py",
+				movePath: null,
+				chunks: [
+					{
+						changeContext: null,
+						oldLines: ["import os", "import sys", "def helper():"],
+						newLines: ["import os", "import sys, json", "def helper():"],
+						isEndOfFile: false,
+					},
+				],
+			})
+
+			// Delete File
+			expect(result.hunks[3]).toEqual({
+				type: "DeleteFile",
+				path: "obsolete.txt",
 			})
 		})
 	})
