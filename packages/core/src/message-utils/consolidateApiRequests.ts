@@ -63,8 +63,8 @@ export function consolidateApiRequests(messages: ClineMessage[]): ClineMessage[]
 			const startMessage = result[startIndex]
 			if (!startMessage) continue
 
-			let startData = {}
-			let finishData = {}
+			let startData: Record<string, any> = {}
+			let finishData: Record<string, any> = {}
 
 			try {
 				if (startMessage.text) {
@@ -82,7 +82,19 @@ export function consolidateApiRequests(messages: ClineMessage[]): ClineMessage[]
 				// Ignore JSON parse errors
 			}
 
-			result[startIndex] = { ...startMessage, text: JSON.stringify({ ...startData, ...finishData }) }
+			// Merge finish data into start data, but preserve token data from start if finish doesn't have it
+			// This prevents token data loss when api_req_finished doesn't contain token info
+			const mergedData = { ...startData }
+			
+			// Only override with finishData if the value is actually present (not undefined)
+			// This ensures token data from api_req_started is preserved
+			for (const key of Object.keys(finishData)) {
+				if (finishData[key] !== undefined) {
+					mergedData[key] = finishData[key]
+				}
+			}
+
+			result[startIndex] = { ...startMessage, text: JSON.stringify(mergedData) }
 		}
 	}
 

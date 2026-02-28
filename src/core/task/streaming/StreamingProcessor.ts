@@ -57,10 +57,15 @@ export class StreamingProcessor {
 			config: this.config,
 		}
 
+		const toolCallHandler = new ToolCallHandler(context)
+
 		handlers.set("reasoning", new ReasoningHandler(context))
 		handlers.set("text", new TextHandler(context))
-		handlers.set("tool_call_partial", new ToolCallHandler(context))
-		handlers.set("tool_call", new ToolCallHandler(context))
+		handlers.set("tool_call_partial", toolCallHandler)
+		handlers.set("tool_call", toolCallHandler)
+		handlers.set("tool_call_start", toolCallHandler)
+		handlers.set("tool_call_delta", toolCallHandler)
+		handlers.set("tool_call_end", toolCallHandler)
 		handlers.set("usage", new UsageHandler(context))
 		handlers.set("grounding", new GroundingHandler(context))
 
@@ -72,12 +77,14 @@ export class StreamingProcessor {
 	 * @param stream API returned stream data
 	 * @param abortController Abort controller for cancellation
 	 * @param apiConversationHistory API conversation history for tiktoken fallback
+	 * @param systemPrompt System prompt for token estimation (included in input tokens)
 	 * @returns Processing result
 	 */
 	async processStream(
 		stream: AsyncIterable<StreamChunk>,
 		abortController?: AbortController,
-		apiConversationHistory?: any[]
+		apiConversationHistory?: any[],
+		systemPrompt?: string
 	): Promise<StreamingResult> {
 		// Validate input
 		if (!stream || typeof stream[Symbol.asyncIterator] !== 'function') {
@@ -91,6 +98,11 @@ export class StreamingProcessor {
 		// Set API conversation history for tiktoken fallback
 		if (apiConversationHistory) {
 			this.tokenManager.setApiConversationHistory(apiConversationHistory)
+		}
+
+		// Set system prompt for token estimation
+		if (systemPrompt) {
+			this.tokenManager.setSystemPrompt(systemPrompt)
 		}
 
 		// Set abort controller

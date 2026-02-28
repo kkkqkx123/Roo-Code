@@ -1,7 +1,6 @@
 import { type ToolName, type TokenUsage, type ToolUsage, type ClineMessage } from "@coder/types"
 import { consolidateApiRequests as combineApiRequests, consolidateCommands as combineCommandSequences, consolidateTokenUsage as getApiMetrics } from "@coder/core/browser"
 import EventEmitter from "events"
-import debounce from "lodash.debounce"
 import type { LogEntry } from "../errors/tools/validation-errors.js"
 
 export interface MetricsServiceEvents {
@@ -16,42 +15,26 @@ export interface MetricsServiceEvents {
  * - Computing token usage from message history
  * - Combining messages for metric calculation
  * - Emitting tool failure events
- * - Throttling token usage updates to prevent excessive emissions
+ * - Emitting token usage updates (now immediate, no throttling needed)
  * - Managing token usage snapshots for efficient access
  *
  * This service encapsulates metrics logic that was previously mixed with
  * Task's core business logic, improving separation of concerns.
+ *
+ * NOTE: Throttling has been removed because token updates now only happen
+ * after streaming completes, ensuring UI always receives complete data.
  */
 export class MetricsService extends EventEmitter<MetricsServiceEvents> {
 	private toolUsage: ToolUsage = {}
 	private taskId: string
 	private tokenUsageSnapshot?: TokenUsage
 	private toolUsageSnapshot?: ToolUsage
-	private readonly TOKEN_USAGE_EMIT_INTERVAL_MS = 2000 // 2 seconds
-	private debouncedEmitTokenUsage: ReturnType<typeof debounce>
+	private emitCallback: (tokenUsage: TokenUsage, toolUsage: ToolUsage) => void
 
 	constructor(taskId: string, emitCallback: (tokenUsage: TokenUsage, toolUsage: ToolUsage) => void) {
 		super()
 		this.taskId = taskId
-
-		// Initialize debounced token usage emit function
-		// Uses debounce with maxWait to achieve throttle-like behavior:
-		// - leading: true  - Emit immediately on first call
-		// - trailing: true - Emit final state when updates stop
-		// - maxWait        - Ensures at most one emit per interval during rapid updates (throttle behavior)
-		this.debouncedEmitTokenUsage = debounce(
-			(tokenUsage: TokenUsage, toolUsage: ToolUsage) => {
-				const tokenChanged = this.hasTokenUsageChanged(tokenUsage)
-				const toolChanged = this.hasToolUsageChanged(toolUsage)
-
-				if (tokenChanged || toolChanged) {
-					emitCallback(tokenUsage, toolUsage)
-					this.updateSnapshots(tokenUsage, toolUsage)
-				}
-			},
-			this.TOKEN_USAGE_EMIT_INTERVAL_MS,
-			{ leading: true, trailing: true, maxWait: this.TOKEN_USAGE_EMIT_INTERVAL_MS },
-		)
+		this.emitCallback = emitCallback
 	}
 
 	/**
@@ -86,20 +69,28 @@ export class MetricsService extends EventEmitter<MetricsServiceEvents> {
 	}
 
 	/**
-	 * Emit token usage update with throttling.
-	 * The actual emission is debounced to prevent excessive updates.
+	 * Emit token usage update immediately.
+	 * Throttling has been removed since updates now only happen after streaming completes.
+	 * This ensures UI always receives complete and accurate token data.
 	 */
 	public emitTokenUsageUpdate(tokenUsage: TokenUsage, toolUsage: ToolUsage): void {
-		this.debouncedEmitTokenUsage(tokenUsage, toolUsage)
+		const tokenChanged = this.hasTokenUsageChanged(tokenUsage)
+		const toolChanged = this.hasToolUsageChanged(toolUsage)
+
+		if (tokenChanged || toolChanged) {
+			this.emitCallback(tokenUsage, toolUsage)
+			this.updateSnapshots(tokenUsage, toolUsage)
+		}
 	}
 
 	/**
-	 * Force emit a final token usage update, ignoring throttle.
+	 * Force emit a final token usage update.
 	 * Called before task completion or abort to ensure final stats are captured.
+	 * Now just calls emitTokenUsageUpdate directly since throttling is removed.
 	 */
 	public emitFinalTokenUsageUpdate(tokenUsage: TokenUsage, toolUsage: ToolUsage): void {
-		this.debouncedEmitTokenUsage(tokenUsage, toolUsage)
-		this.debouncedEmitTokenUsage.flush()
+		this.emitCallback(tokenUsage, toolUsage)
+		this.updateSnapshots(tokenUsage, toolUsage)
 	}
 
 	/**
@@ -188,10 +179,9 @@ export class MetricsService extends EventEmitter<MetricsServiceEvents> {
 	}
 
 	/**
-	 * Dispose of the service and cancel pending debounced emits.
+	 * Dispose of the service and remove all listeners.
 	 */
 	public dispose(): void {
-		this.debouncedEmitTokenUsage.cancel()
 		this.removeAllListeners()
 	}
 }

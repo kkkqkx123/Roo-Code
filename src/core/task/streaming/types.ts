@@ -242,6 +242,7 @@ export interface StreamingTokenManager {
 	// Token retrieval
 	getTokens(): TokenUsage
 	getTokenBreakdown(): TokenBreakdown
+	getTotalEstimatedTokens(): number
 
 	// Background collection
 	collectBackgroundUsage(): Promise<void>

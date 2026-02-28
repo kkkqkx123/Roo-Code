@@ -1,6 +1,6 @@
 /**
  * Usage Handler
- * 
+ *
  * Handles usage chunks from the streaming API.
  * Accumulates token usage information (input, output, cache tokens, and cost).
  */

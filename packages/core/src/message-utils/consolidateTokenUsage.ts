@@ -37,28 +37,39 @@ export function consolidateTokenUsage(messages: ClineMessage[]): TokenUsage {
 	}
 
 	// Calculate running totals.
+	// Skip placeholder messages for token counts (where both tokensIn and tokensOut are 0 or undefined)
+	// These are created when API request starts but haven't received token data yet.
+	// However, we still accumulate cost even from placeholder messages.
 	messages.forEach((message) => {
 		if (message.type === "say" && message.say === "api_req_started" && message.text) {
 			try {
 				const parsedText: ParsedApiReqStartedTextType = JSON.parse(message.text)
 				const { tokensIn, tokensOut, cacheWrites, cacheReads, cost } = parsedText
 
-				if (typeof tokensIn === "number") {
-					result.totalTokensIn += tokensIn
+				// Check if this message has real token data
+				// A placeholder is identified by having no tokens (both in and out are 0 or undefined)
+				const hasRealTokenData = (tokensIn ?? 0) > 0 || (tokensOut ?? 0) > 0
+
+				// Only accumulate tokens if we have real data
+				if (hasRealTokenData) {
+					if (typeof tokensIn === "number") {
+						result.totalTokensIn += tokensIn
+					}
+
+					if (typeof tokensOut === "number") {
+						result.totalTokensOut += tokensOut
+					}
+
+					if (typeof cacheWrites === "number") {
+						result.totalCacheWrites = (result.totalCacheWrites ?? 0) + cacheWrites
+					}
+
+					if (typeof cacheReads === "number") {
+						result.totalCacheReads = (result.totalCacheReads ?? 0) + cacheReads
+					}
 				}
 
-				if (typeof tokensOut === "number") {
-					result.totalTokensOut += tokensOut
-				}
-
-				if (typeof cacheWrites === "number") {
-					result.totalCacheWrites = (result.totalCacheWrites ?? 0) + cacheWrites
-				}
-
-				if (typeof cacheReads === "number") {
-					result.totalCacheReads = (result.totalCacheReads ?? 0) + cacheReads
-				}
-
+				// Always accumulate cost (even from placeholder messages)
 				if (typeof cost === "number") {
 					result.totalCost += cost
 				}
@@ -118,12 +129,20 @@ export function consolidateTokenUsage(messages: ClineMessage[]): TokenUsage {
 	} else {
 		// No condense message: use the LAST api_req_started message's tokens
 		// tokensIn already contains the full context, so we don't need to accumulate
+		// Skip placeholder messages (where both tokensIn and tokensOut are 0)
 		for (let i = messages.length - 1; i >= 0; i--) {
 			const message = messages[i]
 			if (message && message.type === "say" && message.say === "api_req_started" && message.text) {
 				try {
 					const parsedText: ParsedApiReqStartedTextType = JSON.parse(message.text)
 					const { tokensIn, tokensOut } = parsedText
+
+					// Skip placeholder messages that don't have real token data yet
+					const hasRealTokenData = (tokensIn ?? 0) > 0 || (tokensOut ?? 0) > 0
+					if (!hasRealTokenData) {
+						continue // Skip this placeholder, look for previous message
+					}
+
 					// Use the last request's tokens - tokensIn already includes full context
 					result.contextTokens = (tokensIn || 0) + (tokensOut || 0)
 					break

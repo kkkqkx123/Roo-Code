@@ -2941,6 +2941,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 				const streamModelInfo = this.api.getModel().info
 
+				// Get system prompt for token estimation (used in tiktoken fallback)
+				const systemPromptForTokenEstimation = await this.getSystemPrompt()
+
 				// Yields only if the first chunk is successful, otherwise will
 				// allow the user to retry the request (most likely due to rate
 				// limit error, which gets thrown on the first chunk).
@@ -2967,6 +2970,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 							...this.apiConversationHistory,
 							{ role: "user", content: finalUserContent },
 						],
+						systemPromptForTokenEstimation,
 					)
 
 					assistantMessage = streamResult.assistantMessage
@@ -2982,12 +2986,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					cacheReadTokens = streamResult.tokens.cacheRead
 					totalCost = streamResult.tokens.totalCost
 
+					// Update token data in the api_req_started message
+					// This MUST happen before any saveClineMessages call to ensure
+					// UI always receives complete token data
 					updateApiReqMsg()
-					await this.saveClineMessages()
-					const apiReqMessage = this.clineMessages[lastApiReqIndex]
-					if (apiReqMessage) {
-						await this.updateClineMessage(apiReqMessage)
-					}
 
 					// Check for errors in the streaming result
 					if (streamResult.error && streamResult.extractedErrorInfo) {
@@ -3020,7 +3022,16 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 					await this.completeReasoningMessage(reasoningMessage)
 
+					// Save messages AFTER all token data is updated
+					// This ensures UI receives complete and accurate token counts
 					await this.saveClineMessages()
+
+					// Notify UI of the updated api_req_started message with complete token data
+					const apiReqMessage = this.clineMessages[lastApiReqIndex]
+					if (apiReqMessage) {
+						await this.updateClineMessage(apiReqMessage)
+					}
+
 					await this.providerRef.deref()?.postStateToWebviewWithoutTaskHistory()
 
 					hasTextContent = assistantMessage.length > 0
