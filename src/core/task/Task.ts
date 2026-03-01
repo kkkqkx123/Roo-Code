@@ -13,7 +13,6 @@ import delay from "delay"
 import pWaitFor from "p-wait-for"
 import { serializeError } from "serialize-error"
 import { Package } from "../../shared/package"
-import { formatToolInvocation } from "../tools/helpers/toolResultFormatting"
 
 import {
 	type TaskLike,
@@ -89,7 +88,6 @@ import { getTaskDirectoryPath } from "../../utils/storage"
 
 // prompts
 import { formatResponse } from "../prompts/responses"
-import { SYSTEM_PROMPT } from "../prompts/system"
 import { buildNativeToolsArrayWithRestrictions } from "./build-tools"
 
 // core modules
@@ -737,13 +735,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// Token update - accumulate real-time token updates during streaming
 		// Final token counts are applied to clineMessages in stream:complete handler
 		let lastApiReqIndex = -1
-		
+
 		this.eventBus.subscribe('token:update', async (data) => {
 			// Find the current api_req_started message
 			if (lastApiReqIndex < 0 || !this.clineMessages[lastApiReqIndex]) {
 				lastApiReqIndex = this.clineMessages.findIndex(m => m.say === 'api_req_started')
 			}
-			
+
 			if (lastApiReqIndex < 0 || !this.clineMessages[lastApiReqIndex]) {
 				return
 			}
@@ -3600,20 +3598,17 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 			const modelInfo = this.api.getModel().info
 
-			return SYSTEM_PROMPT(
-				provider.context,
-				this.cwd,
-				false,
-				mcpHub,
-				this.diffStrategy,
-				mode ?? defaultModeSlug,
-				customModePrompts,
-				customModes,
-				customInstructions,
-				experiments,
-				language,
-				rooIgnoreInstructions,
-				{
+			const { SystemPromptBuilder } = await import("../prompts/SystemPromptBuilder")
+
+			return await SystemPromptBuilder.create()
+				.withContext(provider.context, this.cwd)
+				.withMode(mode ?? defaultModeSlug, customModes, customModePrompts)
+				.withMcp(mcpHub)
+				.withDiffStrategy(this.diffStrategy)
+				.withCustomInstructions(customInstructions, rooIgnoreInstructions)
+				.withExperiments(experiments)
+				.withLanguage(language)
+				.withSettings({
 					todoListEnabled: apiConfiguration?.todoListEnabled ?? true,
 					useAgentRules:
 						vscode.workspace.getConfiguration(Package.name).get<boolean>("useAgentRules") ?? true,
@@ -3621,14 +3616,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					newTaskRequireTodos: vscode.workspace
 						.getConfiguration(Package.name)
 						.get<boolean>("newTaskRequireTodos", false),
-					isStealthModel: modelInfo?.isStealthModel,
 					skillsEnabled: skillsEnabled ?? true,
 					disabledSkills: disabledSkills ?? [],
-				},
-				undefined, // todoList
-				this.api.getModel().id,
-				provider.getSkillsManager(),
-			)
+				})
+				.withModelId(this.api.getModel().id)
+				.withSkillsManager(provider.getSkillsManager())
+				.withComputerUseSupport(false)
+				.build()
 		})()
 	}
 

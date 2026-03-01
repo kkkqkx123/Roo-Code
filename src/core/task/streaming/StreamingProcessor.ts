@@ -369,6 +369,45 @@ export class StreamingProcessor {
 
     // Check tiktoken fallback
     await this.tokenManager.checkTiktokenFallback()
+
+    // Validate token data and log for debugging
+    await this.validateTokenData()
+  }
+
+  /**
+   * Validate token data and log debugging information
+   */
+  private async validateTokenData(): Promise<void> {
+    const tokens = this.tokenManager.getTokens()
+    const breakdown = this.tokenManager.getTokenBreakdown()
+    const hasMessageStart = this.tokenManager.hasReceivedMessageStartUsage()
+    const hasValidApiUsage = this.tokenManager.hasValidApiUsage()
+    const hasSystemPrompt = this.tokenManager.hasSystemPrompt()
+
+    // Calculate total from breakdown
+    const breakdownTotal = breakdown.text + breakdown.reasoning + breakdown.toolCalls
+
+    console.log(
+      "[StreamingProcessor#validateTokenData] " +
+        `final_tokens{input:${tokens.input},output:${tokens.output},cacheWrite:${tokens.cacheWrite},cacheRead:${tokens.cacheRead},cost:${tokens.totalCost.toFixed(6)}} | ` +
+        `breakdown{text:${breakdown.text},reasoning:${breakdown.reasoning},toolCalls:${breakdown.toolCalls}} | ` +
+        `flags{hasMessageStart:${hasMessageStart},hasValidApiUsage:${hasValidApiUsage},hasSystemPrompt:${hasSystemPrompt}}`
+    )
+
+    // Check for potential issues
+    if (tokens.output === 0 && breakdownTotal > 0) {
+      console.warn(
+        "[StreamingProcessor#validateTokenData] " +
+          `inconsistency: output_tokens=0 but breakdown.total=${breakdownTotal}`
+      )
+    }
+
+    if (tokens.input === 0 && hasSystemPrompt && !hasMessageStart) {
+      console.warn(
+        "[StreamingProcessor#validateTokenData] " +
+          "inconsistency: input_tokens=0 despite having system prompt and no message_start event"
+      )
+    }
   }
 
   /**

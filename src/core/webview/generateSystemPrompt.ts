@@ -1,9 +1,8 @@
 import * as vscode from "vscode"
 import type { WebviewMessage } from "@coder/types"
 import { defaultModeSlug } from "../../shared/modes"
-import { buildApiHandler } from "../../api"
 
-import { SYSTEM_PROMPT } from "../prompts/system"
+import { SystemPromptBuilder } from "../prompts/SystemPromptBuilder"
 import { MultiSearchReplaceDiffStrategy } from "../diff/strategies/multi-search-replace"
 import { Package } from "../../shared/package"
 
@@ -31,16 +30,6 @@ export const generateSystemPrompt = async (provider: ClineProvider, message: Web
 
 	const rooIgnoreInstructions = provider.getCurrentTask()?.rooIgnoreController?.getInstructions()
 
-	// Create a temporary API handler to check model info for stealth mode.
-	// This avoids relying on an active Cline instance which might not exist during preview.
-	let modelInfo: { isStealthModel?: boolean } | undefined
-	try {
-		const tempApiHandler = buildApiHandler(apiConfiguration)
-		modelInfo = tempApiHandler.getModel().info
-	} catch (error) {
-		console.error("Error fetching model info for system prompt preview:", error)
-	}
-
 	const settings = {
 		todoListEnabled: apiConfiguration?.todoListEnabled ?? true,
 		useAgentRules: vscode.workspace.getConfiguration(Package.name).get<boolean>("useAgentRules") ?? true,
@@ -48,29 +37,22 @@ export const generateSystemPrompt = async (provider: ClineProvider, message: Web
 		newTaskRequireTodos: vscode.workspace
 			.getConfiguration(Package.name)
 			.get<boolean>("newTaskRequireTodos", false),
-		isStealthModel: modelInfo?.isStealthModel,
 		skillsEnabled: skillsEnabled ?? true,
 		disabledSkills: disabledSkills ?? [],
 	}
 
-	const systemPrompt = await SYSTEM_PROMPT(
-		provider.context,
-		cwd,
-		false, // supportsComputerUse — browser removed
-		mcpEnabled ? provider.getMcpHub() : undefined,
-		diffStrategy,
-		mode,
-		customModePrompts,
-		customModes,
-		customInstructions,
-		experiments,
-		language,
-		rooIgnoreInstructions,
-		settings,
-		undefined, // todoList
-		undefined, // modelId
-		provider.getSkillsManager(),
-	)
+	const systemPrompt = await SystemPromptBuilder.create()
+		.withContext(provider.context, cwd)
+		.withMode(mode, customModes, customModePrompts)
+		.withMcp(mcpEnabled ? provider.getMcpHub() : undefined)
+		.withDiffStrategy(diffStrategy)
+		.withCustomInstructions(customInstructions, rooIgnoreInstructions)
+		.withExperiments(experiments)
+		.withLanguage(language)
+		.withSettings(settings)
+		.withSkillsManager(provider.getSkillsManager())
+		.withComputerUseSupport(false)
+		.build()
 
 	return systemPrompt
 }

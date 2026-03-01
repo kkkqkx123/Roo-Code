@@ -34,6 +34,7 @@ export class StreamingTokenManager {
 	private inputTokenEstimator: InputTokenEstimator
 	private tokens: TokenUsage
 	private hasApiUsageData: boolean
+	private receivedMessageStartUsage: boolean // Track if we received message_start event with input tokens
 	private collectedInBackground: boolean
 	private apiConversationHistory: any[] // Will be set from Task context
 	private systemPrompt: string // System prompt for token estimation
@@ -69,6 +70,7 @@ export class StreamingTokenManager {
 			totalCost: 0,
 		}
 		this.hasApiUsageData = false
+		this.receivedMessageStartUsage = false
 		this.collectedInBackground = false
 		this.apiConversationHistory = []
 		this.systemPrompt = ""
@@ -110,6 +112,7 @@ export class StreamingTokenManager {
 			totalCost: 0,
 		}
 		this.hasApiUsageData = false
+		this.receivedMessageStartUsage = false
 		this.collectedInBackground = false
 		this.tools = []
 	}
@@ -141,6 +144,7 @@ export class StreamingTokenManager {
 
 	/**
 	 * Add API usage data
+	 * Note: totalCost is accumulated across multiple API calls, not overwritten.
 	 */
 	addApiUsage(
 		inputTokens: number,
@@ -153,7 +157,17 @@ export class StreamingTokenManager {
 		this.tokens.output += outputTokens
 		this.tokens.cacheWrite += cacheWriteTokens
 		this.tokens.cacheRead += cacheReadTokens
-		this.tokens.totalCost = totalCost
+		this.tokens.totalCost += totalCost
+
+		// Track if we received message_start event (inputTokens > 0 indicates message_start)
+		if (inputTokens > 0) {
+			this.receivedMessageStartUsage = true
+			console.log(
+				"[StreamingTokenManager#addApiUsage] " +
+					"received_message_start=true | " +
+					`inputTokens=${inputTokens}, outputTokens=${outputTokens}`
+			)
+		}
 
 		// Consider API provided valid usage data when either input or output tokens are > 0
 		// This handles cases where:
@@ -192,6 +206,21 @@ export class StreamingTokenManager {
 	 */
 	hasValidApiUsage(): boolean {
 		return this.hasApiUsageData
+	}
+
+	/**
+	 * Check if we received message_start event with input tokens
+	 * This indicates the API returned complete input token information
+	 */
+	hasReceivedMessageStartUsage(): boolean {
+		return this.receivedMessageStartUsage
+	}
+
+	/**
+	 * Check if system prompt is set
+	 */
+	hasSystemPrompt(): boolean {
+		return this.systemPrompt.length > 0
 	}
 
 	/**
@@ -241,32 +270,101 @@ export class StreamingTokenManager {
 
 	/**
 	 * Check if tiktoken fallback is needed and apply it
-	 * 
+	 *
 	 * IMPORTANT: API-provided token counts always take precedence over tiktoken estimates.
 	 * Tiktoken fallback is ONLY used when API provides no valid usage data at all.
+	 *
+	 * Improved logic:
+	 * 1. Full fallback: When no API data at all (input=0, output=0)
+	 * 2. Partial fallback: When output exists but input is missing (output>0, input=0)
+	 *    and we didn't receive message_start event
 	 */
 	async checkTiktokenFallback(): Promise<void> {
 		const estimatedOutputTokens = this.tokenCounter.getTotalTokens()
-		
-		// Only apply fallback if:
-		// 1. API did NOT provide any valid usage data (both input and output are 0)
-		// 2. We have estimated output tokens from tiktoken
-		// 
-		// If API provided ANY token data (input OR output), we trust it completely
-		// and do NOT use tiktoken estimates, as they may be inaccurate.
-		const needsFallback = !this.hasApiUsageData && 
-			this.tokens.input === 0 && 
-			this.tokens.output === 0 && 
+
+		// Case 1: Full fallback - no API data at all
+		const needsFullFallback = !this.hasApiUsageData &&
+			this.tokens.input === 0 &&
+			this.tokens.output === 0 &&
 			estimatedOutputTokens > 0
 
-		if (needsFallback) {
+		if (needsFullFallback) {
 			await this.applyTiktokenFallback()
+			return
+		}
+
+		// Case 2: Partial fallback - have output but missing input
+		// Only apply if we didn't receive message_start event (which would have input tokens)
+		const needsPartialFallback = this.tokens.output > 0 &&
+			this.tokens.input === 0 &&
+			!this.receivedMessageStartUsage &&
+			estimatedOutputTokens > 0
+
+		if (needsPartialFallback) {
+			await this.applyPartialFallback()
+			return
+		}
+
+		// Log when fallback is skipped for debugging
+		if (this.receivedMessageStartUsage) {
+			console.log(
+				"[StreamingTokenManager#checkTiktokenFallback] " +
+					"skipped=received_message_start | " +
+					`input=${this.tokens.input}, output=${this.tokens.output}`
+			)
+		}
+	}
+
+	/**
+	 * Apply partial tiktoken fallback for missing input tokens
+	 *
+	 * This is called when:
+	 * - API returned output tokens (so we have some data)
+	 * - But input tokens are 0 (missing from API response)
+	 * - We didn't receive message_start event
+	 *
+	 * We estimate only the input tokens, preserving the API-provided output tokens.
+	 */
+	private async applyPartialFallback(): Promise<void> {
+		console.log(
+			"[StreamingTokenManager#applyPartialFallback] " +
+				"reason=missing_input_tokens | " +
+				`estimatedOutput=${this.tokenCounter.getTotalTokens()}`
+		)
+
+		const estimatedOutputTokens = this.tokenCounter.getTotalTokens()
+
+		if (estimatedOutputTokens > 0) {
+			// Use InputTokenEstimator for unified token estimation
+			const estimationResult = await this.inputTokenEstimator.estimate({
+				systemPrompt: this.systemPrompt,
+				conversationHistory: this.apiConversationHistory,
+				tools: this.tools,
+			})
+
+			const inputTokensEstimate = estimationResult.totalTokens
+			const oldInput = this.tokens.input
+			const oldOutput = this.tokens.output
+
+			// Set only input tokens (output is already set from API)
+			this.tokens.input = inputTokensEstimate
+			// Keep output tokens from API
+
+			// Recalculate cost
+			await this.recalculateCost()
+
+			console.log(
+				"[StreamingTokenManager#applyPartialFallback#after] " +
+					`new{input:${this.tokens.input},output:${this.tokens.output},cost:${this.tokens.totalCost.toFixed(6)}} | ` +
+					`old{input:${oldInput},output:${oldOutput}} | ` +
+					`breakdown{system:${estimationResult.breakdown.systemPrompt},history:${estimationResult.breakdown.conversationHistory},tools:${estimationResult.breakdown.tools}}`
+			)
 		}
 	}
 
 	/**
 	 * Apply tiktoken fallback when API doesn't provide valid usage data
-	 * 
+	 *
 	 * This is only called when API provided NO token data at all.
 	 * We use tiktoken to estimate both input and output tokens.
 	 */

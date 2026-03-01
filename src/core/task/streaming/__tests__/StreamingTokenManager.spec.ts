@@ -45,6 +45,22 @@ describe("StreamingTokenManager", () => {
 			expect(tokens.output).toBe(150)
 		})
 
+		it("should accumulate totalCost from multiple API calls", () => {
+			// Simulate multiple API calls with different costs
+			tokenManager.addApiUsage(100, 50, 0, 0, 0.01)
+			tokenManager.addApiUsage(200, 100, 0, 0, 0.02)
+			tokenManager.addApiUsage(150, 75, 0, 0, 0.015)
+
+			const tokens = tokenManager.getTokens()
+
+			// Cost should accumulate: 0.01 + 0.02 + 0.015 = 0.045
+			expect(tokens.totalCost).toBe(0.045)
+
+			// Other tokens should also accumulate
+			expect(tokens.input).toBe(450) // 100 + 200 + 150
+			expect(tokens.output).toBe(225) // 50 + 100 + 75
+		})
+
 		it("should accumulate cache tokens separately", () => {
 			tokenManager.addApiUsage(100, 50, 500, 200, 0)
 			tokenManager.addApiUsage(100, 50, 300, 100, 0)

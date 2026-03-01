@@ -47,12 +47,13 @@ import * as vscode from "vscode"
 
 import { ModeConfig } from "@coder/types"
 
-import { SYSTEM_PROMPT } from "../system"
+import { SYSTEM_PROMPT } from "../SystemPromptBuilder"
 import { McpHub } from "../../../services/mcp/McpHub"
 import { defaultModeSlug, modes, Mode } from "../../../shared/modes"
 import "../../../utils/path"
 import { addCustomInstructions } from "../sections/custom-instructions"
 import { MultiSearchReplaceDiffStrategy } from "../../diff/strategies/multi-search-replace"
+import { vi, describe, beforeEach, it, expect } from "vitest"
 
 // Mock the sections
 vi.mock("../sections/modes", () => ({

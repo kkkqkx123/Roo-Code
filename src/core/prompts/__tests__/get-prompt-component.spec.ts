@@ -1,6 +1,7 @@
 import type { CustomModePrompts } from "@coder/types"
 
-import { getPromptComponent } from "../system"
+import { getPromptComponent } from "../SystemPromptBuilder"
+import { describe, it, expect } from "vitest"
 
 describe("getPromptComponent", () => {
 	it("should return undefined for empty objects", () => {

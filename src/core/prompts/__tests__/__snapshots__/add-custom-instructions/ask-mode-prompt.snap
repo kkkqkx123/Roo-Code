@@ -111,7 +111,7 @@ Mode-specific Instructions:
 Unless told otherwise, if you want to save a plan file, put it in the /plans directory
 
 Rules:
-# Rules from .clinerules-architect:
+# Rules from .clinerules-ask:
 Mock mode-specific rules
 # Rules from .clinerules:
 Mock generic rules

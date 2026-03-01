@@ -7,8 +7,6 @@ export interface SystemPromptSettings {
 	/** When true, recursively discover and load .roo/rules from subdirectories */
 	enableSubfolderRules?: boolean
 	newTaskRequireTodos: boolean
-	/** When true, model should hide vendor/company identity in responses */
-	isStealthModel?: boolean
 	/** Whether skills functionality is globally enabled */
 	skillsEnabled?: boolean
 	/** List of disabled skill names */

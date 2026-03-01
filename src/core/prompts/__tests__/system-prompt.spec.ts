@@ -47,7 +47,7 @@ import * as vscode from "vscode"
 
 import { ModeConfig } from "@coder/types"
 
-import { SYSTEM_PROMPT } from "../system"
+import { SYSTEM_PROMPT } from "../SystemPromptBuilder"
 import { McpHub } from "../../../services/mcp/McpHub"
 import { defaultModeSlug, modes, Mode } from "../../../shared/modes"
 import "../../../utils/path"

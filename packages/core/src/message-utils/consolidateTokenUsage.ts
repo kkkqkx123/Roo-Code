@@ -16,15 +16,31 @@ export type ParsedApiReqStartedTextType = {
  * consolidated with their corresponding 'api_req_finished' messages by the consolidateApiRequests function.
  * It extracts and sums up the tokensIn, tokensOut, cacheWrites, cacheReads, and cost from these messages.
  *
+ * **Important: Understanding the difference between total usage and context tokens:**
+ *
+ * - `totalTokensIn` / `totalTokensOut`: **Cumulative sum** of ALL API requests. This represents the
+ *   total token usage for billing/cost tracking purposes. These values ALWAYS accumulate.
+ *
+ * - `contextTokens`: **Current context window size** (NOT cumulative). This represents the tokens
+ *   used in the current conversation context, used to determine if the context window limit is
+ *   approaching. Since each API request's `tokensIn` already includes the full conversation history,
+ *   we use ONLY the last request's tokens to avoid double-counting.
+ *
  * @param messages - An array of ClineMessage objects to process.
- * @returns A TokenUsage object containing totalTokensIn, totalTokensOut, totalCacheWrites, totalCacheReads, totalCost, and contextTokens.
+ * @returns A TokenUsage object containing:
+ *   - `totalTokensIn`: Cumulative sum of all input tokens (for cost tracking)
+ *   - `totalTokensOut`: Cumulative sum of all output tokens (for cost tracking)
+ *   - `totalCacheWrites`: Cumulative cache write tokens
+ *   - `totalCacheReads`: Cumulative cache read tokens
+ *   - `totalCost`: Total cost in USD
+ *   - `contextTokens`: Current context window size (not cumulative, for window limit tracking)
  *
  * @example
  * const messages = [
  *   { type: "say", say: "api_req_started", text: '{"request":"GET /api/data","tokensIn":10,"tokensOut":20,"cost":0.005}', ts: 1000 }
  * ];
- * const { totalTokensIn, totalTokensOut, totalCost } = consolidateTokenUsage(messages);
- * // Result: { totalTokensIn: 10, totalTokensOut: 20, totalCost: 0.005 }
+ * const { totalTokensIn, totalTokensOut, totalCost, contextTokens } = consolidateTokenUsage(messages);
+ * // Result: { totalTokensIn: 10, totalTokensOut: 20, totalCost: 0.005, contextTokens: 30 }
  */
 export function consolidateTokenUsage(messages: ClineMessage[]): TokenUsage {
 	const result: TokenUsage = {

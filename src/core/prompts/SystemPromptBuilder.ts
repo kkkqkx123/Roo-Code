@@ -296,7 +296,7 @@ ${markdownFormattingSection()}
 
 ${getSharedToolUseSection()}
 
-${getToolUseGuidelinesSection()}
+\t${getToolUseGuidelinesSection()}
 
 ${getCapabilitiesSection(cwd!, shouldIncludeMcp ? mcpHub : undefined)}
 
@@ -388,5 +388,48 @@ export async function buildSystemPrompt(
 	return SystemPromptBuilder.create()
 		.withContext(context, cwd)
 		.withFullConfig({ ...options, context, cwd } as SystemPromptConfig)
+		.build()
+}
+
+/**
+ * Legacy SYSTEM_PROMPT function - kept for backward compatibility and testing purposes.
+ * This function is a wrapper around SystemPromptBuilder.
+ * New code should use SystemPromptBuilder directly.
+ */
+export const SYSTEM_PROMPT = async (
+	context: vscode.ExtensionContext,
+	cwd: string,
+	supportsComputerUse: boolean,
+	mcpHub?: McpHub,
+	diffStrategy?: DiffStrategy,
+	mode: Mode = defaultModeSlug,
+	customModePrompts?: CustomModePrompts,
+	customModes?: ModeConfig[],
+	globalCustomInstructions?: string,
+	experiments?: Record<string, boolean>,
+	language?: string,
+	rooIgnoreInstructions?: string,
+	settings?: SystemPromptSettings,
+	todoList?: TodoItem[],
+	modelId?: string,
+	skillsManager?: SkillsManager,
+): Promise<string> => {
+	if (!context) {
+		throw new Error("Extension context is required for generating system prompt")
+	}
+
+	return await SystemPromptBuilder.create()
+		.withContext(context, cwd)
+		.withMode(mode, customModes, customModePrompts)
+		.withMcp(mcpHub)
+		.withDiffStrategy(diffStrategy)
+		.withCustomInstructions(globalCustomInstructions, rooIgnoreInstructions)
+		.withExperiments(experiments)
+		.withLanguage(language)
+		.withSettings(settings)
+		.withTodoList(todoList)
+		.withModelId(modelId)
+		.withSkillsManager(skillsManager)
+		.withComputerUseSupport(supportsComputerUse)
 		.build()
 }
