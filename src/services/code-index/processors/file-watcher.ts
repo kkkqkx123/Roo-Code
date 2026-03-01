@@ -118,9 +118,9 @@ export class FileWatcher implements IFileWatcher {
 	}
 
 	/**
-	 * Disposes the file watcher
+	 * Disposes the file watcher and flushes any pending cache changes
 	 */
-	dispose(): void {
+	async dispose(): Promise<void> {
 		this.fileWatcher?.dispose()
 		if (this.batchProcessDebounceTimer) {
 			clearTimeout(this.batchProcessDebounceTimer)
@@ -129,6 +129,11 @@ export class FileWatcher implements IFileWatcher {
 		this._onBatchProgressUpdate.dispose()
 		this._onDidFinishBatchProcessing.dispose()
 		this.accumulatedEvents.clear()
+
+		// Flush cache to ensure all pending changes are persisted
+		if (this.cacheManager) {
+			await this.cacheManager.flush()
+		}
 	}
 
 	/**

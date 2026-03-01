@@ -211,7 +211,7 @@ export class CodeIndexManager {
 		// 2. Check if feature is enabled
 		if (!this.isFeatureEnabled) {
 			if (this._orchestrator) {
-				this._orchestrator.stopWatcher()
+				await this._orchestrator.stopWatcher()
 			}
 			return { requiresRestart, requiresReindex }
 		}
@@ -305,12 +305,12 @@ export class CodeIndexManager {
 	/**
 	 * Stops the file watcher and potentially cleans up resources.
 	 */
-	public stopWatcher(): void {
+	public async stopWatcher(): Promise<void> {
 		if (!this.isFeatureEnabled) {
 			return
 		}
 		if (this._orchestrator) {
-			this._orchestrator.stopWatcher()
+			await this._orchestrator.stopWatcher()
 		}
 	}
 
@@ -372,9 +372,12 @@ export class CodeIndexManager {
 	/**
 	 * Cleans up the manager instance.
 	 */
-	public dispose(): void {
-		this.stopIndexing()
+	public async dispose(): Promise<void> {
+		await this.stopIndexing()
 		this._stateManager.dispose()
+		if (this._cacheManager) {
+			this._cacheManager.dispose()
+		}
 	}
 
 	/**
@@ -417,7 +420,7 @@ export class CodeIndexManager {
 	private async _recreateServices(requiresReindex: boolean = false): Promise<void> {
 		// Stop watcher if it exists
 		if (this._orchestrator) {
-			this.stopWatcher()
+			await this.stopWatcher()
 		}
 		// Clear existing services to ensure clean state
 		this._orchestrator = undefined

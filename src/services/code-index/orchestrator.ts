@@ -286,7 +286,7 @@ export class CodeIndexOrchestrator {
 
 				if (signal.aborted) {
 					await this.cacheManager.flush()
-					this.stopWatcher()
+					await this.stopWatcher()
 					this.stateManager.setSystemState("Standby", t("embeddings:orchestrator.indexingStopped"))
 					return
 				}
@@ -356,7 +356,7 @@ export class CodeIndexOrchestrator {
 
 				if (signal.aborted) {
 					await this.cacheManager.flush()
-					this.stopWatcher()
+					await this.stopWatcher()
 					this.stateManager.setSystemState("Standby", t("embeddings:orchestrator.indexingStopped"))
 					return
 				}
@@ -428,7 +428,7 @@ export class CodeIndexOrchestrator {
 			if (error?.name === "AbortError" || signal.aborted) {
 				console.log("[CodeIndexOrchestrator] Indexing aborted by user.")
 				await this.cacheManager.flush()
-				this.stopWatcher()
+				await this.stopWatcher()
 				// The state manager will validate the transition and prevent invalid ones
 				this.stateManager.setSystemState("Standby", t("embeddings:orchestrator.indexingStopped"))
 				return
@@ -466,9 +466,9 @@ export class CodeIndexOrchestrator {
 					errorMessage: error.message || t("embeddings:orchestrator.unknownError"),
 				}),
 			)
-			
+
 			// Stop watcher to ensure clean state after error
-			this.stopWatcher()
+			await this.stopWatcher()
 		} finally {
 			this._isProcessing = false
 			this._abortController = null
@@ -478,13 +478,13 @@ export class CodeIndexOrchestrator {
 	/**
 	 * Stops any in-progress indexing by aborting the scan and stopping the file watcher.
 	 */
-	public stopIndexing(): void {
+	public async stopIndexing(): Promise<void> {
 		if (this._abortController) {
 			this.stateManager.setSystemState("Stopping", t("embeddings:orchestrator.indexingStoppedPartial"))
 			this._abortController.abort()
 			this._abortController = null
 		}
-		this.stopWatcher()
+		await this.stopWatcher()
 		// Reset the processing flag to allow indexing to be restarted
 		this._isProcessing = false
 	}
@@ -492,8 +492,8 @@ export class CodeIndexOrchestrator {
 	/**
 	 * Stops the file watcher and cleans up resources.
 	 */
-	public stopWatcher(): void {
-		this.fileWatcher.dispose()
+	public async stopWatcher(): Promise<void> {
+		await this.fileWatcher.dispose()
 		this._fileWatcherSubscriptions.forEach((sub) => sub.dispose())
 		this._fileWatcherSubscriptions = []
 
@@ -591,6 +591,10 @@ export class CodeIndexOrchestrator {
 				`[CodeIndexOrchestrator] Fast start: Index is complete and valid. Last completed at: ${metadata.completed_at ? new Date(metadata.completed_at).toISOString() : 'unknown'}`,
 			)
 
+			// Clean up deleted files before starting the watcher
+			console.log("[CodeIndexOrchestrator] Performing deleted files cleanup...")
+			await this._cleanupDeletedFiles()
+
 			// Start the file watcher directly
 			await this._startWatcher()
 
@@ -602,6 +606,45 @@ export class CodeIndexOrchestrator {
 			// If any error occurs during fast start, fall back to normal start
 			console.warn("[CodeIndexOrchestrator] Fast start failed, falling back to normal start:", error)
 			return false
+		}
+	}
+
+	/**
+	 * Cleans up deleted files from the index by checking cached files against the filesystem.
+	 * This is called during fast start to ensure files deleted while the system was offline
+	 * are properly removed from the index.
+	 */
+	private async _cleanupDeletedFiles(): Promise<void> {
+		try {
+			const oldHashes = this.cacheManager.getAllHashes()
+			const filesToCheck = Object.keys(oldHashes)
+			let deletedCount = 0
+
+			console.log(`[CodeIndexOrchestrator] Checking ${filesToCheck.length} cached files for deletions...`)
+
+			for (const cachedFilePath of filesToCheck) {
+				try {
+					// Check if file exists
+					await vscode.workspace.fs.stat(vscode.Uri.file(cachedFilePath))
+				} catch (error) {
+					// File doesn't exist, clean up the index
+					console.log(`[CodeIndexOrchestrator] Cleaning up deleted file: ${cachedFilePath}`)
+					await this.vectorStore.deletePointsByFilePath(cachedFilePath)
+					await this.cacheManager.deleteHash(cachedFilePath)
+					deletedCount++
+				}
+			}
+
+			if (deletedCount > 0) {
+				console.log(`[CodeIndexOrchestrator] Cleaned up ${deletedCount} deleted files`)
+				// Flush cache to ensure changes are persisted
+				await this.cacheManager.flush()
+			} else {
+				console.log("[CodeIndexOrchestrator] No deleted files found")
+			}
+		} catch (error) {
+			console.error("[CodeIndexOrchestrator] Error during deleted files cleanup:", error)
+			// Don't throw - allow fast start to continue even if cleanup fails
 		}
 	}
 }

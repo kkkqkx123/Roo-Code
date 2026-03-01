@@ -47,7 +47,7 @@ export interface ICodeIndexManager {
 	/**
 	 * Stops the file watcher
 	 */
-	stopWatcher(): void
+	stopWatcher(): Promise<void>
 
 	/**
 	 * Clears the index data

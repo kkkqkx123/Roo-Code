@@ -11,6 +11,8 @@ export class CacheManager implements ICacheManager {
 	private cachePath: vscode.Uri
 	private fileHashes: Record<string, string> = {}
 	private _debouncedSaveCache: () => void
+	private _autoSaveInterval: NodeJS.Timeout | null = null
+	private _hasPendingChanges = false
 
 	/**
 	 * Creates a new cache manager
@@ -25,9 +27,14 @@ export class CacheManager implements ICacheManager {
 			context.globalStorageUri,
 			`roo-index-cache-${createHash("sha256").update(workspacePath).digest("hex")}.json`,
 		)
+		// Reduced debounce delay from 1500ms to 500ms for better data safety
 		this._debouncedSaveCache = debounce(async () => {
 			await this._performSave()
-		}, 1500)
+			this._hasPendingChanges = false
+		}, 500)
+
+		// Start auto-save interval to periodically save pending changes
+		this._startAutoSave()
 	}
 
 	/**
@@ -81,6 +88,7 @@ export class CacheManager implements ICacheManager {
 	 */
 	updateHash(filePath: string, hash: string): void {
 		this.fileHashes[filePath] = hash
+		this._hasPendingChanges = true
 		this._debouncedSaveCache()
 	}
 
@@ -90,6 +98,7 @@ export class CacheManager implements ICacheManager {
 	 */
 	deleteHash(filePath: string): void {
 		delete this.fileHashes[filePath]
+		this._hasPendingChanges = true
 		this._debouncedSaveCache()
 	}
 
@@ -106,5 +115,30 @@ export class CacheManager implements ICacheManager {
 	 */
 	getAllHashes(): Record<string, string> {
 		return { ...this.fileHashes }
+	}
+
+	/**
+	 * Starts the auto-save interval to periodically save pending changes
+	 */
+	private _startAutoSave(): void {
+		// Auto-save every 10 seconds if there are pending changes
+		this._autoSaveInterval = setInterval(async () => {
+			if (this._hasPendingChanges) {
+				await this._performSave()
+				this._hasPendingChanges = false
+			}
+		}, 10000)
+	}
+
+	/**
+	 * Stops the auto-save interval and performs a final flush
+	 */
+	dispose(): void {
+		if (this._autoSaveInterval) {
+			clearInterval(this._autoSaveInterval)
+			this._autoSaveInterval = null
+		}
+		// Note: We don't flush here to avoid blocking dispose
+		// Callers should explicitly call flush() if they need to ensure data is saved
 	}
 }
