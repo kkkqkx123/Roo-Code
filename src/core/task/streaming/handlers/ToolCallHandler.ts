@@ -286,6 +286,7 @@ async function handleDirectToolCallStart(
 
 /**
  * Handle direct tool_call_delta chunk (from AI SDK)
+ * Uses NativeToolCallParser.processStreamingChunk for proper partial JSON handling.
  */
 async function handleDirectToolCallDelta(
   context: ChunkHandlerContext,
@@ -300,44 +301,24 @@ async function handleDirectToolCallDelta(
     return
   }
 
-  // Parse the delta as JSON to get parameters
-  let paramsUpdate: any = {}
-  try {
-    // Try to parse the delta as JSON
-    const parsed = JSON.parse(chunk.delta)
-    paramsUpdate = parsed
-  } catch {
-    // If not valid JSON, accumulate as partial JSON string
-    // Get existing tool use and append delta
-    const existingToolUse = context.stateManager.getAssistantMessageContent()[toolUseIndex]
-    if (existingToolUse && existingToolUse.type === "tool_use") {
-      const currentParams = existingToolUse.params || {}
-      const currentParamsStr = JSON.stringify(currentParams)
-      const newParamsStr = currentParamsStr + chunk.delta
+  // Use NativeToolCallParser for proper partial JSON handling
+  // This ensures consistent behavior with handleToolCallDelta
+  const partialToolUse = NativeToolCallParser.processStreamingChunk(chunk.id, chunk.delta)
 
-      try {
-        paramsUpdate = JSON.parse(newParamsStr)
-      } catch {
-        // Still incomplete JSON, store as is
-        existingToolUse.params = currentParams
-        context.config.onPresentAssistant()
-        return
-      }
-    }
+  if (!partialToolUse) {
+    return
   }
 
-  // Update the tool use with parsed parameters
-  const existingToolUse = context.stateManager.getAssistantMessageContent()[toolUseIndex]
-  if (existingToolUse && existingToolUse.type === "tool_use") {
-    existingToolUse.params = { ...existingToolUse.params, ...paramsUpdate }
-    context.stateManager.updateAssistantContentBlock(toolUseIndex, existingToolUse)
+  ;(partialToolUse as any).id = chunk.id
+  context.stateManager.updateAssistantContentBlock(toolUseIndex, partialToolUse)
 
-    // Update tool call token count
+  // Update tool call token count
+  if (partialToolUse.name) {
     const beforeTokens = context.tokenManager.getTotalEstimatedTokens()
     context.tokenManager.addToolCallTokens(
       chunk.id,
-      existingToolUse.name,
-      JSON.stringify(existingToolUse.params || {})
+      partialToolUse.name,
+      JSON.stringify(partialToolUse.params || {})
     )
     const afterTokens = context.tokenManager.getTotalEstimatedTokens()
     const delta = afterTokens - beforeTokens
@@ -345,7 +326,7 @@ async function handleDirectToolCallDelta(
 
     if (delta !== 0) {
       console.log(
-        `[ToolCallHandler#handleDirectToolCallDelta] id=${chunk.id} name=${existingToolUse.name} | delta=${delta} | total=${afterTokens} | ` +
+        `[ToolCallHandler#handleDirectToolCallDelta] id=${chunk.id} name=${partialToolUse.name} | delta=${delta} | total=${afterTokens} | ` +
         `breakdown{text:${breakdown.text},reasoning:${breakdown.reasoning},toolCalls:${breakdown.toolCalls}}`
       )
     }
@@ -362,7 +343,7 @@ async function handleDirectToolCallDelta(
       message: undefined,
       details: {
         delta: chunk.delta,
-        params: paramsUpdate,
+        params: partialToolUse.params,
       },
     },
   })
@@ -370,6 +351,7 @@ async function handleDirectToolCallDelta(
 
 /**
  * Handle direct tool_call_end chunk (from AI SDK)
+ * Uses NativeToolCallParser.finalizeStreamingToolCall for proper finalization.
  */
 async function handleDirectToolCallEnd(
   context: ChunkHandlerContext,
@@ -390,28 +372,52 @@ async function handleDirectToolCallEnd(
     return
   }
 
-  // Finalize the tool use
-  const existingToolUse = context.stateManager.getAssistantMessageContent()[toolUseIndex]
-  if (existingToolUse && existingToolUse.type === "tool_use") {
-    existingToolUse.partial = false
-    ;(existingToolUse as any).id = chunk.id
-    context.stateManager.updateAssistantContentBlock(toolUseIndex, existingToolUse)
-  }
+  // Use NativeToolCallParser for proper finalization
+  // This ensures consistent behavior with handleToolCallEnd
+  const finalToolUse = NativeToolCallParser.finalizeStreamingToolCall(chunk.id)
 
-  context.stateManager.removeToolCallIndex(chunk.id)
+  if (finalToolUse) {
+    ;(finalToolUse as any).id = chunk.id
+
+    if (toolUseIndex !== undefined) {
+      context.stateManager.updateAssistantContentBlock(toolUseIndex, finalToolUse)
+    }
+
+    context.stateManager.removeToolCallIndex(chunk.id)
+
+    // Publish tool call complete event
+    await context.eventBus?.publish('tool:call:complete', {
+      toolCallId: chunk.id,
+      result: {
+        toolCallId: chunk.id,
+        result: finalToolUse,
+        success: true,
+      },
+    })
+  } else if (toolUseIndex !== undefined) {
+    // JSON format error or missing parameters - publish error event
+    const existingToolUse = context.stateManager.getAssistantMessageContent()[toolUseIndex]
+    const errorMessage = 'Tool call finalization failed: invalid JSON or missing parameters'
+
+    if (existingToolUse && existingToolUse.type === "tool_use") {
+      existingToolUse.partial = false
+      ;(existingToolUse as any).id = chunk.id
+    }
+
+    context.stateManager.removeToolCallIndex(chunk.id)
+
+    // Publish tool call error event
+    await context.eventBus?.publish('tool:call:error', {
+      toolCallId: chunk.id,
+      error: new Error(errorMessage),
+      isRetryable: false,
+    })
+
+    console.error(`[ToolCallHandler] ${errorMessage} for ID: ${chunk.id}`)
+  }
 
   // Present assistant message
   context.config.onPresentAssistant()
-
-  // Publish tool call complete event
-  await context.eventBus?.publish('tool:call:complete', {
-    toolCallId: chunk.id,
-    result: {
-      toolCallId: chunk.id,
-      result: existingToolUse,
-      success: true,
-    },
-  })
 }
 
 /**
