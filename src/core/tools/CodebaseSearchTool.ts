@@ -6,16 +6,12 @@ import { CodeIndexManager } from "../../services/code-index/manager"
 import { getWorkspacePath } from "../../utils/path"
 import { formatResponse } from "../prompts/responses"
 import { VectorStoreSearchResult } from "../../services/code-index/interfaces"
-import type { ToolUse } from "../../shared/tools"
+import type { ToolUse, NativeToolArgs } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./core/BaseTool"
-import { MissingParameterError } from "../errors/tools/index.js"
 
-interface CodebaseSearchParams {
-	query?: string
-	queries?: Array<string | { query: string; path?: string }>
-	path?: string
-}
+// Type alias for codebase_search parameters
+type CodebaseSearchParams = NativeToolArgs["codebase_search"]
 
 interface NormalizedQuery {
 	query: string
@@ -34,7 +30,7 @@ interface AggregatedResult {
 export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 	readonly name = "codebase_search" as const
 
-	async execute(params: CodebaseSearchParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
+	async execute(params: NativeToolArgs["codebase_search"], task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { askApproval, handleError, pushToolResult } = callbacks
 
 		// 1. 参数标准化
@@ -156,28 +152,23 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 	}
 
 	/**
-	 * 参数标准化：支持多种参数格式
+	 * 参数标准化：将 queries 数组转换为标准化的查询对象数组
 	 */
 	private normalizeParams(params: CodebaseSearchParams): NormalizedQuery[] {
-		// 格式1：批量查询（对象数组或字符串数组）
-		if (params.queries && Array.isArray(params.queries) && params.queries.length > 0) {
-			return params.queries.map((q) => {
-				if (typeof q === "string") {
-					// 字符串数组格式
-					return { query: q, path: params.path }
-				} else {
-					// 对象数组格式
-					return { query: q.query, path: q.path || params.path }
-				}
-			})
+		// queries 是必需参数
+		if (!params.queries || !Array.isArray(params.queries) || params.queries.length === 0) {
+			throw new Error('Invalid parameters: "queries" must be a non-empty array')
 		}
 
-		// 格式2：单查询（向后兼容）
-		if (params.query && typeof params.query === "string") {
-			return [{ query: params.query, path: params.path }]
-		}
-
-		throw new Error('Invalid parameters: must provide "query" or "queries"')
+		return params.queries.map((q) => {
+			if (typeof q === "string") {
+				// 字符串数组格式
+				return { query: q }
+			} else {
+				// 对象数组格式
+				return { query: q.query, path: q.path }
+			}
+		})
 	}
 
 	/**
@@ -272,22 +263,36 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 	override async handlePartial(task: Task, block: ToolUse<"codebase_search">): Promise<void> {
 		// 尝试解析参数以获取查询信息
 		let queryDisplay = ""
-		
+
 		try {
-			const params = block.params as CodebaseSearchParams
-			
-			if (params.queries && Array.isArray(params.queries) && params.queries.length > 0) {
-				// 批量查询
-				const queryTexts = params.queries.map((q) => {
+			// 优先使用 nativeArgs（如果可用）
+			if (block.nativeArgs?.queries && Array.isArray(block.nativeArgs.queries)) {
+				const queryTexts = block.nativeArgs.queries.map((q) => {
 					if (typeof q === "string") {
 						return q
 					}
 					return q.query
 				})
 				queryDisplay = queryTexts.join(", ")
-			} else if (params.query) {
-				// 单查询
-				queryDisplay = params.query
+			} else {
+				// 回退到 params（用于流式传输早期阶段）
+				const queriesParam = block.params.queries
+				if (queriesParam) {
+					try {
+						const queries = JSON.parse(queriesParam)
+						if (Array.isArray(queries)) {
+							const queryTexts = queries.map((q: string | { query: string }) => {
+								if (typeof q === "string") {
+									return q
+								}
+								return q.query
+							})
+							queryDisplay = queryTexts.join(", ")
+						}
+					} catch {
+						queryDisplay = queriesParam
+					}
+				}
 			}
 		} catch {
 			// 解析失败，使用原始参数
@@ -297,7 +302,6 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 		const sharedMessageProps = {
 			tool: "codebaseSearch",
 			query: queryDisplay,
-			path: block.params.path,
 			isOutsideWorkspace: false,
 		}
 

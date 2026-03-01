@@ -53,6 +53,7 @@ export const toolParamNames = [
 	"task",
 	"size",
 	"query",
+	"queries", // codebase_search parameter for batch queries
 	"args",
 	"skill", // skill tool parameter
 	"start_line",
@@ -108,7 +109,9 @@ export type NativeToolArgs = {
 		question: string
 		follow_up: Array<{ text: string; mode?: string }>
 	}
-	codebase_search: { query: string; path?: string }
+	codebase_search: {
+		queries: Array<string | { query: string; path?: string }>
+	}
 	generate_image: GenerateImageParams
 	run_slash_command: { command: string; args?: string }
 	skill: { skill: string; args?: string }

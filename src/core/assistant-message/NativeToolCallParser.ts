@@ -17,6 +17,7 @@ import type {
 	ApiStreamToolCallEndChunk,
 } from "../../api/transform/stream"
 import { MCP_TOOL_PREFIX, MCP_TOOL_SEPARATOR, parseMcpToolName, normalizeMcpToolName } from "../../utils/mcp-name"
+import { ToolRegistry, isToolRegistered } from "../tools/schemas"
 
 /**
  * Helper type to extract properly typed native arguments for a given tool.
@@ -86,6 +87,45 @@ export class NativeToolCallParser {
 				return false
 			}
 		}
+		return undefined
+	}
+
+	/**
+	 * Try to parse tool arguments using the registered Zod schema.
+	 * This is the new unified approach that will eventually replace the switch-case logic.
+	 *
+	 * @param name - Tool name
+	 * @param args - Raw arguments to parse
+	 * @param partial - Whether this is a partial/streaming parse
+	 * @returns Parsed arguments or undefined if tool not registered
+	 */
+	private static tryParseWithSchema(
+		name: string,
+		args: Record<string, unknown>,
+		partial: boolean,
+	): Record<string, unknown> | undefined {
+		// Check if tool is registered in ToolRegistry
+		if (!isToolRegistered(name)) {
+			return undefined
+		}
+
+		const toolDef = ToolRegistry[name as keyof typeof ToolRegistry]
+		if (!toolDef) {
+			return undefined
+		}
+
+		// Use Zod schema for parsing
+		const result = toolDef.schema.safeParse(args)
+
+		if (result.success) {
+			return result.data
+		}
+
+		// For partial parsing, return the raw args even if validation fails
+		if (partial) {
+			return args
+		}
+
 		return undefined
 	}
 
@@ -538,10 +578,9 @@ export class NativeToolCallParser {
 				break
 
 			case "codebase_search":
-				if (partialArgs.query !== undefined) {
+				if (partialArgs.queries !== undefined && Array.isArray(partialArgs.queries)) {
 					nativeArgs = {
-						query: partialArgs.query,
-						path: partialArgs.path,
+						queries: partialArgs.queries,
 					}
 				}
 				break
@@ -873,10 +912,9 @@ export class NativeToolCallParser {
 					break
 
 				case "codebase_search":
-					if (args.query !== undefined) {
+					if (args.queries !== undefined && Array.isArray(args.queries) && args.queries.length > 0) {
 						nativeArgs = {
-							query: args.query,
-							path: args.path,
+							queries: args.queries,
 						} as NativeArgsFor<TName>
 					}
 					break
