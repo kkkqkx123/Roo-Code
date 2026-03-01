@@ -3,15 +3,35 @@
  * 
  * Manages token counting, cost calculation, and tiktoken fallback for streaming responses.
  * Integrates with StreamingTokenCounter for accurate token estimation.
+ * 
+ * Refactored to use InputTokenEstimator for unified token estimation logic.
  */
 
 import { StreamingTokenCounter } from "../../../utils/tiktoken"
 import { calculateApiCostAnthropic, calculateApiCostOpenAI } from "../../../shared/cost"
+import { InputTokenEstimator, type InputTokenEstimationResult } from "./InputTokenEstimator"
 import type { ApiHandler, TokenBreakdown, TokenUsage } from "./types"
+
+/**
+ * API protocol type for cost calculation
+ */
+export type ApiProtocol = "anthropic" | "openai"
+
+/**
+ * Configuration for StreamingTokenManager
+ */
+export interface StreamingTokenManagerConfig {
+	/** API handler for token counting */
+	api: ApiHandler
+	/** API protocol for cost calculation (default: "anthropic") */
+	apiProtocol?: ApiProtocol
+}
 
 export class StreamingTokenManager {
 	private api: ApiHandler
+	private apiProtocol: ApiProtocol
 	private tokenCounter: StreamingTokenCounter
+	private inputTokenEstimator: InputTokenEstimator
 	private tokens: TokenUsage
 	private hasApiUsageData: boolean
 	private collectedInBackground: boolean
@@ -22,9 +42,25 @@ export class StreamingTokenManager {
 	// Background collection timeout (5 seconds)
 	private static readonly USAGE_COLLECTION_TIMEOUT_MS = 5000
 
-	constructor(api: ApiHandler) {
-		this.api = api
+	/**
+	 * Create a new StreamingTokenManager
+	 * 
+	 * @param config - Configuration object or ApiHandler (for backward compatibility)
+	 */
+	constructor(config: StreamingTokenManagerConfig | ApiHandler) {
+		// Handle both new config object and legacy ApiHandler parameter
+		if ("getModel" in config && "countTokens" in config) {
+			// Legacy: config is an ApiHandler
+			this.api = config as ApiHandler
+			this.apiProtocol = "anthropic"
+		} else {
+			// New: config is a StreamingTokenManagerConfig
+			this.api = (config as StreamingTokenManagerConfig).api
+			this.apiProtocol = (config as StreamingTokenManagerConfig).apiProtocol ?? "anthropic"
+		}
+
 		this.tokenCounter = new StreamingTokenCounter()
+		this.inputTokenEstimator = new InputTokenEstimator(this.api)
 		this.tokens = {
 			input: 0,
 			output: 0,
@@ -123,7 +159,6 @@ export class StreamingTokenManager {
 		// This handles cases where:
 		// 1. API returns inputTokens > 0 but outputTokens = 0 (e.g., thinking models at start)
 		// 2. API returns outputTokens > 0 (normal streaming completion)
-		const hadValidUsageData = this.hasApiUsageData
 		if (inputTokens > 0 || outputTokens > 0) {
 			this.hasApiUsageData = true
 		}
@@ -164,6 +199,26 @@ export class StreamingTokenManager {
 	 */
 	getTotalEstimatedTokens(): number {
 		return this.tokenCounter.getTotalTokens()
+	}
+
+	/**
+	 * Get the input token estimator instance
+	 * Can be used for advanced token estimation scenarios
+	 */
+	getInputTokenEstimator(): InputTokenEstimator {
+		return this.inputTokenEstimator
+	}
+
+	/**
+	 * Get detailed input token estimation with breakdown
+	 * Useful for debugging and analysis
+	 */
+	async getInputTokenEstimation(): Promise<InputTokenEstimationResult> {
+		return this.inputTokenEstimator.estimate({
+			systemPrompt: this.systemPrompt,
+			conversationHistory: this.apiConversationHistory,
+			tools: this.tools,
+		})
 	}
 
 	// ============================================================================
@@ -225,8 +280,14 @@ export class StreamingTokenManager {
 		const estimatedOutputTokens = this.tokenCounter.getTotalTokens()
 
 		if (estimatedOutputTokens > 0) {
-			// Use tiktoken to calculate input tokens
-			const inputTokensEstimate = await this.estimateInputTokens()
+			// Use InputTokenEstimator for unified token estimation
+			const estimationResult = await this.inputTokenEstimator.estimate({
+				systemPrompt: this.systemPrompt,
+				conversationHistory: this.apiConversationHistory,
+				tools: this.tools,
+			})
+			
+			const inputTokensEstimate = estimationResult.totalTokens
 			const oldInput = this.tokens.input
 			const oldOutput = this.tokens.output
 
@@ -240,51 +301,9 @@ export class StreamingTokenManager {
 			console.log(
 				"[StreamingTokenManager#applyTiktokenFallback#after] " +
 					`new{input:${this.tokens.input},output:${this.tokens.output},cost:${this.tokens.totalCost.toFixed(6)}} | ` +
-					`old{input:${oldInput},output:${oldOutput}}`
+					`old{input:${oldInput},output:${oldOutput}} | ` +
+					`breakdown{system:${estimationResult.breakdown.systemPrompt},history:${estimationResult.breakdown.conversationHistory},tools:${estimationResult.breakdown.tools}}`
 			)
-		}
-	}
-
-	/**
-	 * Estimate input tokens using tiktoken
-	 * Includes system prompt, conversation history, and tool definitions
-	 */
-	private async estimateInputTokens(): Promise<number> {
-		try {
-			// Start with system prompt if available
-			const allContent: any[] = []
-
-			// Add system prompt as a text content block
-			if (this.systemPrompt) {
-				allContent.push({ type: "text", text: this.systemPrompt })
-			}
-
-			// Flatten the conversation history to get all content blocks
-			const conversationContent = this.apiConversationHistory.flatMap((msg) =>
-				Array.isArray(msg.content) ? msg.content : []
-			)
-			allContent.push(...conversationContent)
-
-			// Add tool definitions as text content
-			// Tools are part of the input sent to the API and contribute to input tokens
-			if (this.tools && this.tools.length > 0) {
-				// Convert tool definitions to a format that can be counted
-				// Each tool definition is serialized to JSON for token counting
-				const toolsText = JSON.stringify(this.tools)
-				allContent.push({ type: "text", text: toolsText })
-			}
-
-			// Use the API's countTokens method if available
-			if (this.api.countTokens) {
-				return await this.api.countTokens(allContent)
-			}
-
-			// Fallback: estimate based on character count (rough approximation)
-			const textContent = JSON.stringify(allContent)
-			return Math.ceil(textContent.length / 4) // Approximate 4 chars per token
-		} catch (error) {
-			console.error("[StreamingTokenManager] Error estimating input tokens:", error)
-			return 0
 		}
 	}
 
@@ -296,12 +315,8 @@ export class StreamingTokenManager {
 			const model = this.api.getModel()
 			const modelInfo = model.info
 
-			// Determine API protocol (this would need to be passed in config)
-			// For now, default to Anthropic
-			const apiProtocol = "anthropic" // This should come from config
-
 			let costResult
-			if (apiProtocol === "anthropic") {
+			if (this.apiProtocol === "anthropic") {
 				costResult = calculateApiCostAnthropic(
 					modelInfo,
 					this.tokens.input,

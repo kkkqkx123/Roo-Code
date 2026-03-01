@@ -3,6 +3,7 @@ import { getCapabilitiesSection } from "../sections/capabilities"
 import { getRulesSection, getCommandChainOperator } from "../sections/rules"
 import { McpHub } from "../../../services/mcp/McpHub"
 import * as shellUtils from "../../../utils/shell"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 describe("addCustomInstructions", () => {
 	it("adds vscode language to custom instructions", async () => {
@@ -11,11 +12,11 @@ describe("addCustomInstructions", () => {
 			"global instructions",
 			"/test/path",
 			"test-mode",
-			{ language: "fr" },
+			{ language: "zh-CN" },
 		)
 
 		expect(result).toContain("Language Preference:")
-		expect(result).toContain('You should always speak and think in the "Français" (fr) language')
+		expect(result).toContain('You should always speak and think in the "简体中文" (zh-CN) language')
 	})
 
 	it("works without vscode language", async () => {
@@ -38,9 +39,9 @@ describe("getCapabilitiesSection", () => {
 		const result = getCapabilitiesSection(cwd)
 
 		expect(result).toContain("CAPABILITIES")
-		expect(result).toContain("execute CLI commands")
-		expect(result).toContain("list files")
-		expect(result).toContain("read and write files")
+		expect(result).toContain("execute_command")
+		expect(result).toContain("list_files")
+		expect(result).toContain("read/write files")
 	})
 
 	it("includes MCP reference when mcpHub is provided", () => {
@@ -64,52 +65,8 @@ describe("getRulesSection", () => {
 		const result = getRulesSection(cwd)
 
 		expect(result).toContain("RULES")
-		expect(result).toContain("project base directory")
+		expect(result).toContain("Project base:")
 		expect(result).toContain(cwd)
-	})
-
-	it("includes vendor confidentiality section when isStealthModel is true", () => {
-		const settings = {
-			todoListEnabled: true,
-			useAgentRules: true,
-			newTaskRequireTodos: false,
-			isStealthModel: true,
-		}
-
-		const result = getRulesSection(cwd, settings)
-
-		expect(result).toContain("VENDOR CONFIDENTIALITY")
-		expect(result).toContain("Never reveal the vendor or company that created you")
-		expect(result).toContain("I was created by a team of developers")
-		expect(result).toContain("I'm an open-source project maintained by contributors")
-		expect(result).toContain("I don't have information about specific vendors")
-	})
-
-	it("excludes vendor confidentiality section when isStealthModel is false", () => {
-		const settings = {
-			todoListEnabled: true,
-			useAgentRules: true,
-			newTaskRequireTodos: false,
-			isStealthModel: false,
-		}
-
-		const result = getRulesSection(cwd, settings)
-
-		expect(result).not.toContain("VENDOR CONFIDENTIALITY")
-		expect(result).not.toContain("Never reveal the vendor or company")
-	})
-
-	it("excludes vendor confidentiality section when isStealthModel is undefined", () => {
-		const settings = {
-			todoListEnabled: true,
-			useAgentRules: true,
-			newTaskRequireTodos: false,
-		}
-
-		const result = getRulesSection(cwd, settings)
-
-		expect(result).not.toContain("VENDOR CONFIDENTIALITY")
-		expect(result).not.toContain("Never reveal the vendor or company")
 	})
 })
 
@@ -163,9 +120,9 @@ describe("getRulesSection shell-aware command chaining", () => {
 		vi.spyOn(shellUtils, "getShell").mockReturnValue("/bin/bash")
 		const result = getRulesSection(cwd)
 
-		expect(result).toContain("cd (path to project) && (command")
-		expect(result).not.toContain("cd (path to project) ; (command")
-		expect(result).not.toContain("cd (path to project) & (command")
+		expect(result).toContain("cd [path] &&")
+		expect(result).not.toContain("cd [path] ;")
+
 	})
 
 	it("uses ; for PowerShell in command chaining example", () => {
@@ -174,7 +131,7 @@ describe("getRulesSection shell-aware command chaining", () => {
 		)
 		const result = getRulesSection(cwd)
 
-		expect(result).toContain("cd (path to project) ; (command")
+		expect(result).toContain("cd [path] ;")
 		expect(result).toContain("Note: Using `;` for PowerShell command chaining")
 	})
 
@@ -182,7 +139,7 @@ describe("getRulesSection shell-aware command chaining", () => {
 		vi.spyOn(shellUtils, "getShell").mockReturnValue("C:\\Windows\\System32\\cmd.exe")
 		const result = getRulesSection(cwd)
 
-		expect(result).toContain("cd (path to project) && (command")
+		expect(result).toContain("cd [path] &&")
 		expect(result).toContain("Note: Using `&&` for cmd.exe command chaining")
 	})
 

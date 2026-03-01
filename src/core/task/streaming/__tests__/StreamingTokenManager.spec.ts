@@ -59,11 +59,17 @@ describe("StreamingTokenManager", () => {
 			// Initially no valid usage data
 			expect(tokenManager.hasValidApiUsage()).toBe(false)
 
-			// Add usage with outputTokens = 0 (not valid)
+			// Add usage with inputTokens > 0 but outputTokens = 0 (valid - thinking models at start)
 			tokenManager.addApiUsage(100, 0, 0, 0, 0)
-			expect(tokenManager.hasValidApiUsage()).toBe(false)
+			expect(tokenManager.hasValidApiUsage()).toBe(true)
 
-			// Add usage with outputTokens > 0 (valid)
+			// Reset and test with outputTokens > 0 (valid)
+			tokenManager.reset()
+			tokenManager.addApiUsage(0, 50, 0, 0, 0)
+			expect(tokenManager.hasValidApiUsage()).toBe(true)
+
+			// Reset and test with both > 0 (valid)
+			tokenManager.reset()
 			tokenManager.addApiUsage(100, 50, 0, 0, 0)
 			expect(tokenManager.hasValidApiUsage()).toBe(true)
 		})

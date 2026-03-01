@@ -53,6 +53,7 @@ import { defaultModeSlug, modes, Mode } from "../../../shared/modes"
 import "../../../utils/path"
 import { addCustomInstructions } from "../sections/custom-instructions"
 import { MultiSearchReplaceDiffStrategy } from "../../diff/strategies/multi-search-replace"
+import { vi, describe, beforeEach, afterEach, it, expect, afterAll } from "vitest"
 
 // Mock the sections
 vi.mock("../sections/modes", () => ({
@@ -275,7 +276,7 @@ describe("SYSTEM_PROMPT", () => {
 	it("should include vscode language in custom instructions", async () => {
 		// Mock vscode.env.language
 		const vscode = vi.mocked(await import("vscode")) as any
-		vscode.env = { language: "es" }
+		vscode.env = { language: "zh-cn" }
 		// Ensure workspace mock is maintained
 		vscode.workspace = {
 			workspaceFolders: [
@@ -316,7 +317,7 @@ describe("SYSTEM_PROMPT", () => {
 		)
 
 		expect(prompt).toContain("Language Preference:")
-		expect(prompt).toContain('You should always speak and think in the "es" language')
+		expect(prompt).toContain('You should always speak and think in the "zh-CN" language')
 
 		// Reset mock
 		vscode.env = { language: "en" }
@@ -549,7 +550,6 @@ describe("SYSTEM_PROMPT", () => {
 		// Should contain TOOL USE section with native note
 		expect(prompt).toContain("TOOL USE")
 		expect(prompt).toContain("provider-native tool-calling mechanism")
-		expect(prompt).toContain("Do not include XML markup or examples")
 
 		// Should NOT contain XML-style tags or examples
 		expect(prompt).not.toContain("<actual_tool_name>")

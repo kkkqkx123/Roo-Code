@@ -26,8 +26,12 @@ export { StreamingRetryError } from "./types"
 // Core components
 export { StreamingProcessor } from "./StreamingProcessor"
 export { StreamingStateManager } from "./StreamingStateManager"
-export { StreamingTokenManager } from "./StreamingTokenManager"
+export { StreamingTokenManager, type ApiProtocol, type StreamingTokenManagerConfig } from "./StreamingTokenManager"
 export { StreamingErrorHandler } from "./StreamingErrorHandler"
+
+// Token estimation
+export { InputTokenEstimator, createInputTokenEstimator } from "./InputTokenEstimator"
+export type { InputTokenEstimationInput, InputTokenEstimationResult } from "./InputTokenEstimator"
 
 // Handler functions
 export { handleReasoningChunk } from "./handlers/ReasoningHandler"
