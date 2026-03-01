@@ -34,11 +34,12 @@ export class CodeIndexStateMachine {
 
   private initializeTransitions(): void {
     const validTransitions: ValidTransitions = {
-      Standby: ["Indexing", "Error"],
+      Standby: ["Indexing", "Migrating", "Error"],
       Indexing: ["Indexed", "Stopping", "Error"],
-      Indexed: ["Indexing", "Standby"],
+      Migrating: ["Indexed", "Stopping", "Error"],
+      Indexed: ["Indexing", "Migrating", "Standby"],
       Stopping: ["Standby"],
-      Error: ["Standby", "Indexing"]
+      Error: ["Standby", "Indexing", "Migrating"]
     };
 
     Object.entries(validTransitions).forEach(([from, toStates]) => {
