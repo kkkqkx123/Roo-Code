@@ -598,6 +598,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 									className={cn("inline-block w-3 h-3 rounded-full mr-2", {
 										"bg-gray-400": indexingStatus.systemStatus === "Standby",
 										"bg-yellow-500 animate-pulse": indexingStatus.systemStatus === "Indexing",
+										"bg-blue-500 animate-pulse": indexingStatus.systemStatus === "Migrating",
 										"bg-green-500": indexingStatus.systemStatus === "Indexed",
 										"bg-red-500": indexingStatus.systemStatus === "Error",
 									})}
@@ -606,7 +607,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 								{indexingStatus.message ? ` - ${indexingStatus.message}` : ""}
 							</div>
 
-							{indexingStatus.systemStatus === "Indexing" && (
+							{(indexingStatus.systemStatus === "Indexing" || indexingStatus.systemStatus === "Migrating") && (
 								<div className="mt-2">
 									<ProgressPrimitive.Root
 										className="relative h-2 w-full overflow-hidden rounded-full bg-secondary"
@@ -1367,7 +1368,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 										</Button>
 									)}
 
-								{currentSettings.codebaseIndexEnabled && indexingStatus.systemStatus === "Indexing" && (
+								{currentSettings.codebaseIndexEnabled && (indexingStatus.systemStatus === "Indexing" || indexingStatus.systemStatus === "Migrating") && (
 									<Button
 										variant="destructive"
 										onClick={() => vscode.postMessage({ type: "stopIndexing" })}>

@@ -237,6 +237,7 @@
 		"indexingStatuses": {
 			"standby": "Standby",
 			"indexing": "Indexing",
+			"migrating": "Migrating",
 			"indexed": "Indexed",
 			"error": "Error"
 		},

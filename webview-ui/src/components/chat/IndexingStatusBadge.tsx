@@ -62,6 +62,8 @@ export const IndexingStatusBadge: React.FC<IndexingStatusBadgeProps> = ({ classN
 				return t("chat:indexingStatus.ready")
 			case "Indexing":
 				return t("chat:indexingStatus.indexing", { percentage: progressPercentage })
+			case "Migrating":
+				return t("chat:indexingStatus.migrating", { percentage: progressPercentage })
 			case "Indexed":
 				return t("chat:indexingStatus.indexed")
 			case "Stopping":
@@ -77,6 +79,7 @@ export const IndexingStatusBadge: React.FC<IndexingStatusBadgeProps> = ({ classN
 		const statusColors = {
 			Standby: "bg-vscode-descriptionForeground/60",
 			Indexing: "bg-yellow-500 animate-pulse",
+			Migrating: "bg-blue-500 animate-pulse",
 			Indexed: "bg-green-500",
 			Stopping: "bg-amber-500 animate-pulse",
 			Error: "bg-red-500",

@@ -417,6 +417,7 @@
 	"indexingStatus": {
 		"ready": "Index ready",
 		"indexing": "Indexing {{percentage}}%",
+		"migrating": "Migrating {{percentage}}%",
 		"indexed": "Indexed",
 		"error": "Index error",
 		"status": "Index status",

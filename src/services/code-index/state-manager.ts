@@ -1,26 +1,27 @@
 import * as vscode from "vscode"
+import { CodeIndexStateMachine } from "./state-machine"
 
-export type IndexingState = "Standby" | "Indexing" | "Indexed" | "Error" | "Stopping"
+export type IndexingState = "Standby" | "Indexing" | "Migrating" | "Indexed" | "Error" | "Stopping"
 
 export class CodeIndexStateManager {
-	private _systemStatus: IndexingState = "Standby"
 	private _statusMessage: string = ""
 	private _processedItems: number = 0
 	private _totalItems: number = 0
 	private _currentItemUnit: string = "blocks"
 	private _progressEmitter = new vscode.EventEmitter<ReturnType<typeof this.getCurrentStatus>>()
+	private _stateMachine: CodeIndexStateMachine
 
 	// --- Public API ---
 
 	public readonly onProgressUpdate = this._progressEmitter.event
 
 	public get state(): IndexingState {
-		return this._systemStatus
+		return this._stateMachine.getState()
 	}
 
 	public getCurrentStatus() {
 		return {
-			systemStatus: this._systemStatus,
+			systemStatus: this._stateMachine.getState(),
 			message: this._statusMessage,
 			processedItems: this._processedItems,
 			totalItems: this._totalItems,
@@ -30,18 +31,27 @@ export class CodeIndexStateManager {
 
 	// --- State Management ---
 
-	public setSystemState(newState: IndexingState, message?: string): void {
-		const stateChanged =
-			newState !== this._systemStatus || (message !== undefined && message !== this._statusMessage)
+	constructor() {
+		this._stateMachine = new CodeIndexStateMachine()
+		// Subscribe to state changes to log them
+		this._stateMachine.onStateChange(({ oldState, newState, message }) => {
+			// Log state transitions for debugging
+			console.log(`[CodeIndexStateManager] State transition: ${oldState} -> ${newState}${message ? ` - ${message}` : ''}`)
+		})
+	}
 
-		if (stateChanged) {
-			this._systemStatus = newState
+	public setSystemState(newState: IndexingState, message?: string): void {
+		// Attempt the state transition using the state machine
+		const transitionSuccessful = this._stateMachine.transition(newState, message)
+
+		// Only update additional state if transition was successful
+		if (transitionSuccessful) {
 			if (message !== undefined) {
 				this._statusMessage = message
 			}
 
-			// Reset progress counters if moving to a non-indexing state or starting fresh
-			if (newState !== "Indexing") {
+			// Reset progress counters if moving to a non-indexing/non-migrating state or starting fresh
+			if (newState !== "Indexing" && newState !== "Migrating") {
 				this._processedItems = 0
 				this._totalItems = 0
 				this._currentItemUnit = "blocks" // Reset to default unit
@@ -59,23 +69,32 @@ export class CodeIndexStateManager {
 		const progressChanged = processedItems !== this._processedItems || totalItems !== this._totalItems
 
 		// Don't override Stopping state with progress updates
-		if (this._systemStatus === "Stopping") return
-		// Update if progress changes OR if the system wasn't already in 'Indexing' state
-		if (progressChanged || this._systemStatus !== "Indexing") {
-			this._processedItems = processedItems
-			this._totalItems = totalItems
-			this._currentItemUnit = "blocks"
+		if (this._stateMachine.getState() === "Stopping") return
+		// Update if progress changes OR if the system wasn't already in 'Indexing' or 'Migrating' state
+		if (progressChanged || (this._stateMachine.getState() !== "Indexing" && this._stateMachine.getState() !== "Migrating")) {
+			// Attempt state transition using the state machine
+			const currentState = this._stateMachine.getState()
 
-			const message = `Indexed ${this._processedItems} / ${this._totalItems} ${this._currentItemUnit} found`
-			const oldStatus = this._systemStatus
-			const oldMessage = this._statusMessage
+			// Determine the target state based on current state
+			// If we're in Migrating state, stay in Migrating
+			const targetState = currentState === "Migrating" ? "Migrating" : "Indexing"
+			const transitionSuccessful = this._stateMachine.transition(targetState,
+				`Indexed ${processedItems} / ${totalItems} blocks found`)
 
-			this._systemStatus = "Indexing" // Ensure state is Indexing
-			this._statusMessage = message
+			if (transitionSuccessful) {
+				this._processedItems = processedItems
+				this._totalItems = totalItems
+				this._currentItemUnit = "blocks"
 
-			// Only fire update if status, message or progress actually changed
-			if (oldStatus !== this._systemStatus || oldMessage !== this._statusMessage || progressChanged) {
-				this._progressEmitter.fire(this.getCurrentStatus())
+				const message = `Indexed ${this._processedItems} / ${this._totalItems} ${this._currentItemUnit} found`
+				this._statusMessage = message
+
+				// Only fire update if message or progress actually changed
+				if (progressChanged) {
+					this._progressEmitter.fire(this.getCurrentStatus())
+				}
+			} else {
+				console.warn(`[CodeIndexStateManager] Invalid transition from ${currentState} to ${targetState} in reportBlockIndexingProgress`)
 			}
 		}
 	}
@@ -84,12 +103,14 @@ export class CodeIndexStateManager {
 		const progressChanged = processedFiles !== this._processedItems || totalFiles !== this._totalItems
 
 		// Don't override Stopping state with progress updates
-		if (this._systemStatus === "Stopping") return
-		if (progressChanged || this._systemStatus !== "Indexing") {
-			this._processedItems = processedFiles
-			this._totalItems = totalFiles
-			this._currentItemUnit = "files"
-			this._systemStatus = "Indexing"
+		if (this._stateMachine.getState() === "Stopping") return
+		if (progressChanged || (this._stateMachine.getState() !== "Indexing" && this._stateMachine.getState() !== "Migrating")) {
+			// Attempt state transition using the state machine
+			const currentState = this._stateMachine.getState()
+
+			// Determine the target state based on current state
+			// If we're in Migrating state, stay in Migrating
+			const targetState = currentState === "Migrating" ? "Migrating" : "Indexing"
 
 			let message: string
 			if (totalFiles > 0 && processedFiles < totalFiles) {
@@ -102,18 +123,26 @@ export class CodeIndexStateManager {
 				message = `File queue processed.`
 			}
 
-			const oldStatus = this._systemStatus
-			const oldMessage = this._statusMessage
+			const transitionSuccessful = this._stateMachine.transition(targetState, message)
 
-			this._statusMessage = message
+			if (transitionSuccessful) {
+				this._processedItems = processedFiles
+				this._totalItems = totalFiles
+				this._currentItemUnit = "files"
 
-			if (oldStatus !== this._systemStatus || oldMessage !== this._statusMessage || progressChanged) {
-				this._progressEmitter.fire(this.getCurrentStatus())
+				this._statusMessage = message
+
+				if (progressChanged) {
+					this._progressEmitter.fire(this.getCurrentStatus())
+				}
+			} else {
+				console.warn(`[CodeIndexStateManager] Invalid transition from ${currentState} to ${targetState} in reportFileQueueProgress`)
 			}
 		}
 	}
 
 	public dispose(): void {
 		this._progressEmitter.dispose()
+		this._stateMachine.dispose()
 	}
 }

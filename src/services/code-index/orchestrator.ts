@@ -42,7 +42,7 @@ export class CodeIndexOrchestrator {
 			return
 		}
 
-		this.stateManager.setSystemState("Indexing", "Initializing file watcher...")
+		this.stateManager.setSystemState(this.state === "Migrating" ? "Migrating" : "Indexing", "Initializing file watcher...")
 
 		try {
 			await this.fileWatcher.initialize()
@@ -50,8 +50,8 @@ export class CodeIndexOrchestrator {
 			this._fileWatcherSubscriptions = [
 				this.fileWatcher.onDidStartBatchProcessing((filePaths: string[]) => { }),
 				this.fileWatcher.onBatchProgressUpdate(({ processedInBatch, totalInBatch, currentFile }) => {
-					if (totalInBatch > 0 && this.stateManager.state !== "Indexing") {
-						this.stateManager.setSystemState("Indexing", "Processing file changes...")
+					if (totalInBatch > 0 && this.stateManager.state !== "Indexing" && this.stateManager.state !== "Migrating") {
+						this.stateManager.setSystemState(this.state === "Migrating" ? "Migrating" : "Indexing", "Processing file changes...")
 					}
 					this.stateManager.reportFileQueueProgress(
 						processedInBatch,
@@ -129,31 +129,42 @@ export class CodeIndexOrchestrator {
 		}
 		console.log("[CodeIndexOrchestrator] Project allowlist check passed")
 
+		// Determine the target state based on current state
+		const isMigration = this.stateManager.state === "Migrating"
+		const validStatesForStart = ["Standby", "Error", "Indexed", "Migrating"]
+
 		if (
 			this._isProcessing ||
-			(this.stateManager.state !== "Standby" &&
-				this.stateManager.state !== "Error" &&
-				this.stateManager.state !== "Indexed")
+			!validStatesForStart.includes(this.stateManager.state)
 		) {
 			console.warn(
 				`[CodeIndexOrchestrator] Start rejected: Already processing or in state ${this.stateManager.state}.`,
 			)
 			return
 		}
-		console.log("[CodeIndexOrchestrator] State check passed, current state:", this.stateManager.state)
+		console.log("[CodeIndexOrchestrator] State check passed, current state:", this.stateManager.state, "isMigration:", isMigration)
 
-		// Try fast start first - check if we can skip the scan
-		const fastStartResult = await this._tryFastStart()
-		if (fastStartResult) {
-			console.log("[CodeIndexOrchestrator] Fast start successful, skipping full scan")
-			return
+		// Try fast start first - check if we can skip the scan (only for non-migration scenarios)
+		if (!isMigration) {
+			const fastStartResult = await this._tryFastStart()
+			if (fastStartResult) {
+				console.log("[CodeIndexOrchestrator] Fast start successful, skipping full scan")
+				return
+			}
 		}
 
 		this._isProcessing = true
 		this._abortController = new AbortController()
 		const signal = this._abortController.signal
-		this.stateManager.setSystemState("Indexing", "Initializing services...")
-		console.log("[CodeIndexOrchestrator] Processing started, state set to Indexing")
+
+		// Set appropriate state based on whether this is a migration or normal indexing
+		if (isMigration) {
+			this.stateManager.setSystemState("Migrating", "Migrating index to new configuration...")
+			console.log("[CodeIndexOrchestrator] Processing started, state set to Migrating")
+		} else {
+			this.stateManager.setSystemState("Indexing", "Initializing services...")
+			console.log("[CodeIndexOrchestrator] Processing started, state set to Indexing")
+		}
 
 		// Track whether we successfully connected to Qdrant and started indexing
 		// This helps us decide whether to preserve cache on error
@@ -172,7 +183,7 @@ export class CodeIndexOrchestrator {
 							console.log(
 								"[CodeIndexOrchestrator] Error retry: Collection exists with indexed data. Reusing existing collection for incremental scan.",
 							)
-							this.stateManager.setSystemState("Indexing", "Reusing existing collection...")
+							this.stateManager.setSystemState(this.state === "Migrating" ? "Migrating" : "Indexing", "Reusing existing collection...")
 						} else {
 							console.log(
 								"[CodeIndexOrchestrator] Error retry: Collection exists but has no indexed data. Will perform full scan.",
@@ -239,7 +250,7 @@ export class CodeIndexOrchestrator {
 				console.log(
 					"[CodeIndexOrchestrator] Collection already has indexed data. Running incremental scan for new/changed files...",
 				)
-				this.stateManager.setSystemState("Indexing", "Checking for new or modified files...")
+				this.stateManager.setSystemState(this.state === "Migrating" ? "Migrating" : "Indexing", "Checking for new or modified files...")
 
 				// Mark as incomplete at the start of incremental scan
 				await this.vectorStore.markIndexingIncomplete()
@@ -310,7 +321,7 @@ export class CodeIndexOrchestrator {
 				this.stateManager.setSystemState("Indexed", t("embeddings:orchestrator.fileWatcherStarted"))
 			} else {
 				// No existing data or collection was just created - do a full scan
-				this.stateManager.setSystemState("Indexing", "Services ready. Starting workspace scan...")
+				this.stateManager.setSystemState(this.state === "Migrating" ? "Migrating" : "Indexing", "Services ready. Starting workspace scan...")
 
 				// Mark as incomplete at the start of full scan
 				await this.vectorStore.markIndexingIncomplete()
@@ -418,6 +429,7 @@ export class CodeIndexOrchestrator {
 				console.log("[CodeIndexOrchestrator] Indexing aborted by user.")
 				await this.cacheManager.flush()
 				this.stopWatcher()
+				// The state manager will validate the transition and prevent invalid ones
 				this.stateManager.setSystemState("Standby", t("embeddings:orchestrator.indexingStopped"))
 				return
 			}
@@ -446,12 +458,16 @@ export class CodeIndexOrchestrator {
 				)
 			}
 
+			// Ensure we properly transition to Error state after failure
+			// The state manager will validate the transition and prevent invalid ones
 			this.stateManager.setSystemState(
 				"Error",
 				t("embeddings:orchestrator.failedDuringInitialScan", {
 					errorMessage: error.message || t("embeddings:orchestrator.unknownError"),
 				}),
 			)
+			
+			// Stop watcher to ensure clean state after error
 			this.stopWatcher()
 		} finally {
 			this._isProcessing = false

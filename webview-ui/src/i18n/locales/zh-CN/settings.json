@@ -159,6 +159,7 @@
 		"indexingStatuses": {
 			"standby": "待机",
 			"indexing": "索引中",
+			"migrating": "迁移中",
 			"indexed": "已索引",
 			"error": "错误"
 		},

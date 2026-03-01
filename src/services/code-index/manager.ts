@@ -234,7 +234,7 @@ export class CodeIndexManager {
 		const needsServiceRecreation = !this._serviceFactory || requiresRestart
 
 		if (needsServiceRecreation) {
-			await this._recreateServices()
+			await this._recreateServices(requiresReindex)
 		}
 
 		// 6. Handle Indexing Start/Restart
@@ -245,7 +245,7 @@ export class CodeIndexManager {
 		const shouldStartOrRestartIndexing =
 			shouldStartAutomatically &&
 			(requiresRestart ||
-				(needsServiceRecreation && (!this._orchestrator || this._orchestrator.state !== "Indexing")))
+				(needsServiceRecreation && (!this._orchestrator || this._orchestrator.state !== "Indexing" && this._orchestrator.state !== "Migrating")))
 
 		if (shouldStartOrRestartIndexing) {
 			this._orchestrator?.startIndexing()
@@ -331,19 +331,33 @@ export class CodeIndexManager {
 	public async recoverFromError(): Promise<void> {
 		// Prevent race conditions from multiple rapid recovery attempts
 		if (this._isRecoveringFromError) {
+			console.log("[CodeIndexManager] Recovery already in progress, skipping duplicate call")
 			return
 		}
 
 		this._isRecoveringFromError = true
+		console.log("[CodeIndexManager] Starting error recovery process")
+		
 		try {
-			// Clear error state
-			this._stateManager.setSystemState("Standby", "")
+			// Stop any ongoing indexing or watching processes
+			if (this._orchestrator) {
+				this.stopIndexing()
+			}
+			
+			// Clear error state - validate transition from Error to Standby
+			if (this._stateManager.state === "Error") {
+				this._stateManager.setSystemState("Standby", "Error recovery completed, ready to reinitialize")
+			} else {
+				console.log(`[CodeIndexManager] Not in Error state (${this._stateManager.state}), setting to Standby`)
+				this._stateManager.setSystemState("Standby", "Ready after recovery attempt")
+			}
 		} catch (error) {
 			// Log error but continue with recovery - clearing service instances is more important
-			console.error("Failed to clear error state during recovery:", error)
+			console.error("[CodeIndexManager] Failed to clear error state during recovery:", error)
 		} finally {
 			// Force re-initialization by clearing service instances
 			// This ensures a clean slate even if state update failed
+			console.log("[CodeIndexManager] Clearing service instances for clean re-initialization")
 			this._configManager = undefined
 			this._serviceFactory = undefined
 			this._orchestrator = undefined
@@ -351,6 +365,7 @@ export class CodeIndexManager {
 
 			// Reset the flag after recovery is complete
 			this._isRecoveringFromError = false
+			console.log("[CodeIndexManager] Error recovery process completed")
 		}
 	}
 
@@ -397,8 +412,9 @@ export class CodeIndexManager {
 	/**
 	 * Private helper method to recreate services with current configuration.
 	 * Used by both initialize() and handleSettingsChange().
+	 * @param requiresReindex Whether the index needs to be rebuilt due to configuration changes
 	 */
-	private async _recreateServices(): Promise<void> {
+	private async _recreateServices(requiresReindex: boolean = false): Promise<void> {
 		// Stop watcher if it exists
 		if (this._orchestrator) {
 			this.stopWatcher()
@@ -472,8 +488,12 @@ export class CodeIndexManager {
 			vectorStore,
 		)
 
-		// Clear any error state after successful recreation
-		this._stateManager.setSystemState("Standby", "")
+		// Set appropriate state after successful recreation
+		if (requiresReindex) {
+			this._stateManager.setSystemState("Migrating", "Configuration changed. Index migration required.")
+		} else {
+			this._stateManager.setSystemState("Standby", "")
+		}
 	}
 
 	/**
@@ -484,7 +504,7 @@ export class CodeIndexManager {
 	 */
 	public async handleSettingsChange(): Promise<void> {
 		if (this._configManager) {
-			const { requiresRestart } = await this._configManager.loadConfiguration()
+			const { requiresRestart, requiresReindex } = await this._configManager.loadConfiguration()
 
 			const isFeatureEnabled = this.isFeatureEnabled
 			const isFeatureConfigured = this.isFeatureConfigured
@@ -505,7 +525,14 @@ export class CodeIndexManager {
 					}
 
 					// Recreate services with new configuration
-					await this._recreateServices()
+					await this._recreateServices(requiresReindex)
+
+					// If reindex is required, clear existing index data and start migration
+					if (requiresReindex) {
+						await this.clearIndexData()
+						// Start indexing with migration flag
+						await this.startIndexing()
+					}
 				} catch (error) {
 					// Error state already set in _recreateServices
 					console.error("Failed to recreate services:", error)
