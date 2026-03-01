@@ -20,7 +20,7 @@ export const generateSystemPrompt = async (provider: ClineProvider, message: Web
 		enableSubfolderRules,
 		skillsEnabled,
 		disabledSkills,
-	} = await provider.getState()
+	} = await provider.configurationService.getState()
 
 	const diffStrategy = new MultiSearchReplaceDiffStrategy()
 

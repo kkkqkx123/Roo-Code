@@ -117,7 +117,7 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 			task.consecutiveMistakeCount = 0
 
 			const provider = task.providerRef.deref()
-			const state = await provider?.getState()
+			const state = await provider?.configurationService.getState()
 			const diagnosticsEnabled = state?.diagnosticsEnabled ?? true
 			const writeDelayMs = state?.writeDelayMs ?? DEFAULT_WRITE_DELAY_MS
 			const isPreventFocusDisruptionEnabled = experiments.isEnabled(
@@ -220,7 +220,7 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 		}
 
 		const provider = task.providerRef.deref()
-		const state = await provider?.getState()
+		const state = await provider?.configurationService.getState()
 		const isPreventFocusDisruptionEnabled = experiments.isEnabled(
 			state?.experiments ?? {},
 			EXPERIMENT_IDS.PREVENT_FOCUS_DISRUPTION,

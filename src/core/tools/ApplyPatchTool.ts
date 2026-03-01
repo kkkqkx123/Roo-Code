@@ -442,7 +442,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 
 		// Check experiment settings
 		const provider = task.providerRef.deref()
-		const state = await provider?.getState()
+		const state = await provider?.configurationService.getState()
 		const diagnosticsEnabled = state?.diagnosticsEnabled ?? true
 		const writeDelayMs = state?.writeDelayMs ?? DEFAULT_WRITE_DELAY_MS
 		const isPreventFocusDisruptionEnabled = experiments.isEnabled(
@@ -611,7 +611,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 
 		// Check experiment settings
 		const provider = task.providerRef.deref()
-		const state = await provider?.getState()
+		const state = await provider?.configurationService.getState()
 		const diagnosticsEnabled = state?.diagnosticsEnabled ?? true
 		const writeDelayMs = state?.writeDelayMs ?? DEFAULT_WRITE_DELAY_MS
 		const isPreventFocusDisruptionEnabled = experiments.isEnabled(

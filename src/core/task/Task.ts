@@ -769,7 +769,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	private async initializeTaskMode(provider: ClineProvider): Promise<void> {
 		try {
-			const state = await provider.getState()
+			const state = await provider.configurationService.getState()
 			this._taskMode = state?.mode || defaultModeSlug
 		} catch (error) {
 			// If there's an error getting state, use the default mode
@@ -803,7 +803,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 */
 	private async initializeTaskApiConfigName(provider: ClineProvider): Promise<void> {
 		try {
-			const state = await provider.getState()
+			const state = await provider.configurationService.getState()
 
 			// Avoid clobbering a newer value that may have been set while awaiting provider state
 			// (e.g., user switches provider profile immediately after task creation).
@@ -835,7 +835,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 		this.providerProfileChangeListener = async () => {
 			try {
-				const newState = await provider.getState()
+				const newState = await provider.configurationService.getState()
 				if (newState?.apiConfiguration) {
 					this.updateApiConfiguration(newState.apiConfiguration)
 				}
@@ -1516,7 +1516,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 		// Automatically approve if the ask according to the user's settings.
 		const provider = this.providerRef.deref()
-		const state = provider ? await provider.getState() : undefined
+		const state = provider ? await provider.configurationService.getState() : undefined
 		const approval = await checkAutoApproval({ state, ask: type, text, isProtected })
 
 		if (approval.decision === "approve") {
@@ -1765,7 +1765,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 					// Update this task's API configuration to match the new profile
 					// This ensures the parser state is synchronized with the selected model
-					const newState = await provider.getState()
+					const newState = await provider.configurationService.getState()
 					if (newState?.apiConfiguration) {
 						this.updateApiConfiguration(newState.apiConfiguration)
 					}
@@ -1810,7 +1810,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		const systemPrompt = await this.getSystemPrompt()
 
 		// Get condensing configuration
-		const state = await this.providerRef.deref()?.getState()
+		const state = await this.providerRef.deref()?.configurationService.getState()
 		const customCondensingPrompt = state?.customSupportPrompts?.CONDENSE
 		const { mode, apiConfiguration } = state ?? {}
 
@@ -2058,7 +2058,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				return { enabledToolCount: 0, enabledServerCount: 0 }
 			}
 
-			const { mcpEnabled } = (await provider.getState()) ?? {}
+			const { mcpEnabled } = (await provider.configurationService.getState()) ?? {}
 			if (!(mcpEnabled ?? true)) {
 				return { enabledToolCount: 0, enabledServerCount: 0 }
 			}
@@ -2977,7 +2977,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				ignoreMode = "both",
 				includeDiagnosticMessages = true,
 				maxDiagnosticMessages = 50,
-			} = (await this.providerRef.deref()?.getState()) ?? {}
+			} = (await this.providerRef.deref()?.configurationService.getState()) ?? {}
 
 			// Update ignore mode based on settings
 			const modeMap: Record<string, IgnoreMode> = {
@@ -3002,7 +3002,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			if (slashCommandMode) {
 				const provider = this.providerRef.deref()
 				if (provider) {
-					const state = await provider.getState()
+					const state = await provider.configurationService.getState()
 					const targetMode = getModeBySlug(slashCommandMode, state?.customModes)
 					if (targetMode) {
 						await provider.handleModeSwitch(slashCommandMode)
@@ -3156,6 +3156,29 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				// Get system prompt for token estimation (used in tiktoken fallback)
 				const systemPromptForTokenEstimation = await this.getSystemPrompt()
 
+				// Build tools for token estimation (used in tiktoken fallback)
+				// This ensures the token count includes tool definitions
+				let toolsForTokenEstimation: OpenAI.Chat.ChatCompletionTool[] = []
+				{
+					const provider = this.providerRef.deref()
+					if (provider) {
+						const state = await provider.configurationService.getState()
+						const toolsResult = await buildNativeToolsArrayWithRestrictions({
+							provider,
+							cwd: this.cwd,
+							mode: state?.mode,
+							customModes: state?.customModes,
+							experiments: state?.experiments,
+							apiConfiguration: this.apiConfiguration,
+							disabledTools: state?.disabledTools,
+							modelInfo: streamModelInfo,
+							skillsEnabled: state?.skillsEnabled,
+							includeAllToolsWithRestrictions: this.apiConfiguration?.apiProvider === "gemini",
+						})
+						toolsForTokenEstimation = toolsResult.tools
+					}
+				}
+
 				// Yields only if the first chunk is successful, otherwise will
 				// allow the user to retry the request (most likely due to rate
 				// limit error, which gets thrown on the first chunk).
@@ -3181,6 +3204,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 							{ role: "user", content: finalUserContent },
 						],
 						systemPromptForTokenEstimation,
+						toolsForTokenEstimation,
 					)
 
 					// Wait for event bus to process stream:complete event
@@ -3296,7 +3320,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 							`[Task#${this.taskId}.${this.instanceId}] Stream failed, will retry: ${streamingFailedMessage}`,
 						)
 
-						const stateForBackoff = await this.providerRef.deref()?.getState()
+						const stateForBackoff = await this.providerRef.deref()?.configurationService.getState()
 						if (stateForBackoff?.autoApprovalEnabled) {
 							const backoffError =
 								error instanceof StreamingRetryError && error.rawError ? error.rawError : error
@@ -3410,7 +3434,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					// apiConversationHistory at line 1876. Since the assistant failed to respond,
 					// we need to remove that message before retrying to avoid having two consecutive
 					// user messages (which would cause tool_result validation errors).
-					let state = await this.providerRef.deref()?.getState()
+					let state = await this.providerRef.deref()?.configurationService.getState()
 					if (this.apiConversationHistory.length > 0) {
 						const lastMessage = this.apiConversationHistory[this.apiConversationHistory.length - 1]
 						if (lastMessage && lastMessage.role === "user") {
@@ -3528,7 +3552,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	private async getSystemPrompt(): Promise<string> {
-		const { mcpEnabled } = (await this.providerRef.deref()?.getState()) ?? {}
+		const { mcpEnabled } = (await this.providerRef.deref()?.configurationService.getState()) ?? {}
 		let mcpHub: McpHub | undefined
 		if (mcpEnabled ?? true) {
 			const provider = this.providerRef.deref()
@@ -3552,7 +3576,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 		const rooIgnoreInstructions = this.rooIgnoreController?.getInstructions()
 
-		const state = await this.providerRef.deref()?.getState()
+		const state = await this.providerRef.deref()?.configurationService.getState()
 
 		const {
 			mode,
@@ -3616,7 +3640,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	private async handleContextWindowExceededError(): Promise<void> {
-		const state = await this.providerRef.deref()?.getState()
+		const state = await this.providerRef.deref()?.configurationService.getState()
 		const { profileThresholds = {}, mode, apiConfiguration } = state ?? {}
 
 		const { contextTokens } = this.metricsService.getTokenUsage(this.clineMessages.slice(1))
@@ -3756,7 +3780,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 * the `api_req_rate_limit_wait` say type (not an error).
 	 */
 	private async maybeWaitForProviderRateLimit(retryAttempt: number): Promise<void> {
-		const state = await this.providerRef.deref()?.getState()
+		const state = await this.providerRef.deref()?.configurationService.getState()
 		const rateLimitSeconds =
 			state?.apiConfiguration?.rateLimitSeconds ?? this.apiConfiguration?.rateLimitSeconds ?? 0
 
@@ -3787,7 +3811,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		retryAttempt: number = 0,
 		options: { skipProviderRateLimit?: boolean } = {},
 	): ApiStream {
-		const state = await this.providerRef.deref()?.getState()
+		const state = await this.providerRef.deref()?.configurationService.getState()
 
 		const {
 			apiConfiguration,
@@ -4189,7 +4213,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	// Shared exponential backoff for retries (first-chunk and mid-stream)
 	private async backoffAndAnnounce(retryAttempt: number, error: any): Promise<void> {
 		try {
-			const state = await this.providerRef.deref()?.getState()
+			const state = await this.providerRef.deref()?.configurationService.getState()
 			const baseDelay = state?.requestDelaySeconds || 5
 
 			let exponentialDelay = Math.min(

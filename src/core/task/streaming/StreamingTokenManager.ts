@@ -17,6 +17,7 @@ export class StreamingTokenManager {
 	private collectedInBackground: boolean
 	private apiConversationHistory: any[] // Will be set from Task context
 	private systemPrompt: string // System prompt for token estimation
+	private tools: any[] // Tool definitions for token estimation
 
 	// Background collection timeout (5 seconds)
 	private static readonly USAGE_COLLECTION_TIMEOUT_MS = 5000
@@ -35,6 +36,7 @@ export class StreamingTokenManager {
 		this.collectedInBackground = false
 		this.apiConversationHistory = []
 		this.systemPrompt = ""
+		this.tools = []
 	}
 
 	/**
@@ -52,6 +54,14 @@ export class StreamingTokenManager {
 	}
 
 	/**
+	 * Set the tool definitions for token estimation
+	 * Tools are part of the input tokens sent to the API
+	 */
+	setTools(tools: any[]): void {
+		this.tools = tools || []
+	}
+
+	/**
 	 * Reset all token counting state
 	 */
 	reset(): void {
@@ -65,6 +75,7 @@ export class StreamingTokenManager {
 		}
 		this.hasApiUsageData = false
 		this.collectedInBackground = false
+		this.tools = []
 	}
 
 	// ============================================================================
@@ -236,7 +247,7 @@ export class StreamingTokenManager {
 
 	/**
 	 * Estimate input tokens using tiktoken
-	 * Includes system prompt and conversation history
+	 * Includes system prompt, conversation history, and tool definitions
 	 */
 	private async estimateInputTokens(): Promise<number> {
 		try {
@@ -253,6 +264,15 @@ export class StreamingTokenManager {
 				Array.isArray(msg.content) ? msg.content : []
 			)
 			allContent.push(...conversationContent)
+
+			// Add tool definitions as text content
+			// Tools are part of the input sent to the API and contribute to input tokens
+			if (this.tools && this.tools.length > 0) {
+				// Convert tool definitions to a format that can be counted
+				// Each tool definition is serialized to JSON for token counting
+				const toolsText = JSON.stringify(this.tools)
+				allContent.push({ type: "text", text: toolsText })
+			}
 
 			// Use the API's countTokens method if available
 			if (this.api.countTokens) {

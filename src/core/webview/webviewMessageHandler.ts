@@ -97,7 +97,7 @@ export const webviewMessageHandler = async (
 		const text = payload.text ?? ""
 		const images = payload.images
 		const currentTask = provider.getCurrentTask()
-		const state = await provider.getState()
+		const state = await provider.configurationService.getState()
 		const resolved = await resolveImageMentions({
 			text,
 			images,
@@ -507,7 +507,7 @@ export const webviewMessageHandler = async (
 					if (listApiConfig.length === 1) {
 						// Check if first time init then sync with exist config.
 						if (listApiConfig[0] && !checkExistKey(listApiConfig[0])) {
-							const { apiConfiguration } = await provider.getState()
+							const { apiConfiguration } = await provider.configurationService.getState()
 
 							// Only save if the current configuration has meaningful settings
 							// (e.g., API keys). This prevents saving a default "anthropic"
@@ -1069,7 +1069,7 @@ export const webviewMessageHandler = async (
 		case "toggleSkillEnabledForPrompt": {
 			try {
 				// Get current disabledSkills from global state
-				const state = await provider.getState()
+				const state = await provider.configurationService.getState()
 				const disabledSkills = state?.disabledSkills ?? []
 				const skillName = message.skillName
 
@@ -1353,7 +1353,7 @@ export const webviewMessageHandler = async (
 		case "enhancePrompt":
 			if (message.text) {
 				try {
-					const state = await provider.getState()
+					const state = await provider.configurationService.getState()
 
 					const {
 						apiConfiguration,
@@ -2448,7 +2448,7 @@ export const webviewMessageHandler = async (
 		}
 		case "getEnabledSkills": {
 			try {
-				const state = await provider.getState()
+				const state = await provider.configurationService.getState()
 				const skillsManager = provider.getSkillsManager()
 				const currentMode = state?.mode || "code"
 				const disabledSkills = state?.disabledSkills ?? []

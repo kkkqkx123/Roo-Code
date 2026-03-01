@@ -29,7 +29,7 @@ export class SwitchModeTool extends BaseTool<"switch_mode"> {
 			task.consecutiveMistakeCount = 0
 
 			// Verify the mode exists
-			const targetMode = getModeBySlug(mode_slug, (await task.providerRef.deref()?.getState())?.customModes)
+			const targetMode = getModeBySlug(mode_slug, (await task.providerRef.deref()?.configurationService.getState())?.customModes)
 
 			if (!targetMode) {
 				task.recordToolError("switch_mode")
@@ -39,7 +39,7 @@ export class SwitchModeTool extends BaseTool<"switch_mode"> {
 			}
 
 			// Check if already in requested mode
-			const currentMode = (await task.providerRef.deref()?.getState())?.mode ?? defaultModeSlug
+			const currentMode = (await task.providerRef.deref()?.configurationService.getState())?.mode ?? defaultModeSlug
 
 			if (currentMode === mode_slug) {
 				task.recordToolError("switch_mode")

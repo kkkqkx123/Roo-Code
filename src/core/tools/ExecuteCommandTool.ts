@@ -64,7 +64,7 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 
 			const executionId = task.lastMessageTs?.toString() ?? Date.now().toString()
 			const provider = await task.providerRef.deref()
-			const providerState = await provider?.getState()
+			const providerState = await provider?.configurationService.getState()
 
 			const { terminalShellIntegrationDisabled = true } = providerState ?? {}
 
@@ -195,7 +195,7 @@ export async function executeCommandInTerminal(
 	if (globalStoragePath) {
 		const taskDir = await getTaskDirectoryPath(globalStoragePath, task.taskId)
 		const storageDir = path.join(taskDir, "command-output")
-		const providerState = await provider?.getState()
+		const providerState = await provider?.configurationService.getState()
 		const terminalOutputPreviewSize =
 			providerState?.terminalOutputPreviewSize ?? DEFAULT_TERMINAL_OUTPUT_PREVIEW_SIZE
 

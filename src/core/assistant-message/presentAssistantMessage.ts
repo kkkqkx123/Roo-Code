@@ -345,7 +345,7 @@ export async function presentAssistantMessage(cline: Task) {
 			}
 
 			// Fetch state early so it's available for toolDescription and validation
-			const state = await cline.providerRef.deref()?.getState()
+			const state = await cline.providerRef.deref()?.configurationService.getState()
 			const { mode, customModes, experiments: stateExperiments, disabledTools } = state ?? {}
 
 			const toolDescription = (): string => {

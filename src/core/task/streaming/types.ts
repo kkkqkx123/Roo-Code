@@ -292,6 +292,9 @@ export interface StreamingTokenManager {
 	// Tiktoken fallback
 	checkTiktokenFallback(): Promise<void>
 	hasValidApiUsage(): boolean
+
+	// Tool definitions for token estimation
+	setTools(tools: any[]): void
 }
 
 /**

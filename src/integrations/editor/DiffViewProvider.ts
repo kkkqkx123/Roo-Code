@@ -254,7 +254,7 @@ export class DiffViewProvider {
 
 			// Get diagnostic settings from state
 			const task = this.taskRef.deref()
-			const state = await task?.providerRef.deref()?.getState()
+			const state = await task?.providerRef.deref()?.configurationService.getState()
 			const includeDiagnosticMessages = state?.includeDiagnosticMessages ?? true
 			const maxDiagnosticMessages = state?.maxDiagnosticMessages ?? 50
 
@@ -702,7 +702,7 @@ export class DiffViewProvider {
 
 			// Get diagnostic settings from state
 			const task = this.taskRef.deref()
-			const state = await task?.providerRef.deref()?.getState()
+			const state = await task?.providerRef.deref()?.configurationService.getState()
 			const includeDiagnosticMessages = state?.includeDiagnosticMessages ?? true
 			const maxDiagnosticMessages = state?.maxDiagnosticMessages ?? 50
 

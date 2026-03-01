@@ -24,7 +24,7 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 	let details = ""
 
 	const clineProvider = cline.providerRef.deref()
-	const state = await clineProvider?.getState()
+	const state = await clineProvider?.configurationService.getState()
 	const { maxWorkspaceFiles = 200 } = state ?? {}
 
 	// It could be useful for cline to know if the user went from one or no

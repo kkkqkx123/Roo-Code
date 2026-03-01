@@ -114,7 +114,8 @@ export class StreamingProcessor {
     stream: AsyncIterable<StreamChunk>,
     abortController?: AbortController,
     apiConversationHistory?: any[],
-    systemPrompt?: string
+    systemPrompt?: string,
+    tools?: any[]
   ): Promise<StreamingResult> {
     // Validate input
     if (!stream || typeof stream[Symbol.asyncIterator] !== 'function') {
@@ -134,6 +135,11 @@ export class StreamingProcessor {
     // Set system prompt for token estimation
     if (systemPrompt) {
       this.tokenManager.setSystemPrompt(systemPrompt)
+    }
+
+    // Set tools for token estimation
+    if (tools) {
+      this.tokenManager.setTools(tools)
     }
 
     // Set abort controller

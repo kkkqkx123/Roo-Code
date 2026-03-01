@@ -50,7 +50,7 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 				return
 			}
 
-			const state = await provider.getState()
+			const state = await provider.configurationService.getState()
 
 			// Use Package.name (dynamic at build time) as the VSCode configuration namespace.
 			// Supports multiple extension variants (e.g., stable/nightly) without hardcoded strings.

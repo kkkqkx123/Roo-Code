@@ -20,7 +20,7 @@ export class RunSlashCommandTool extends BaseTool<"run_slash_command"> {
 
 		// Check if run slash command experiment is enabled
 		const provider = task.providerRef.deref()
-		const state = await provider?.getState()
+		const state = await provider?.configurationService.getState()
 		const isRunSlashCommandEnabled = experiments.isEnabled(
 			state?.experiments ?? {},
 			EXPERIMENT_IDS.RUN_SLASH_COMMAND,
@@ -80,7 +80,7 @@ export class RunSlashCommandTool extends BaseTool<"run_slash_command"> {
 			// Switch mode if specified in the command frontmatter
 			if (command.mode) {
 				const provider = task.providerRef.deref()
-				const targetMode = getModeBySlug(command.mode, (await provider?.getState())?.customModes)
+				const targetMode = getModeBySlug(command.mode, (await provider?.configurationService.getState())?.customModes)
 				if (targetMode) {
 					await provider?.handleModeSwitch(command.mode)
 				}

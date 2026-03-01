@@ -171,7 +171,7 @@ export class EditTool extends BaseTool<"edit"> {
 
 			// Check if preventFocusDisruption experiment is enabled
 			const provider = task.providerRef.deref()
-			const state = await provider?.getState()
+			const state = await provider?.configurationService.getState()
 			const diagnosticsEnabled = state?.diagnosticsEnabled ?? true
 			const writeDelayMs = state?.writeDelayMs ?? DEFAULT_WRITE_DELAY_MS
 			const isPreventFocusDisruptionEnabled = experiments.isEnabled(

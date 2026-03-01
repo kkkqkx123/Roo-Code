@@ -366,7 +366,7 @@ export class ClineProvider
 		await this.performPreparationTasks(task)
 
 		// Ensure getState() resolves correctly.
-		const state = await this.getState()
+		const state = await this.configurationService.getState()
 
 		if (!state || typeof state.mode !== "string") {
 			throw new Error(t("common:errors.retrieve_current_mode"))
@@ -638,7 +638,7 @@ export class ClineProvider
 			return
 		}
 
-		const { customSupportPrompts } = await visibleProvider.getState()
+		const { customSupportPrompts } = await visibleProvider.configurationService.getState()
 
 		// TODO: Improve type safety for promptType.
 		const prompt = supportPrompt.create(promptType, params, customSupportPrompts)
@@ -667,7 +667,7 @@ export class ClineProvider
 			return
 		}
 
-		const { customSupportPrompts } = await visibleProvider.getState()
+		const { customSupportPrompts } = await visibleProvider.configurationService.getState()
 		const prompt = supportPrompt.create(promptType, params, customSupportPrompts)
 
 		if (command === "terminalAddToContext") {
@@ -707,7 +707,7 @@ export class ClineProvider
 
 		// Initialize out-of-scope variables that need to receive persistent
 		// global state values.
-		this.getState().then(
+		this.configurationService.getState().then(
 			({
 				terminalShellIntegrationTimeout = Terminal.defaultShellIntegrationTimeout,
 				terminalShellIntegrationDisabled = false,
@@ -946,7 +946,7 @@ export class ClineProvider
 			}
 		}
 
-		const { apiConfiguration, enableCheckpoints, checkpointTimeout, experiments } = await this.getState()
+		const { apiConfiguration, enableCheckpoints, checkpointTimeout, experiments } = await this.configurationService.getState()
 
 		const task = new Task({
 			provider: this,
@@ -1695,18 +1695,6 @@ export class ClineProvider
 	 */
 
 	/**
-	 * @deprecated Use ConfigurationService.getState() instead
-	 */
-	async getState(): Promise<
-		Omit<
-			ExtensionState,
-			"clineMessages" | "renderContext" | "hasOpenedModeSelector" | "version" | "shouldShowAnnouncement"
-		>
-	> {
-		return this.configurationService.getState()
-	}
-
-	/**
 	 * Updates a task in the task history and optionally broadcasts the updated history to the webview.
 	 * Now delegates to TaskHistoryStore for per-task file persistence.
 	 *
@@ -2080,7 +2068,7 @@ export class ClineProvider
 			checkpointTimeout,
 			experiments,
 			remoteControlEnabled,
-		} = await this.getState()
+		} = await this.configurationService.getState()
 
 		// Single-open-task invariant: always enforce for user-initiated top-level tasks
 		if (!parentTask) {
@@ -2230,7 +2218,7 @@ export class ClineProvider
 	}
 
 	public async getMode(): Promise<string> {
-		const { mode } = await this.getState()
+		const { mode } = await this.configurationService.getState()
 		return mode
 	}
 
@@ -2241,12 +2229,12 @@ export class ClineProvider
 	// Provider Profiles
 
 	public async getProviderProfiles(): Promise<{ name: string; provider?: string }[]> {
-		const { listApiConfigMeta = [] } = await this.getState()
+		const { listApiConfigMeta = [] } = await this.configurationService.getState()
 		return listApiConfigMeta.map((profile: ProviderSettingsEntry) => ({ name: profile.name, provider: profile.apiProvider }))
 	}
 
 	public async getProviderProfile(): Promise<string> {
-		const { currentApiConfigName = "default" } = await this.getState()
+		const { currentApiConfigName = "default" } = await this.configurationService.getState()
 		return currentApiConfigName
 	}
 
@@ -2280,7 +2268,7 @@ export class ClineProvider
 	}
 
 	private async getTaskProperties(): Promise<DynamicAppProperties & TaskProperties> {
-		const { language = "en", mode, apiConfiguration } = await this.getState()
+		const { language = "en", mode, apiConfiguration } = await this.configurationService.getState()
 
 		const task = this.getCurrentTask()
 		const todoList = task?.todoList

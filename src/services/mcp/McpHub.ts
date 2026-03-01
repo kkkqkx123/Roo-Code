@@ -649,7 +649,7 @@ export class McpHub {
 		if (!provider) {
 			return true // Default to enabled if provider is not available
 		}
-		const state = await provider.getState()
+		const state = await provider.configurationService.getState()
 		return state.mcpEnabled ?? true
 	}
 
