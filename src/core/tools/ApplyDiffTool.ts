@@ -13,7 +13,7 @@ import { EXPERIMENT_IDS, experiments } from "../../shared/experiments"
 import { computeDiffStats, sanitizeUnifiedDiff } from "../diff/stats"
 import type { ToolUse } from "../../shared/tools"
 
-import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { BaseTool, ToolCallbacks } from "./core/BaseTool"
 import {
 	MissingParameterError,
 	RooIgnoreViolationError,

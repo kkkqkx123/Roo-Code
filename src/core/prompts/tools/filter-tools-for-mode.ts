@@ -5,7 +5,7 @@ import { TOOL_GROUPS, ALWAYS_AVAILABLE_TOOLS, TOOL_ALIASES } from "../../../shar
 import { defaultModeSlug } from "../../../shared/modes"
 import type { CodeIndexManager } from "../../../services/code-index/manager"
 import type { McpHub } from "../../../services/mcp/McpHub"
-import { isToolAllowedForMode } from "../../../core/tools/validateToolUse"
+import { isToolAllowedForMode } from "../../../core/tools/core/validateToolUse"
 
 /**
  * Reverse lookup map - maps alias name to canonical tool name.

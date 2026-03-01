@@ -8,7 +8,7 @@ import { formatResponse } from "../prompts/responses"
 import { t } from "../../i18n"
 import { parseMarkdownChecklist } from "./UpdateTodoListTool"
 import { Package } from "../../shared/package"
-import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { BaseTool, ToolCallbacks } from "./core/BaseTool"
 import type { ToolUse } from "../../shared/tools"
 
 interface NewTaskParams {

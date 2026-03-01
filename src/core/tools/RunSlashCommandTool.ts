@@ -2,7 +2,7 @@ import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { getCommand, getCommandNames } from "../../services/command/commands"
 import { EXPERIMENT_IDS, experiments } from "../../shared/experiments"
-import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { BaseTool, ToolCallbacks } from "./core/BaseTool"
 import type { ToolUse } from "../../shared/tools"
 import { getModeBySlug } from "../../shared/modes"
 

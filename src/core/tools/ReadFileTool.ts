@@ -33,7 +33,7 @@ import {
 	processImageFile,
 	ImageMemoryTracker,
 } from "./helpers/imageHelpers"
-import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { BaseTool, ToolCallbacks } from "./core/BaseTool"
 import {
 	MissingParameterError,
 	RooIgnoreViolationError,

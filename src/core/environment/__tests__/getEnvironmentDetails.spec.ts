@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest"
 
 import { getEnvironmentDetails } from "../getEnvironmentDetails"
 import { getFullModeDetails } from "../../../shared/modes"
-import { isToolAllowedForMode } from "../../tools/validateToolUse"
+import { isToolAllowedForMode } from "../../tools/core/validateToolUse"
 import { consolidateTokenUsage as getApiMetrics } from "@coder/core/browser"
 import { listFiles } from "../../../services/glob/list-files"
 import { TerminalRegistry } from "../../../integrations/terminal/TerminalRegistry"

@@ -91,7 +91,7 @@ import { formatResponse } from "../prompts/responses"
 import { buildNativeToolsArrayWithRestrictions } from "./build-tools"
 
 // core modules
-import { ToolRepetitionDetector } from "../tools/ToolRepetitionDetector"
+import { ToolRepetitionDetector } from "../tools/helpers/ToolRepetitionDetector"
 import { restoreTodoListForTask } from "../tools/UpdateTodoListTool"
 import { FileContextTracker } from "../context/tracking/FileContextTracker"
 import { RooIgnoreController, IgnoreMode } from "../ignore/RooIgnoreController"

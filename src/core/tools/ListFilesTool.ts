@@ -9,7 +9,7 @@ import { getReadablePath } from "../../utils/path"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import type { ToolUse } from "../../shared/tools"
 
-import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { BaseTool, ToolCallbacks } from "./core/BaseTool"
 import {
 	MissingParameterError,
 	DirectoryNotFoundToolError,

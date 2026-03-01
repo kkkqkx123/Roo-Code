@@ -1,6 +1,6 @@
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
-import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { BaseTool, ToolCallbacks } from "./core/BaseTool"
 import type { ToolUse } from "../../shared/tools"
 import cloneDeep from "clone-deep"
 import crypto from "crypto"

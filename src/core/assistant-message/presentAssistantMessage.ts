@@ -32,7 +32,7 @@ import { updateTodoListTool } from "../tools/UpdateTodoListTool"
 import { runSlashCommandTool } from "../tools/RunSlashCommandTool"
 import { skillTool } from "../tools/SkillTool"
 import { applyDiffTool as applyDiffToolClass } from "../tools/ApplyDiffTool"
-import { isValidToolName, validateToolUse } from "../tools/validateToolUse"
+import { isValidToolName, validateToolUse } from "../tools/core/validateToolUse"
 import { codebaseSearchTool } from "../tools/CodebaseSearchTool"
 
 import { formatResponse } from "../prompts/responses"

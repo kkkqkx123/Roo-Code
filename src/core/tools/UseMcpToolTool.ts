@@ -6,7 +6,7 @@ import { t } from "../../i18n"
 import type { ToolUse } from "../../shared/tools"
 import { toolNamesMatch } from "../../utils/mcp-name"
 
-import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { BaseTool, ToolCallbacks } from "./core/BaseTool"
 
 interface UseMcpToolParams {
 	server_name: string

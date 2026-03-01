@@ -18,7 +18,7 @@ import { OutputInterceptor } from "../../integrations/terminal/OutputInterceptor
 import { Package } from "../../shared/package"
 import { t } from "../../i18n"
 import { getTaskDirectoryPath } from "../../utils/storage"
-import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { BaseTool, ToolCallbacks } from "./core/BaseTool"
 import { parseCdCommand, removeCdFromCommand } from "../../utils/path"
 import { MissingParameterError, CommandTimeoutError, ShellIntegrationError as ShellIntegrationErrorType } from "../errors/tools/index.js"
 

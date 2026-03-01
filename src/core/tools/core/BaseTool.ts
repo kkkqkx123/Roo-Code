@@ -1,8 +1,8 @@
 import type { ToolName } from "@coder/types"
 
-import { Task } from "../task/Task"
-import type { ToolUse, HandleError, PushToolResult, AskApproval, NativeToolArgs } from "../../shared/tools"
-import { ValidationError, type LogEntry } from "../errors/tools/validation-errors.js"
+import { Task } from "../../task/Task"
+import type { ToolUse, HandleError, PushToolResult, AskApproval, NativeToolArgs } from "../../../shared/tools"
+import { ValidationError, type LogEntry } from "../../errors/tools/validation-errors.js"
 
 /**
  * Callbacks passed to tool execution

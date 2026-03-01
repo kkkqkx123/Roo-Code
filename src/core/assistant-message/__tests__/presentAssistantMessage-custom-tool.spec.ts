@@ -2,7 +2,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { presentAssistantMessage } from "../presentAssistantMessage"
-import { validateToolUse } from "../../tools/validateToolUse"
+import { validateToolUse } from "../../tools/core/validateToolUse"
 
 // Mock dependencies
 vi.mock("../../task/Task")

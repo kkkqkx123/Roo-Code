@@ -2,9 +2,9 @@ import type { ToolName, ModeConfig, ExperimentId, GroupOptions, GroupEntry } fro
 import { toolNames as validToolNames } from "@coder/types"
 import { customToolRegistry } from "@coder/core"
 
-import { type Mode, FileRestrictionError, getModeBySlug, getGroupName } from "../../shared/modes"
-import { EXPERIMENT_IDS } from "../../shared/experiments"
-import { TOOL_GROUPS, ALWAYS_AVAILABLE_TOOLS, TOOL_ALIASES } from "../../shared/tools"
+import { type Mode, FileRestrictionError, getModeBySlug, getGroupName } from "../../../shared/modes"
+import { EXPERIMENT_IDS } from "../../../shared/experiments"
+import { TOOL_GROUPS, ALWAYS_AVAILABLE_TOOLS, TOOL_ALIASES } from "../../../shared/tools"
 
 /**
  * Checks if a tool name is a valid, known tool.

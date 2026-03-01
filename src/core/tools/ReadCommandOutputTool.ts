@@ -5,7 +5,7 @@ import { Task } from "../task/Task"
 import { getTaskDirectoryPath } from "../../utils/storage"
 import { formatResponse } from "../prompts/responses"
 
-import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { BaseTool, ToolCallbacks } from "./core/BaseTool"
 import { MissingParameterError } from "../errors/tools/index.js"
 
 /** Default byte limit for read operations (40KB) */

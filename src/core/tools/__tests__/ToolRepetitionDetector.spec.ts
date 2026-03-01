@@ -4,7 +4,7 @@ import type { ToolName } from "@coder/types"
 
 import type { ToolUse } from "../../../shared/tools"
 
-import { ToolRepetitionDetector } from "../ToolRepetitionDetector"
+import { ToolRepetitionDetector } from "../helpers/ToolRepetitionDetector"
 
 vitest.mock("../../../i18n", () => ({
 	t: vitest.fn((key, options) => {
