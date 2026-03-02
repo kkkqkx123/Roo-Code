@@ -710,13 +710,31 @@ export const webviewMessageHandler = async (
 			vscode.window.showInformationMessage("Task sharing is not available")
 			break
 		case "showTaskWithId":
-			provider.showTaskWithId(message.text!)
+			try {
+				await provider.showTaskWithId(message.text!)
+			} catch (error) {
+				const errorMessage = error instanceof Error ? error.message : String(error)
+				provider.log(`[showTaskWithId] ERROR: ${errorMessage}`)
+				vscode.window.showErrorMessage(`Failed to open task: ${errorMessage}`)
+			}
 			break
 		case "condenseTaskContextRequest":
-			provider.condenseTaskContext(message.text!)
+			try {
+				await provider.condenseTaskContext(message.text!)
+			} catch (error) {
+				const errorMessage = error instanceof Error ? error.message : String(error)
+				provider.log(`[condenseTaskContext] ERROR: ${errorMessage}`)
+				vscode.window.showErrorMessage(`Failed to condense task context: ${errorMessage}`)
+			}
 			break
 		case "deleteTaskWithId":
-			provider.deleteTaskWithId(message.text!)
+			try {
+				await provider.deleteTaskWithId(message.text!)
+			} catch (error) {
+				const errorMessage = error instanceof Error ? error.message : String(error)
+				provider.log(`[deleteTaskWithId] ERROR: ${errorMessage}`)
+				vscode.window.showErrorMessage(`Failed to delete task: ${errorMessage}`)
+			}
 			break
 		case "deleteMultipleTasksWithIds": {
 			const ids = message.ids

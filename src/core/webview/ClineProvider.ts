@@ -948,24 +948,51 @@ export class ClineProvider
 
 		const { apiConfiguration, enableCheckpoints, checkpointTimeout, experiments } = await this.configurationService.getState()
 
-		const task = new Task({
-			provider: this,
-			apiConfiguration,
-			enableCheckpoints,
-			checkpointTimeout,
-			consecutiveMistakeLimit: apiConfiguration.consecutiveMistakeLimit,
-			historyItem,
-			experiments,
-			rootTask: historyItem.rootTask,
-			parentTask: historyItem.parentTask,
-			taskNumber: historyItem.number,
-			workspacePath: historyItem.workspace,
-			onCreated: this.taskCreationCallback,
-			startTask: options?.startTask ?? true,
-			enableBridge: false,
-			// Preserve the status from the history item to avoid overwriting it when the task saves messages
-			initialStatus: historyItem.status,
-		})
+		const shouldStartTask = options?.startTask ?? true
+		
+		// Use Task.create to get the initialization promise when starting from history
+		let task: Task
+		let initPromise: Promise<void> | undefined
+		
+		if (shouldStartTask && historyItem) {
+			// Use Task.create to get the initialization promise
+			const [taskInstance, promise] = Task.create({
+				provider: this,
+				apiConfiguration,
+				enableCheckpoints,
+				checkpointTimeout,
+				consecutiveMistakeLimit: apiConfiguration.consecutiveMistakeLimit,
+				historyItem,
+				experiments,
+				rootTask: historyItem.rootTask,
+				parentTask: historyItem.parentTask,
+				taskNumber: historyItem.number,
+				workspacePath: historyItem.workspace,
+				onCreated: this.taskCreationCallback,
+				enableBridge: false,
+				initialStatus: historyItem.status,
+			})
+			task = taskInstance
+			initPromise = promise
+		} else {
+			task = new Task({
+				provider: this,
+				apiConfiguration,
+				enableCheckpoints,
+				checkpointTimeout,
+				consecutiveMistakeLimit: apiConfiguration.consecutiveMistakeLimit,
+				historyItem,
+				experiments,
+				rootTask: historyItem.rootTask,
+				parentTask: historyItem.parentTask,
+				taskNumber: historyItem.number,
+				workspacePath: historyItem.workspace,
+				onCreated: this.taskCreationCallback,
+				startTask: shouldStartTask,
+				enableBridge: false,
+				initialStatus: historyItem.status,
+			})
+		}
 
 		if (isRehydratingCurrentTask) {
 			// Replace the current task in-place to avoid UI flicker
@@ -1051,6 +1078,16 @@ export class ClineProvider
 					this.log(`[createTaskWithHistoryItem] Error processing pending edit: ${error}`)
 				}
 			}, 100) // Small delay to ensure task is fully ready
+		}
+
+		// Wait for task initialization to complete (messages loaded from history)
+		// This ensures the webview receives the task messages before we switch to chat view
+		// Note: overwriteClineMessages now calls postStateToWebviewWithoutTaskHistory
+		// so we just need to wait a short time for the initial messages to be loaded
+		if (initPromise) {
+			// Wait for the initial state to be ready (messages loaded)
+			// We use a short timeout since we don't need to wait for the full task loop
+			await new Promise<void>((resolve) => setTimeout(resolve, 50))
 		}
 
 		return task
@@ -1442,10 +1479,15 @@ export class ClineProvider
 	}
 
 	async showTaskWithId(id: string) {
+		this.log(`[showTaskWithId] Starting with id: ${id}`)
+		
 		const currentTask = this.getCurrentTask()
 		
-		// If trying to show the current task, no action needed
+		// If trying to show the current task, sync state and switch to chat view
 		if (currentTask && currentTask.taskId === id) {
+			this.log(`[showTaskWithId] Same task, syncing state and sending chatButtonClicked`)
+			// Ensure the webview has the latest state including clineMessages
+			await this.postStateToWebview()
 			await this.postMessageToWebview({ type: "action", action: "chatButtonClicked" })
 			return
 		}
@@ -1460,11 +1502,23 @@ export class ClineProvider
 			}
 		}
 		
-		// Load and display the requested task
-		const { historyItem } = await this.getTaskWithId(id)
-		await this.createTaskWithHistoryItem(historyItem) // Clears existing task.
-		
-		await this.postMessageToWebview({ type: "action", action: "chatButtonClicked" })
+		try {
+			// Load and display the requested task
+			this.log(`[showTaskWithId] Getting task with id: ${id}`)
+			const { historyItem } = await this.getTaskWithId(id)
+			this.log(`[showTaskWithId] Got historyItem: ${historyItem.id}`)
+			
+			this.log(`[showTaskWithId] Creating task with history item`)
+			await this.createTaskWithHistoryItem(historyItem) // Clears existing task.
+			this.log(`[showTaskWithId] Task created successfully`)
+			
+			this.log(`[showTaskWithId] Sending chatButtonClicked`)
+			await this.postMessageToWebview({ type: "action", action: "chatButtonClicked" })
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			this.log(`[showTaskWithId] ERROR: ${errorMessage}`)
+			throw error // Re-throw to let the caller handle it
+		}
 	}
 
 	async exportTaskWithId(id: string) {

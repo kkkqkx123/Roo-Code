@@ -1391,6 +1391,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.clineMessages = newMessages
 		restoreTodoListForTask(this)
 		await this.saveClineMessages()
+		// Notify the webview that messages have been updated
+		const provider = this.providerRef.deref()
+		await provider?.postStateToWebviewWithoutTaskHistory()
 	}
 
 	private async updateClineMessage(message: ClineMessage) {
