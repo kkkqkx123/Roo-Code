@@ -1442,12 +1442,28 @@ export class ClineProvider
 	}
 
 	async showTaskWithId(id: string) {
-		if (id !== this.getCurrentTask()?.taskId) {
-			// Non-current task.
-			const { historyItem } = await this.getTaskWithId(id)
-			await this.createTaskWithHistoryItem(historyItem) // Clears existing task.
+		const currentTask = this.getCurrentTask()
+		
+		// If trying to show the current task, no action needed
+		if (currentTask && currentTask.taskId === id) {
+			await this.postMessageToWebview({ type: "action", action: "chatButtonClicked" })
+			return
 		}
-
+		
+		// Save current task state before switching to ensure persistence
+		if (currentTask) {
+			try {
+				await currentTask.saveClineMessages()
+				this.log(`[showTaskWithId] Saved current task ${currentTask.taskId} state before switching`)
+			} catch (error) {
+				this.log(`[showTaskWithId] Failed to save current task state: ${error instanceof Error ? error.message : String(error)}`)
+			}
+		}
+		
+		// Load and display the requested task
+		const { historyItem } = await this.getTaskWithId(id)
+		await this.createTaskWithHistoryItem(historyItem) // Clears existing task.
+		
 		await this.postMessageToWebview({ type: "action", action: "chatButtonClicked" })
 	}
 

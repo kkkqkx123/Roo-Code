@@ -5,14 +5,14 @@ import type { IndexingState } from "../state-manager"
 // Mock vscode module
 vi.mock("vscode", () => ({
 	EventEmitter: class {
-		private listeners: Function[] = []
+		private listeners: Array<(data: unknown) => void> = []
 
-		event = (listener: Function) => {
+		event = (listener: (data: unknown) => void) => {
 			this.listeners.push(listener)
 			return { dispose: () => {} }
 		}
 
-		fire(data: any) {
+		fire(data: unknown) {
 			this.listeners.forEach((listener) => listener(data))
 		}
 

@@ -2,10 +2,8 @@ import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo
 import { useDeepCompareEffect, useEvent } from "react-use"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import removeMd from "remove-markdown"
-import { VSCodeLink } from "@vscode/webview-ui-toolkit/react"
 import useSound from "use-sound"
 import { LRUCache } from "lru-cache"
-import { Trans } from "react-i18next"
 
 import { useDebounceEffect } from "@src/utils/useDebounceEffect"
 import { appendImages } from "@src/utils/imageUtils"
@@ -43,7 +41,6 @@ import { CheckpointWarning } from "./CheckpointWarning"
 import { QueuedMessages } from "./QueuedMessages"
 import { WorktreeSelector } from "./WorktreeSelector"
 import FileChangesPanel from "./FileChangesPanel"
-import DismissibleUpsell from "../common/DismissibleUpsell"
 import { useScrollLifecycle } from "@src/hooks/useScrollLifecycle"
 
 export interface ChatViewProps {
@@ -1097,6 +1094,15 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		setWasStreaming(isStreaming)
 	}, [isStreaming, lastMessage, wasStreaming, messages.length, ttsEnabled])
 
+	// Track when condensing started to capture timestamp
+	const [condensingTime, setCondensingTime] = useState<number>(0)
+
+	useEffect(() => {
+		if (isCondensing) {
+			setCondensingTime(Date.now())
+		}
+	}, [isCondensing])
+
 	const groupedMessages = useMemo(() => {
 		const filtered: ClineMessage[] = visibleMessages
 
@@ -1235,16 +1241,16 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		const listFilesBatched = batchConsecutive(readFileBatched, isListFilesAsk, synthesizeListFilesBatch)
 		const result = batchConsecutive(listFilesBatched, isEditFileAsk, synthesizeEditFileBatch)
 
-		if (isCondensing) {
+		if (isCondensing && condensingTime > 0) {
 			result.push({
 				type: "say",
 				say: "condense_context",
-				ts: Date.now(),
+				ts: condensingTime,
 				partial: true,
 			} as ClineMessage)
 		}
 		return result
-	}, [isCondensing, visibleMessages])
+	}, [isCondensing, visibleMessages, condensingTime])
 
 	// Scroll lifecycle is managed by a dedicated hook to keep ChatView focused
 	// on message handling and UI orchestration.

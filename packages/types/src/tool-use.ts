@@ -26,7 +26,7 @@ export interface ToolUse<TName extends ToolName = ToolName> {
 	originalName?: string
 	params: Partial<Record<ToolParamName<TName>, string>>
 	partial: boolean
-	nativeArgs?: any
+	nativeArgs?: unknown
 	usedLegacyFormat?: boolean
 }
 

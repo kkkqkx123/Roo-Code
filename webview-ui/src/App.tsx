@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState, useMemo } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { useEvent } from "react-use"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
@@ -75,6 +75,8 @@ const App = () => {
 	const settingsRef = useRef<SettingsViewRef>(null)
 	const chatViewRef = useRef<ChatViewRef>(null)
 
+	const [currentSection, setCurrentSection] = useState<string | undefined>(undefined)
+
 	const switchTab = useCallback(
 		(newTab: Tab) => {
 			setCurrentSection(undefined)
@@ -87,8 +89,6 @@ const App = () => {
 		},
 		[mdmCompliant],
 	)
-
-	const [currentSection, setCurrentSection] = useState<string | undefined>(undefined)
 
 	const onMessage = useCallback(
 		(e: MessageEvent) => {

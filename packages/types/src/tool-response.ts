@@ -24,9 +24,9 @@ export type HandleError = (action: string, error: Error) => Promise<void>
 /**
  * Callback type for pushing tool results to the output.
  */
-export type PushToolResult = (content: string | Array<any>) => void
+export type PushToolResult = (content: string | Array<unknown>) => void
 
 /**
  * Tool response type - can be a simple string or an array of text/image blocks.
  */
-export type ToolResponse = string | Array<any>
+export type ToolResponse = string | Array<unknown>

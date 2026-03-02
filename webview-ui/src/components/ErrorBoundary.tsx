@@ -19,7 +19,7 @@ class ErrorBoundary extends Component<ErrorProps, ErrorState> {
 	}
 
 	static getDerivedStateFromError(error: unknown) {
-		let errorMessage = ""
+		let errorMessage: string
 
 		if (error instanceof Error) {
 			errorMessage = error.stack ?? error.message

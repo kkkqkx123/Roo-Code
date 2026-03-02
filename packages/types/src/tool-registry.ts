@@ -4,8 +4,6 @@
  * This module contains types related to tool registration and management.
  */
 
-import type { ZodType } from "zod"
-import type { ToolName } from "./tool.js"
 import type {
 	ReadFileParams,
 	WriteToFileParams,

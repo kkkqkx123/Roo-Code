@@ -155,7 +155,7 @@ export interface TaskOptions extends CreateTaskOptions {
 	initialTodos?: TodoItem[]
 	workspacePath?: string
 	/** Initial status for the task's history item (e.g., "active" for child tasks) */
-	initialStatus?: "active" | "delegated" | "completed"
+	initialStatus?: "active" | "delegated" | "completed" | "running" | "aborted" | "error"
 }
 
 export class Task extends EventEmitter<TaskEvents> implements TaskLike {
@@ -408,7 +408,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	private providerProfileChangeListener?: (config: { name: string; provider?: string }) => void
 
 	// Initial status for the task's history item (set at creation time to avoid race conditions)
-	private readonly initialStatus?: "active" | "delegated" | "completed"
+	private readonly initialStatus?: "active" | "delegated" | "completed" | "running" | "aborted" | "error"
 
 	// MessageManager for high-level message operations (lazy initialized)
 	private _messageManager?: MessageManager
@@ -1422,6 +1422,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				mode: this._taskMode || defaultModeSlug, // Use the task's own mode, not the current provider mode.
 				apiConfigName: this._taskApiConfigName, // Use the task's own provider profile, not the current provider profile.
 				initialStatus: this.initialStatus,
+				// Map TaskState to HistoryItem status (exclude 'idle' and 'paused')
+				taskState: (this.taskState === 'idle' || this.taskState === 'paused' 
+					? undefined 
+					: this.taskState) as "active" | "completed" | "delegated" | "running" | "aborted" | "error" | undefined,
 			})
 
 			// Emit token/tool usage updates using metrics service throttling
