@@ -4,12 +4,8 @@ import { getCommand, getCommandNames } from "../../services/command/commands"
 import { EXPERIMENT_IDS, experiments } from "../../shared/experiments"
 import { BaseTool, ToolCallbacks } from "./core/BaseTool"
 import type { ToolUse } from "../../shared/tools"
+import type { RunSlashCommandParams } from "./schemas/run_slash_command"
 import { getModeBySlug } from "../../shared/modes"
-
-interface RunSlashCommandParams {
-	command: string
-	args?: string
-}
 
 export class RunSlashCommandTool extends BaseTool<"run_slash_command"> {
 	readonly name = "run_slash_command" as const

@@ -6,12 +6,13 @@ import { CodeIndexManager } from "../../services/code-index/manager"
 import { getWorkspacePath } from "../../utils/path"
 import { formatResponse } from "../prompts/responses"
 import { VectorStoreSearchResult } from "../../services/code-index/interfaces"
-import type { ToolUse, NativeToolArgs } from "../../shared/tools"
+import type { ToolUse } from "../../shared/tools"
+import type { ToolParamsMap } from "./schemas/registry"
 
 import { BaseTool, ToolCallbacks } from "./core/BaseTool"
 
 // Type alias for codebase_search parameters
-type CodebaseSearchParams = NativeToolArgs["codebase_search"]
+type CodebaseSearchParams = ToolParamsMap["codebase_search"]
 
 interface NormalizedQuery {
 	query: string
@@ -30,7 +31,7 @@ interface AggregatedResult {
 export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 	readonly name = "codebase_search" as const
 
-	async execute(params: NativeToolArgs["codebase_search"], task: Task, callbacks: ToolCallbacks): Promise<void> {
+	async execute(params: CodebaseSearchParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { askApproval, handleError, pushToolResult } = callbacks
 
 		// 1. 参数标准化
@@ -267,7 +268,7 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 		try {
 			// 优先使用 nativeArgs（如果可用）
 			if (block.nativeArgs?.queries && Array.isArray(block.nativeArgs.queries)) {
-				const queryTexts = block.nativeArgs.queries.map((q) => {
+				const queryTexts = block.nativeArgs.queries.map((q: string | { query: string }) => {
 					if (typeof q === "string") {
 						return q
 					}

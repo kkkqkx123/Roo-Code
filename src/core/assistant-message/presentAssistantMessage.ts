@@ -7,7 +7,7 @@ import { customToolRegistry } from "@coder/core"
 import { t } from "../../i18n"
 
 import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
-import type { ToolParamName, ToolResponse, ToolUse, McpToolUse } from "../../shared/tools"
+import type { ToolResponse, ToolUse, McpToolUse } from "../../shared/tools"
 
 import { AskIgnoredError } from "../task/AskIgnoredError"
 import { Task } from "../task/Task"

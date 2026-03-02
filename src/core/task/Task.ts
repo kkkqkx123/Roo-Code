@@ -65,7 +65,7 @@ import { t } from "../../i18n"
 import type { ApiMessage } from "../task-persistence"
 import type { ClineAskResponse } from "@coder/types"
 import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
-import { DiffStrategy, type ToolUse, type ToolParamName, toolParamNames } from "../../shared/tools"
+import { DiffStrategy, type ToolUse } from "../../shared/tools"
 import { getModelMaxOutputTokens } from "../../shared/api"
 
 // services

@@ -19,19 +19,16 @@ import { Package } from "../../shared/package"
 import { t } from "../../i18n"
 import { getTaskDirectoryPath } from "../../utils/storage"
 import { BaseTool, ToolCallbacks } from "./core/BaseTool"
+import type { ExecuteCommandParams } from "./schemas/execute_command"
 import { parseCdCommand, removeCdFromCommand } from "../../utils/path"
 import { MissingParameterError, CommandTimeoutError, ShellIntegrationError as ShellIntegrationErrorType } from "../errors/tools/index.js"
-
-interface ExecuteCommandParams {
-	command: string
-	cwd?: string
-}
 
 export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 	readonly name = "execute_command" as const
 
 	async execute(params: ExecuteCommandParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
-		const { command, cwd: customCwd } = params
+		const { command, cwd } = params
+		const customCwd = cwd ?? undefined
 		const { handleError, pushToolResult, askApproval } = callbacks
 
 		try {

@@ -6,10 +6,9 @@ import { customToolRegistry } from "@coder/core"
 import {
 	type ToolUse,
 	type McpToolUse,
-	type ToolParamName,
-	type NativeToolArgs,
-	toolParamNames,
 } from "../../shared/tools"
+import { getToolParamNames } from "../tools/validation"
+import type { ToolParamsMap } from "../tools/schemas/registry"
 import { resolveToolAlias } from "../prompts/tools/filter-tools-for-mode"
 import type {
 	ApiStreamToolCallStartChunk,
@@ -21,9 +20,9 @@ import { ToolRegistry, isToolRegistered } from "../tools/schemas"
 
 /**
  * Helper type to extract properly typed native arguments for a given tool.
- * Returns the type from NativeToolArgs if the tool is defined there, otherwise never.
+ * Returns the type from ToolParamsMap if the tool is defined there, otherwise never.
  */
-type NativeArgsFor<TName extends ToolName> = TName extends keyof NativeToolArgs ? NativeToolArgs[TName] : never
+type NativeArgsFor<TName extends ToolName> = TName extends keyof ToolParamsMap ? ToolParamsMap[TName] : never
 
 /**
  * Parser for native tool calls (OpenAI-style function calling).
@@ -467,11 +466,16 @@ export class NativeToolCallParser {
 		// Build stringified params for display/partial-progress UI.
 		// NOTE: For streaming partial updates, we MUST populate params even for complex types
 		// because tool.handlePartial() methods rely on params to show UI updates.
-		const params: Partial<Record<ToolParamName, string>> = {}
+		const params: Partial<Record<string, string>> = {}
+
+		// Get valid parameter names from schema
+		const validParamNames = new Set(getToolParamNames(name))
 
 		for (const [key, value] of Object.entries(partialArgs)) {
-			if (toolParamNames.includes(key as ToolParamName)) {
-				params[key as ToolParamName] = typeof value === "string" ? value : JSON.stringify(value)
+			// For custom tools, allow all parameters
+			// For native tools, only allow parameters defined in schema
+			if (customToolRegistry.has(name) || validParamNames.has(key)) {
+				params[key] = typeof value === "string" ? value : JSON.stringify(value)
 			}
 		}
 
@@ -787,19 +791,23 @@ export class NativeToolCallParser {
 
 			// Build stringified params for display/logging.
 			// Tool execution MUST use nativeArgs (typed) and does not support legacy fallbacks.
-			const params: Partial<Record<ToolParamName, string>> = {}
+			const params: Partial<Record<string, string>> = {}
+
+			// Get valid parameter names from schema
+			const validParamNames = new Set(getToolParamNames(resolvedName))
 
 			for (const [key, value] of Object.entries(args)) {
-				// Validate parameter name
-				if (!toolParamNames.includes(key as ToolParamName) && !customToolRegistry.has(resolvedName)) {
+				// For custom tools, allow all parameters
+				// For native tools, only allow parameters defined in schema
+				if (!customToolRegistry.has(resolvedName) && !validParamNames.has(key)) {
 					console.warn(`Unknown parameter '${key}' for tool '${resolvedName}'`)
-					console.warn(`Valid param names:`, toolParamNames)
+					console.warn(`Valid param names:`, Array.from(validParamNames))
 					continue
 				}
 
 				// Convert to string for legacy params format
 				const stringValue = typeof value === "string" ? value : JSON.stringify(value)
-				params[key as ToolParamName] = stringValue
+				params[key] = stringValue
 			}
 
 			// Build typed nativeArgs for tool execution.
@@ -836,7 +844,7 @@ export class NativeToolCallParser {
 							nativeArgs = {
 								files: this.convertFileEntries(filesArray),
 								_legacyFormat: true as const,
-							} as NativeArgsFor<TName>
+							} as unknown as NativeArgsFor<TName>
 						}
 					}
 					// New format: { path: "...", mode: "..." }

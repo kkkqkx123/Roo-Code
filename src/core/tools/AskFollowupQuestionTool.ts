@@ -1,18 +1,12 @@
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import type { ToolUse } from "../../shared/tools"
+import type { AskFollowupQuestionParams, FollowUpOption } from "./schemas/ask_followup_question"
 
 import { BaseTool, ToolCallbacks } from "./core/BaseTool"
 
-interface Suggestion {
-	text: string
-	mode?: string
-}
-
-interface AskFollowupQuestionParams {
-	question: string
-	follow_up: Suggestion[]
-}
+// Type alias for backward compatibility
+type Suggestion = FollowUpOption
 
 export class AskFollowupQuestionTool extends BaseTool<"ask_followup_question"> {
 	readonly name = "ask_followup_question" as const

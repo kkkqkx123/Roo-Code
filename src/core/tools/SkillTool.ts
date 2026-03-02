@@ -2,11 +2,7 @@ import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { BaseTool, ToolCallbacks } from "./core/BaseTool"
 import type { ToolUse } from "../../shared/tools"
-
-interface SkillParams {
-	skill: string
-	args?: string
-}
+import type { SkillParams } from "./schemas/skill"
 
 export class SkillTool extends BaseTool<"skill"> {
 	readonly name = "skill" as const

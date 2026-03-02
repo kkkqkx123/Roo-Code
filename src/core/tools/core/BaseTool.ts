@@ -1,7 +1,8 @@
 import type { ToolName } from "@coder/types"
 
 import { Task } from "../../task/Task"
-import type { ToolUse, HandleError, PushToolResult, AskApproval, NativeToolArgs } from "../../../shared/tools"
+import type { ToolUse, HandleError, PushToolResult, AskApproval } from "../../../shared/tools"
+import type { ToolParamsMap } from "../schemas/registry"
 import { ValidationError, type LogEntry } from "../../errors/tools/validation-errors.js"
 
 /**
@@ -16,9 +17,9 @@ export interface ToolCallbacks {
 
 /**
  * Helper type to extract the parameter type for a tool based on its name.
- * If the tool has native args defined in NativeToolArgs, use those; otherwise fall back to any.
+ * If the tool has native args defined in ToolParamsMap, use those; otherwise fall back to any.
  */
-type ToolParams<TName extends ToolName> = TName extends keyof NativeToolArgs ? NativeToolArgs[TName] : any
+type ToolParams<TName extends ToolName> = TName extends keyof ToolParamsMap ? ToolParamsMap[TName] : any
 
 /**
  * Abstract base class for all tools.

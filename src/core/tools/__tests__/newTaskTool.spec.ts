@@ -1,6 +1,7 @@
 // npx vitest core/tools/__tests__/newTaskTool.spec.ts
 
-import type { AskApproval, HandleError, NativeToolArgs, ToolUse } from "../../../shared/tools"
+import type { AskApproval, HandleError, ToolUse } from "../../../shared/tools"
+import type { ToolParamsMap } from "../../schemas/registry"
 
 // Mock vscode module
 vi.mock("vscode", () => ({
@@ -121,7 +122,7 @@ const withNativeArgs = (block: ToolUse<"new_task">): ToolUse<"new_task"> => ({
 		mode: block.params.mode,
 		message: block.params.message,
 		todos: block.params.todos,
-	} as unknown as NativeToolArgs["new_task"],
+	} as unknown as ToolParamsMap["new_task"],
 })
 
 describe("newTaskTool", () => {
