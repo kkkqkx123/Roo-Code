@@ -28,6 +28,7 @@ import { vscode } from "@src/utils/vscode"
 import { buildDocLink } from "@src/utils/docLinks"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { useExtensionState } from "@src/context/ExtensionStateContext"
+import { useModes } from "@src/hooks/useModes"
 import { Section } from "@src/components/settings/Section"
 import {
 	Button,
@@ -76,15 +77,19 @@ const ModesView = () => {
 		customModes,
 	} = useExtensionState()
 
+	// Use useModes hook for mode management
+	const { modes: customModesFromQuery, isLoading: isModesLoading, updateMode, deleteMode } = useModes()
+
+	// Use customModes from extension state (authoritative source)
+	// useModes provides optimistic updates and query management
+	const modes = getAllModes(customModes)
+
 	// Use a local state to track the visually active mode
 	// This prevents flickering when switching modes rapidly by:
 	// 1. Updating the UI immediately when a mode is clicked
 	// 2. Not syncing with the backend mode state (which would cause flickering)
 	// 3. Still sending the mode change to the backend for persistence
 	const [visualMode, setVisualMode] = useState(mode)
-
-	// Build modes fresh each render so search reflects inline rename updates immediately
-	const modes = getAllModes(customModes)
 
 	const [isDialogOpen, setIsDialogOpen] = useState(false)
 	const [selectedPromptContent, setSelectedPromptContent] = useState("")
@@ -151,15 +156,9 @@ const ModesView = () => {
 	const updateCustomMode = useCallback((slug: string, modeConfig: ModeConfig) => {
 		const source = modeConfig.source || "global"
 
-		vscode.postMessage({
-			type: "updateCustomMode",
-			slug,
-			modeConfig: {
-				...modeConfig,
-				source, // Ensure source is set
-			},
-		})
-	}, [])
+		// Use useModes hook for optimistic update
+		updateMode({ slug, updates: { ...modeConfig, source } })
+	}, [updateMode])
 
 	// Helper function to find a mode by slug
 	const findModeBySlug = useCallback(
@@ -1669,10 +1668,8 @@ const ModesView = () => {
 				modeToDelete={modeToDelete}
 				onConfirm={() => {
 					if (modeToDelete) {
-						vscode.postMessage({
-							type: "deleteCustomMode",
-							slug: modeToDelete.slug,
-						})
+						// Use useModes hook for deletion
+						deleteMode(modeToDelete.slug)
 						setShowDeleteConfirm(false)
 						setModeToDelete(null)
 					}

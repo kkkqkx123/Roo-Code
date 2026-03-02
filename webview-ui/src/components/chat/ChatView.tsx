@@ -24,6 +24,7 @@ import { getLatestTodo } from "@coder/todo"
 import { vscode } from "@src/utils/vscode"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { useExtensionState } from "@src/context/ExtensionStateContext"
+import { useChatStore } from "@src/stores/chatStore"
 import { useSelectedModel } from "@src/components/ui/hooks/useSelectedModel"
 import RooHero from "@src/components/welcome/RooHero"
 import RooTips from "@src/components/welcome/RooTips"
@@ -129,17 +130,23 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 	const [inputValue, setInputValue] = useState("")
 	const inputValueRef = useRef(inputValue)
 	const textAreaRef = useRef<HTMLTextAreaElement>(null)
-	const [sendingDisabled, setSendingDisabled] = useState(false)
 	const [selectedImages, setSelectedImages] = useState<string[]>([])
 
-	// We need to hold on to the ask because useEffect > lastMessage will always
-	// let us know when an ask comes in and handle it, but by the time
-	// handleMessage is called, the last message might not be the ask anymore
-	// (it could be a say that followed).
-	const [clineAsk, setClineAsk] = useState<ClineAsk | undefined>(undefined)
-	const [enableButtons, setEnableButtons] = useState<boolean>(false)
-	const [primaryButtonText, setPrimaryButtonText] = useState<string | undefined>(undefined)
-	const [secondaryButtonText, setSecondaryButtonText] = useState<string | undefined>(undefined)
+	// Use chatStore for button states (migrated from local state)
+	const {
+		clineAsk,
+		enableButtons,
+		primaryButtonText,
+		secondaryButtonText,
+		sendingDisabled,
+		setClineAsk,
+		setEnableButtons,
+		setPrimaryButtonText,
+		setSecondaryButtonText,
+		setSendingDisabled,
+		updateButtonStates,
+	} = useChatStore()
+
 	const [_didClickCancel, setDidClickCancel] = useState(false)
 	const virtuosoRef = useRef<VirtuosoHandle>(null)
 	const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({})

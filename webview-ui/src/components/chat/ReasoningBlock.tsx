@@ -20,7 +20,7 @@ export const ReasoningBlock = ({ content, isStreaming, isLast }: ReasoningBlockP
 
 	const [isCollapsed, setIsCollapsed] = useState(reasoningBlockCollapsed)
 
-	const startTimeRef = useRef<number>(() => Date.now())()
+	const [startTime] = useState<number>(() => Date.now())
 	const [elapsed, setElapsed] = useState<number>(0)
 	const contentRef = useRef<HTMLDivElement>(null)
 
@@ -30,12 +30,12 @@ export const ReasoningBlock = ({ content, isStreaming, isLast }: ReasoningBlockP
 
 	useEffect(() => {
 		if (isLast && isStreaming) {
-			const tick = () => setElapsed(Date.now() - startTimeRef.current)
+			const tick = () => setElapsed(Date.now() - startTime)
 			tick()
 			const id = setInterval(tick, 1000)
 			return () => clearInterval(id)
 		}
-	}, [isLast, isStreaming])
+	}, [isLast, isStreaming, startTime])
 
 	const seconds = Math.floor(elapsed / 1000)
 	const secondsLabel = t("chat:reasoning.seconds", { count: seconds })

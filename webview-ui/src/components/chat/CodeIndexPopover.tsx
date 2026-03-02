@@ -43,6 +43,8 @@ import {
 	Checkbox,
 } from "@src/components/ui"
 import { useEscapeKey } from "@src/hooks/useEscapeKey"
+import { useCodeIndexStore } from "@src/stores/codeIndexStore"
+import { useIndexingStatus } from "@src/hooks/useIndexingStatus"
 
 // Default URLs for providers
 const DEFAULT_QDRANT_URL = "http://localhost:6333"
@@ -140,63 +142,49 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 	const SECRET_PLACEHOLDER = "••••••••••••••••"
 	const { t } = useAppTranslation()
 	const { codebaseIndexConfig, codebaseIndexModels, cwd } = useExtensionState()
-	const [open, setOpen] = useState(false)
-	const [isAdvancedSettingsOpen, setIsAdvancedSettingsOpen] = useState(false)
-	const [isSetupSettingsOpen, setIsSetupSettingsOpen] = useState(false)
-	const [isVectorStorageOpen, setIsVectorStorageOpen] = useState(false)
-	const [isIndexingBehaviorOpen, setIsIndexingBehaviorOpen] = useState(false)
+	
+	// Use codeIndexStore for UI state management
+	const {
+		isOpen,
+		saveStatus,
+		saveError,
+		formErrors,
+		isAdvancedSettingsOpen,
+		isSetupSettingsOpen,
+		isVectorStorageOpen,
+		isIndexingBehaviorOpen,
+		initialSettings,
+		currentSettings,
+		indexingStatus,
+		isDiscardDialogShow,
+		setOpen,
+		setSaveStatus,
+		setSaveError,
+		setFormErrors,
+		setIsAdvancedSettingsOpen,
+		setIsSetupSettingsOpen,
+		setIsVectorStorageOpen,
+		setIsIndexingBehaviorOpen,
+		setIsDiscardDialogShow,
+		setInitialSettings,
+		setCurrentSettings,
+		updateSetting,
+		setIndexingStatus,
+		resetSettings,
+	} = useCodeIndexStore()
 
-	const [indexingStatus, setIndexingStatus] = useState<IndexingStatus>(externalIndexingStatus)
+	// Use useIndexingStatus hook for polling (optional - can use external status instead)
+	// const { data: polledStatus } = useIndexingStatus(cwd)
 
-	const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
-	const [saveError, setSaveError] = useState<string | null>(null)
-
-	// Form validation state
-	const [formErrors, setFormErrors] = useState<Record<string, string>>({})
-
-	// Discard changes dialog state
-	const [isDiscardDialogShow, setDiscardDialogShow] = useState(false)
+	const [open, setOpenLocal] = useState(false)
 	const confirmDialogHandler = useRef<(() => void) | null>(null)
 
-	// Default settings template
-	const getDefaultSettings = (): LocalCodeIndexSettings => ({
-		codebaseIndexEnabled: true,
-		codebaseIndexQdrantUrl: "",
-		codebaseIndexEmbedderProvider: "openai",
-		codebaseIndexEmbedderBaseUrl: "",
-		codebaseIndexEmbedderModelId: "",
-		codebaseIndexEmbedderModelDimension: undefined,
-		codebaseIndexSearchMaxResults: CODEBASE_INDEX_DEFAULTS.DEFAULT_SEARCH_RESULTS,
-		codebaseIndexSearchMinScore: CODEBASE_INDEX_DEFAULTS.DEFAULT_SEARCH_MIN_SCORE,
-		vectorStorageMode: "auto",
-		vectorStoragePreset: "medium",
-		vectorStorageThresholds: {
-			tiny: 2000,
-			small: 10000,
-			medium: 100000,
-			large: 1000000,
-		},
-		codeIndexOpenAiKey: "",
-		codeIndexQdrantApiKey: "",
-		codebaseIndexOpenAiCompatibleApiKey: "",
-		codebaseIndexGeminiApiKey: "",
-		manualIndexingOnly: false,
-		autoUpdateIndex: true,
-		codebaseIndexAllowedProjects: [],
-	})
-
-	// Initial settings state - stores the settings when popover opens
-	const [initialSettings, setInitialSettings] = useState<LocalCodeIndexSettings>(getDefaultSettings())
-
-	// Current settings state - tracks user changes
-	const [currentSettings, setCurrentSettings] = useState<LocalCodeIndexSettings>(getDefaultSettings())
-
-	// Update indexing status from parent
+	// Sync external indexing status to store
 	useEffect(() => {
 		setIndexingStatus(externalIndexingStatus)
-	}, [externalIndexingStatus])
+	}, [externalIndexingStatus, setIndexingStatus])
 
-	// Initialize settings from global state
+	// Initialize settings from global state - single effect
 	useEffect(() => {
 		if (codebaseIndexConfig) {
 			const settings = {
@@ -230,44 +218,22 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 			}
 			setInitialSettings(settings)
 			setCurrentSettings(settings)
-
-			// Request secret status to check if secrets exist
 			vscode.postMessage({ type: "requestCodeIndexSecretStatus" })
 		}
-	}, [codebaseIndexConfig])
+	}, [codebaseIndexConfig, setInitialSettings, setCurrentSettings])
 
-	// Request initial indexing status
+	// Combined message listener effect - reduces from 3 separate effects to 1
 	useEffect(() => {
 		if (open) {
 			vscode.postMessage({ type: "requestIndexingStatus" })
 			vscode.postMessage({ type: "requestCodeIndexSecretStatus" })
 		}
-		const handleMessage = (event: MessageEvent) => {
-			if (event.data.type === "workspaceUpdated") {
-				// When workspace changes, request updated indexing status
-				if (open) {
-					vscode.postMessage({ type: "requestIndexingStatus" })
-					vscode.postMessage({ type: "requestCodeIndexSecretStatus" })
-				}
-			}
-		}
 
-		window.addEventListener("message", handleMessage)
-		return () => window.removeEventListener("message", handleMessage)
-	}, [open])
-
-	// Use a ref to capture current settings for the save handler
-	const currentSettingsRef = useRef(currentSettings)
-
-	// Update ref when current settings change
-	useEffect(() => {
-		currentSettingsRef.current = currentSettings
-	}, [currentSettings])
-
-	// Listen for indexing status updates and save responses
-	useEffect(() => {
 		const handleMessage = (event: MessageEvent<any>) => {
-			if (event.data.type === "indexingStatusUpdate") {
+			if (event.data.type === "workspaceUpdated" && open) {
+				vscode.postMessage({ type: "requestIndexingStatus" })
+				vscode.postMessage({ type: "requestCodeIndexSecretStatus" })
+			} else if (event.data.type === "indexingStatusUpdate") {
 				if (!event.data.values.workspacePath || event.data.values.workspacePath === cwd) {
 					setIndexingStatus({
 						systemStatus: event.data.values.systemStatus,
@@ -280,44 +246,20 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 			} else if (event.data.type === "codeIndexSettingsSaved") {
 				if (event.data.success) {
 					setSaveStatus("saved")
-					// Note: We don't update settings here to avoid race conditions
-					// The updated state will be received via the 'state' message from postStateToWebview()
-					// Request secret status to ensure we have the latest state
 					vscode.postMessage({ type: "requestCodeIndexSecretStatus" })
-					
-					// Clear save status after a short delay
-					setTimeout(() => {
-						setSaveStatus("idle")
-					}, 1000)
+					setTimeout(() => setSaveStatus("idle"), 1000)
 				} else {
 					setSaveStatus("error")
 					setSaveError(event.data.error || t("settings:codeIndex.saveError"))
-					// Clear error message after 5 seconds
 					setTimeout(() => {
 						setSaveStatus("idle")
 						setSaveError(null)
 					}, 5000)
 				}
-			}
-		}
-
-		window.addEventListener("message", handleMessage)
-		return () => window.removeEventListener("message", handleMessage)
-	}, [t, cwd])
-
-	// Listen for secret status
-	useEffect(() => {
-		const handleMessage = (event: MessageEvent) => {
-			if (event.data.type === "codeIndexSecretStatus") {
-				// Update settings to show placeholders for existing secrets
+			} else if (event.data.type === "codeIndexSecretStatus") {
 				const secretStatus = event.data.values
-
-				// Update both current and initial settings based on what secrets exist
 				const updateWithSecrets = (prev: LocalCodeIndexSettings): LocalCodeIndexSettings => {
 					const updated = { ...prev }
-
-					// Only update to placeholder if the field is currently empty or already a placeholder
-					// This preserves user input when they're actively editing
 					if (!prev.codeIndexOpenAiKey || prev.codeIndexOpenAiKey === SECRET_PLACEHOLDER) {
 						updated.codeIndexOpenAiKey = secretStatus.hasOpenAiKey ? SECRET_PLACEHOLDER : ""
 					}
@@ -335,22 +277,28 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 					if (!prev.codebaseIndexGeminiApiKey || prev.codebaseIndexGeminiApiKey === SECRET_PLACEHOLDER) {
 						updated.codebaseIndexGeminiApiKey = secretStatus.hasGeminiApiKey ? SECRET_PLACEHOLDER : ""
 					}
-
 					return updated
 				}
-
-				// Only update settings if we're not in the middle of saving
-				// After save is complete (saved status), we still want to update to maintain consistency
+				// Only update when not saving to avoid race conditions
 				if (saveStatus === "idle" || saveStatus === "saved") {
-					setCurrentSettings(updateWithSecrets)
-					setInitialSettings(updateWithSecrets)
+					const updatedSettings = updateWithSecrets(currentSettings)
+					setCurrentSettings(updatedSettings)
+					setInitialSettings(updatedSettings)
 				}
 			}
 		}
 
 		window.addEventListener("message", handleMessage)
 		return () => window.removeEventListener("message", handleMessage)
-	}, [saveStatus])
+	}, [open, cwd, t, saveStatus, setIndexingStatus, setSaveStatus, setSaveError, setCurrentSettings, setInitialSettings, currentSettings])
+
+	// Use a ref to capture current settings for the save handler
+	const currentSettingsRef = useRef(currentSettings)
+
+	// Update ref when current settings change
+	useEffect(() => {
+		currentSettingsRef.current = currentSettings
+	}, [currentSettings])
 
 	// Generic comparison function that detects changes between initial and current settings
 	const hasUnsavedChanges = useMemo(() => {
@@ -381,15 +329,13 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 		return false
 	}, [currentSettings, initialSettings])
 
-	const updateSetting = (key: keyof LocalCodeIndexSettings, value: any) => {
-		setCurrentSettings((prev) => ({ ...prev, [key]: value }))
+	const handleUpdateSetting = (key: keyof LocalCodeIndexSettings, value: any) => {
+		updateSetting(key, value)
 		// Clear validation error for this field when user starts typing
 		if (formErrors[key]) {
-			setFormErrors((prev) => {
-				const newErrors = { ...prev }
-				delete newErrors[key]
-				return newErrors
-			})
+			const newErrors = { ...formErrors }
+			delete newErrors[key]
+			setFormErrors(newErrors)
 		}
 	}
 
@@ -442,25 +388,25 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 		(then: () => void) => {
 			if (hasUnsavedChanges) {
 				confirmDialogHandler.current = then
-				setDiscardDialogShow(true)
+				setIsDiscardDialogShow(true)
 			} else {
 				then()
 			}
 		},
-		[hasUnsavedChanges],
+		[hasUnsavedChanges, setIsDiscardDialogShow],
 	)
 
 	const onConfirmDialogResult = useCallback(
 		(confirm: boolean) => {
 			if (confirm) {
 				// Discard changes: Reset to initial settings
-				setCurrentSettings(initialSettings)
+				resetSettings()
 				setFormErrors({}) // Clear any validation errors
 				confirmDialogHandler.current?.() // Execute the pending action (e.g., close popover)
 			}
-			setDiscardDialogShow(false)
+			setIsDiscardDialogShow(false)
 		},
-		[initialSettings],
+		[resetSettings, setFormErrors, setIsDiscardDialogShow],
 	)
 
 	// Handle popover close with unsaved changes check
@@ -1436,7 +1382,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 			</Popover>
 
 			{/* Discard Changes Dialog */}
-			<AlertDialog open={isDiscardDialogShow} onOpenChange={setDiscardDialogShow}>
+			<AlertDialog open={isDiscardDialogShow} onOpenChange={setIsDiscardDialogShow}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle className="flex items-center gap-2">

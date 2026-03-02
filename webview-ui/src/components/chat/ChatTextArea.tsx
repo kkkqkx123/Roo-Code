@@ -24,6 +24,7 @@ import {
 import { cn } from "@src/lib/utils"
 import { convertToMentionPath } from "@src/utils/path-mentions"
 import { StandardTooltip } from "@src/components/ui"
+import { useChatTextArea } from "./hooks/useChatTextArea"
 
 import Thumbnails from "../common/Thumbnails"
 import { ModeSelector } from "./ModeSelector"
@@ -109,104 +110,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			}
 		}, [listApiConfigMeta, currentApiConfigName])
 
-		const [gitCommits, setGitCommits] = useState<any[]>([])
-		const [showDropdown, setShowDropdown] = useState(false)
-		const [fileSearchResults, setFileSearchResults] = useState<SearchResult[]>([])
-		const [searchLoading, setSearchLoading] = useState(false)
-		const [searchRequestId, setSearchRequestId] = useState<string>("")
-
-		// Close dropdown when clicking outside.
-		useEffect(() => {
-			const handleClickOutside = () => {
-				if (showDropdown) {
-					setShowDropdown(false)
-				}
-			}
-
-			document.addEventListener("mousedown", handleClickOutside)
-			return () => document.removeEventListener("mousedown", handleClickOutside)
-		}, [showDropdown])
-
-		// Handle enhanced prompt response and search results.
-		useEffect(() => {
-			const messageHandler = (event: MessageEvent) => {
-				const message = event.data
-
-				if (message.type === "enhancedPrompt") {
-					if (message.text && textAreaRef.current) {
-						try {
-							// Use execCommand to replace text while preserving undo history
-							if (document.execCommand) {
-								// Use native browser methods to preserve undo stack
-								const textarea = textAreaRef.current
-
-								// Focus the textarea to ensure it's the active element
-								textarea.focus()
-
-								// Select all text first
-								textarea.select()
-								document.execCommand("insertText", false, message.text)
-							} else {
-								setInputValue(message.text)
-							}
-						} catch {
-							setInputValue(message.text)
-						}
-					}
-
-					setIsEnhancingPrompt(false)
-				} else if (message.type === "insertTextIntoTextarea") {
-					if (message.text && textAreaRef.current) {
-						// Insert the command text at the current cursor position
-						const textarea = textAreaRef.current
-						const currentValue = inputValue
-						const cursorPos = textarea.selectionStart || 0
-
-						// Check if we need to add a space before the command
-						const textBefore = currentValue.slice(0, cursorPos)
-						const needsSpaceBefore = textBefore.length > 0 && !textBefore.endsWith(" ")
-						const prefix = needsSpaceBefore ? " " : ""
-
-						// Insert the text at cursor position
-						const newValue =
-							currentValue.slice(0, cursorPos) +
-							prefix +
-							message.text +
-							" " +
-							currentValue.slice(cursorPos)
-						setInputValue(newValue)
-
-						// Set cursor position after the inserted text
-						const newCursorPos = cursorPos + prefix.length + message.text.length + 1
-						setTimeout(() => {
-							if (textAreaRef.current) {
-								textAreaRef.current.focus()
-								textAreaRef.current.setSelectionRange(newCursorPos, newCursorPos)
-							}
-						}, 0)
-					}
-				} else if (message.type === "commitSearchResults") {
-					const commits = message.commits.map((commit: any) => ({
-						type: ContextMenuOptionType.Git,
-						value: commit.hash,
-						label: commit.subject,
-						description: `${commit.shortHash} by ${commit.author} on ${commit.date}`,
-						icon: "$(git-commit)",
-					}))
-
-					setGitCommits(commits)
-				} else if (message.type === "fileSearchResults") {
-					setSearchLoading(false)
-					if (message.requestId === searchRequestId) {
-						setFileSearchResults(message.results || [])
-					}
-				}
-			}
-
-			window.addEventListener("message", messageHandler)
-			return () => window.removeEventListener("message", messageHandler)
-		}, [setInputValue, searchRequestId, inputValue])
-
 		const [isDraggingOver, setIsDraggingOver] = useState(false)
 		const [textAreaBaseHeight, setTextAreaBaseHeight] = useState<number | undefined>(undefined)
 		const [showContextMenu, setShowContextMenu] = useState(false)
@@ -220,6 +123,22 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const [intendedCursorPosition, setIntendedCursorPosition] = useState<number | null>(null)
 		const contextMenuContainerRef = useRef<HTMLDivElement>(null)
 		const [isEnhancingPrompt, setIsEnhancingPrompt] = useState(false)
+
+		// Use custom hook for text area state and message handling
+		const {
+			gitCommits,
+			fileSearchResults,
+			searchLoading,
+			showDropdown,
+			setShowDropdown,
+			setSearchLoading,
+			setFileSearchResults,
+		} = useChatTextArea({
+			inputValue,
+			setInputValue,
+			setShowContextMenu,
+			setIsEnhancingPrompt,
+		})
 		const [isFocused, setIsFocused] = useState(false)
 
 		// Use custom hook for prompt history navigation
@@ -663,7 +582,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 									searchTimeoutRef.current = setTimeout(() => {
 										// Generate a request ID for this search.
 										const reqId = Math.random().toString(36).substring(2, 9)
-										setSearchRequestId(reqId)
 										setSearchLoading(true)
 
 										// Send message to extension to search files.
@@ -694,7 +612,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				// Reset history navigation when user types (non-urgent, outside batch)
 				resetOnInputChange()
 			},
-			[setInputValue, setSearchRequestId, setFileSearchResults, setSearchLoading, resetOnInputChange, isTailAppend, shouldComputeMenu],
+			[setInputValue, setFileSearchResults, setSearchLoading, resetOnInputChange, isTailAppend, shouldComputeMenu],
 		)
 
 		useEffect(() => {

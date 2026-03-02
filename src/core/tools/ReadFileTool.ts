@@ -673,11 +673,11 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 		// Handle both legacy and new format for partial display
 		let filePath = ""
 		if (block.nativeArgs) {
-			if (isLegacyReadFileParams(block.nativeArgs)) {
+			if (isLegacyReadFileParams(block.nativeArgs as any)) {
 				// Legacy format - show first file
-				filePath = block.nativeArgs.files[0]?.path ?? ""
+				filePath = (block.nativeArgs as any).files[0]?.path ?? ""
 			} else {
-				filePath = block.nativeArgs.path ?? ""
+				filePath = (block.nativeArgs as any).path ?? ""
 			}
 		}
 

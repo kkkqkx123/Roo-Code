@@ -42,6 +42,8 @@ import { vscode } from "@src/utils/vscode"
 import { cn } from "@src/lib/utils"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { ExtensionStateContextType, useExtensionState } from "@src/context/ExtensionStateContext"
+import { useSettingsStore } from "@src/stores/settingsStore"
+import { useStore } from "zustand"
 import {
 	AlertDialog,
 	AlertDialogContent,
@@ -126,8 +128,23 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 	const extensionState = useExtensionState()
 	const { currentApiConfigName, listApiConfigMeta, uriScheme, settingsImportedAt } = extensionState
 
+	// Use settingsStore for state management
+	const store = useSettingsStore()
+	const {
+		cachedState,
+		originalState,
+		isDirty,
+		setCachedState,
+		updateCachedField,
+		commitChanges,
+		resetChanges,
+		importSettings,
+	} = store
+
+	// Helper to get current store state (for use in callbacks)
+	const getSettingsStoreState = () => useSettingsStore.getState()
+
 	const [isDiscardDialogShow, setDiscardDialogShow] = useState(false)
-	const [isChangeDetected, setChangeDetected] = useState(false)
 	const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined)
 	const [activeTab, setActiveTab] = useState<SectionName>(
 		targetSection && sectionNames.includes(targetSection as SectionName)
@@ -142,8 +159,6 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 
 	const prevApiConfigName = useRef(currentApiConfigName)
 	const confirmDialogHandler = useRef<() => void>()
-
-	const [cachedState, setCachedState] = useState(() => extensionState)
 
 	const {
 		alwaysAllowReadOnly,
@@ -205,143 +220,128 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 
 	const apiConfiguration = useMemo(() => cachedState.apiConfiguration ?? {}, [cachedState.apiConfiguration])
 
+	// Sync settings when API config name changes
 	useEffect(() => {
-		// Update only when currentApiConfigName is changed.
-		// Expected to be triggered by loadApiConfiguration/upsertApiConfiguration.
 		if (prevApiConfigName.current === currentApiConfigName) {
 			return
 		}
 
-		setCachedState((prevCachedState) => ({ ...prevCachedState, ...extensionState }))
+		importSettings(extensionState)
 		prevApiConfigName.current = currentApiConfigName
-		setChangeDetected(false)
-	}, [currentApiConfigName, extensionState])
+	}, [currentApiConfigName, extensionState, importSettings])
 
-	// Bust the cache when settings are imported.
+	// Sync settings when settings are imported
 	useEffect(() => {
 		if (settingsImportedAt) {
-			setCachedState((prevCachedState) => ({ ...prevCachedState, ...extensionState }))
-			setChangeDetected(false)
+			importSettings(extensionState)
 		}
-	}, [settingsImportedAt, extensionState])
+	}, [settingsImportedAt, extensionState, importSettings])
 
-	const setCachedStateField: SetCachedStateField<keyof ExtensionStateContextType> = useCallback((field, value) => {
-		setCachedState((prevState) => {
-			if (prevState[field] === value) {
-				return prevState
+	const setCachedStateField: SetCachedStateField<keyof ExtensionStateContextType> = useCallback(
+		(field, value) => {
+			// Only update fields that exist in cachedState and are valid
+			// Skip 'theme' and other invalid fields
+			if (field in cachedState && field !== "theme") {
+				updateCachedField(field as keyof typeof cachedState, value as any)
 			}
-
-			setChangeDetected(true)
-			return { ...prevState, [field]: value }
-		})
-	}, [])
+		},
+		[updateCachedField, cachedState],
+	)
 
 	const setApiConfigurationField = useCallback(
 		<K extends keyof ProviderSettings>(field: K, value: ProviderSettings[K], isUserAction: boolean = true) => {
-			setCachedState((prevState) => {
-				if (prevState.apiConfiguration?.[field] === value) {
-					return prevState
+			const prevState = getSettingsStoreState()
+			const previousValue = prevState.cachedState.apiConfiguration?.[field]
+
+			if (previousValue === value) {
+				return
+			}
+
+			// Helper to check if two values are semantically equal
+			const areValuesEqual = (a: any, b: any): boolean => {
+				if (a === b) return true
+				if (a == null && b == null) return true
+				if (typeof a !== typeof b) return false
+				if (typeof a === "object" && typeof b === "object") {
+					return JSON.stringify(a) === JSON.stringify(b)
 				}
+				return false
+			}
 
-				const previousValue = prevState.apiConfiguration?.[field]
+			// Only skip change detection for automatic initialization (not user actions)
+			const isInitialSync =
+				!isUserAction &&
+				(previousValue === undefined || previousValue === "" || previousValue === null) &&
+				value !== undefined &&
+				value !== "" &&
+				value !== null
 
-				// Helper to check if two values are semantically equal
-				const areValuesEqual = (a: any, b: any): boolean => {
-					if (a === b) return true
-					if (a == null && b == null) return true
-					if (typeof a !== typeof b) return false
-					if (typeof a === "object" && typeof b === "object") {
-						return JSON.stringify(a) === JSON.stringify(b)
-					}
-					return false
-				}
+			// Also skip if it's an automatic sync with semantically equal values
+			const isAutomaticNoOpSync = !isUserAction && areValuesEqual(previousValue, value)
 
-				// Only skip change detection for automatic initialization (not user actions)
-				// This prevents the dirty state when the component initializes and auto-syncs values
-				const isInitialSync =
-					!isUserAction &&
-					(previousValue === undefined || previousValue === "" || previousValue === null) &&
-					value !== undefined &&
-					value !== "" &&
-					value !== null
-
-				// Also skip if it's an automatic sync with semantically equal values
-				const isAutomaticNoOpSync = !isUserAction && areValuesEqual(previousValue, value)
-
-				if (!isInitialSync && !isAutomaticNoOpSync) {
-					setChangeDetected(true)
-				}
-				return { ...prevState, apiConfiguration: { ...prevState.apiConfiguration, [field]: value } }
-			})
+			if (!isInitialSync && !isAutomaticNoOpSync) {
+				const currentApiConfig = prevState.cachedState.apiConfiguration || {}
+				updateCachedField("apiConfiguration", { ...currentApiConfig, [field]: value })
+			} else {
+				// Still update the state without marking as dirty
+				const currentApiConfig = prevState.cachedState.apiConfiguration || {}
+				setCachedState({
+					...prevState.cachedState,
+					apiConfiguration: { ...currentApiConfig, [field]: value },
+				})
+			}
 		},
-		[],
+		[updateCachedField, setCachedState],
 	)
 
-	const setExperimentEnabled: SetExperimentEnabled = useCallback((id: ExperimentId, enabled: boolean) => {
-		setCachedState((prevState) => {
-			if (prevState.experiments?.[id] === enabled) {
-				return prevState
+	const setExperimentEnabled: SetExperimentEnabled = useCallback(
+		(id, enabled) => {
+			const state = getSettingsStoreState()
+			if (state.cachedState.experiments?.[id] === enabled) {
+				return
 			}
+			updateCachedField("experiments", { ...state.cachedState.experiments, [id]: enabled })
+		},
+		[updateCachedField],
+	)
 
-			setChangeDetected(true)
-			return { ...prevState, experiments: { ...prevState.experiments, [id]: enabled } }
-		})
-	}, [])
+	const setDebug = useCallback(
+		(debug: boolean) => {
+			updateCachedField("debug", debug)
+		},
+		[updateCachedField],
+	)
 
-	const setDebug = useCallback((debug: boolean) => {
-		setCachedState((prevState) => {
-			if (prevState.debug === debug) {
-				return prevState
+	const setImageGenerationProvider = useCallback(
+		(provider: ImageGenerationProvider) => {
+			updateCachedField("imageGenerationProvider", provider)
+		},
+		[updateCachedField],
+	)
+
+	const setOpenRouterImageApiKey = useCallback(
+		(apiKey: string) => {
+			updateCachedField("openRouterImageApiKey", apiKey)
+		},
+		[updateCachedField],
+	)
+
+	const setImageGenerationSelectedModel = useCallback(
+		(model: string) => {
+			updateCachedField("openRouterImageGenerationSelectedModel", model)
+		},
+		[updateCachedField],
+	)
+
+	const setCustomSupportPromptsField = useCallback(
+		(prompts: Record<string, string | undefined>) => {
+			const state = getSettingsStoreState()
+			if (JSON.stringify(state.cachedState.customSupportPrompts) !== JSON.stringify(prompts)) {
+				updateCachedField("customSupportPrompts", prompts)
 			}
-
-			setChangeDetected(true)
-			return { ...prevState, debug }
-		})
-	}, [])
-
-	const setImageGenerationProvider = useCallback((provider: ImageGenerationProvider) => {
-		setCachedState((prevState) => {
-			if (prevState.imageGenerationProvider !== provider) {
-				setChangeDetected(true)
-			}
-
-			return { ...prevState, imageGenerationProvider: provider }
-		})
-	}, [])
-
-	const setOpenRouterImageApiKey = useCallback((apiKey: string) => {
-		setCachedState((prevState) => {
-			if (prevState.openRouterImageApiKey !== apiKey) {
-				setChangeDetected(true)
-			}
-
-			return { ...prevState, openRouterImageApiKey: apiKey }
-		})
-	}, [])
-
-	const setImageGenerationSelectedModel = useCallback((model: string) => {
-		setCachedState((prevState) => {
-			if (prevState.openRouterImageGenerationSelectedModel !== model) {
-				setChangeDetected(true)
-			}
-
-			return { ...prevState, openRouterImageGenerationSelectedModel: model }
-		})
-	}, [])
-
-	const setCustomSupportPromptsField = useCallback((prompts: Record<string, string | undefined>) => {
-		setCachedState((prevState) => {
-			const previousStr = JSON.stringify(prevState.customSupportPrompts)
-			const newStr = JSON.stringify(prompts)
-
-			if (previousStr === newStr) {
-				return prevState
-			}
-
-			setChangeDetected(true)
-			return { ...prevState, customSupportPrompts: prompts }
-		})
-	}, [])
+		},
+		[updateCachedField],
+	)
 
 	const isSettingValid = !errorMessage
 
@@ -361,9 +361,6 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 					alwaysAllowModeSwitch,
 					allowedCommands: allowedCommands ?? [],
 					deniedCommands: deniedCommands ?? [],
-					// Note that we use `null` instead of `undefined` since `JSON.stringify`
-					// will omit `undefined` when serializing the object and passing it to the
-					// extension host. We may need to do the same for other nullable fields.
 					allowedMaxRequests: allowedMaxRequests ?? null,
 					allowedMaxCost: allowedMaxCost ?? null,
 					autoCondenseContext,
@@ -417,20 +414,20 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 			vscode.postMessage({ type: "upsertApiConfiguration", text: currentApiConfigName, apiConfiguration })
 			vscode.postMessage({ type: "debugSetting", bool: cachedState.debug })
 
-			setChangeDetected(false)
+			commitChanges()
 		}
 	}
 
 	const checkUnsaveChanges = useCallback(
 		(then: () => void) => {
-			if (isChangeDetected) {
+			if (isDirty) {
 				confirmDialogHandler.current = then
 				setDiscardDialogShow(true)
 			} else {
 				then()
 			}
 		},
-		[isChangeDetected],
+		[isDirty],
 	)
 
 	useImperativeHandle(ref, () => ({ checkUnsaveChanges }), [checkUnsaveChanges])
@@ -439,13 +436,11 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 		(confirm: boolean) => {
 			if (confirm) {
 				// Discard changes: Reset state and flag
-				setCachedState(extensionState) // Revert to original state
-				setChangeDetected(false) // Reset change flag
-				confirmDialogHandler.current?.() // Execute the pending action (e.g., tab switch)
+				resetChanges()
+				confirmDialogHandler.current?.()
 			}
-			// If confirm is false (Cancel), do nothing, dialog closes automatically
 		},
-		[extensionState], // Depend on extensionState to get the latest original state
+		[resetChanges],
 	)
 
 	// Handle tab changes with unsaved changes check
@@ -639,7 +634,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 						content={
 							!isSettingValid
 								? errorMessage
-								: isChangeDetected
+								: isDirty
 									? t("settings:header.saveButtonTooltip")
 									: t("settings:header.nothingChangedTooltip")
 						}>
@@ -647,7 +642,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 							variant={isSettingValid ? "primary" : "secondary"}
 							className={!isSettingValid ? "!border-vscode-errorForeground" : ""}
 							onClick={handleSubmit}
-							disabled={!isChangeDetected || !isSettingValid}
+							disabled={!isDirty || !isSettingValid}
 							data-testid="save-button">
 							{t("settings:common.save")}
 						</Button>
@@ -742,7 +737,6 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 												values: { oldName, newName },
 												apiConfiguration,
 											})
-											prevApiConfigName.current = newName
 										}}
 										onUpsertConfig={(configName: string) =>
 											vscode.postMessage({
@@ -803,10 +797,10 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 						{/* Notifications Section */}
 						{renderTab === "notifications" && (
 							<NotificationSettings
-								ttsEnabled={ttsEnabled}
-								ttsSpeed={ttsSpeed}
-								soundEnabled={soundEnabled}
-								soundVolume={soundVolume}
+								ttsEnabled={ttsEnabled ?? true}
+								ttsSpeed={ttsSpeed ?? 1.0}
+								soundEnabled={soundEnabled ?? true}
+								soundVolume={soundVolume ?? 0.5}
 								setCachedStateField={setCachedStateField}
 							/>
 						)}
@@ -814,22 +808,22 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 						{/* Context Management Section */}
 						{renderTab === "contextManagement" && (
 							<ContextManagementSettings
-								autoCondenseContext={autoCondenseContext}
-								autoCondenseContextPercent={autoCondenseContextPercent}
+								autoCondenseContext={autoCondenseContext ?? true}
+								autoCondenseContextPercent={autoCondenseContextPercent ?? 100}
 								listApiConfigMeta={listApiConfigMeta ?? []}
-								maxOpenTabsContext={maxOpenTabsContext}
+								maxOpenTabsContext={maxOpenTabsContext ?? 20}
 								maxWorkspaceFiles={maxWorkspaceFiles ?? 200}
-								ignoreMode={ignoreMode}
-								enableSubfolderRules={enableSubfolderRules}
-								maxImageFileSize={maxImageFileSize}
-								maxTotalImageSize={maxTotalImageSize}
-								profileThresholds={profileThresholds}
-								includeDiagnosticMessages={includeDiagnosticMessages}
-								maxDiagnosticMessages={maxDiagnosticMessages}
-								writeDelayMs={writeDelayMs}
-								includeCurrentTime={includeCurrentTime}
-								includeCurrentCost={includeCurrentCost}
-								maxGitStatusFiles={maxGitStatusFiles}
+								ignoreMode={ignoreMode ?? "both"}
+								enableSubfolderRules={enableSubfolderRules ?? false}
+								maxImageFileSize={maxImageFileSize ?? 5}
+								maxTotalImageSize={maxTotalImageSize ?? 20}
+								profileThresholds={profileThresholds ?? {}}
+								includeDiagnosticMessages={includeDiagnosticMessages ?? true}
+								maxDiagnosticMessages={maxDiagnosticMessages ?? 50}
+								writeDelayMs={writeDelayMs ?? 1000}
+								includeCurrentTime={includeCurrentTime ?? true}
+								includeCurrentCost={includeCurrentCost ?? true}
+								maxGitStatusFiles={maxGitStatusFiles ?? 0}
 								customSupportPrompts={customSupportPrompts || {}}
 								setCustomSupportPrompts={setCustomSupportPromptsField}
 								setCachedStateField={setCachedStateField}
@@ -886,7 +880,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 						{renderTab === "experimental" && (
 							<ExperimentalSettings
 								setExperimentEnabled={setExperimentEnabled}
-								experiments={experiments}
+								experiments={experiments ?? {}}
 								apiConfiguration={apiConfiguration}
 								setApiConfigurationField={setApiConfigurationField}
 							/>

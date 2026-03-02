@@ -264,8 +264,8 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 
 		try {
 			// 优先使用 nativeArgs（如果可用）
-			if (block.nativeArgs?.queries && Array.isArray(block.nativeArgs.queries)) {
-				const queryTexts = block.nativeArgs.queries.map((q: string | { query: string }) => {
+			if ((block.nativeArgs as any)?.queries && Array.isArray((block.nativeArgs as any).queries)) {
+				const queryTexts = (block.nativeArgs as any).queries.map((q: string | { query: string }) => {
 					if (typeof q === "string") {
 						return q
 					}
