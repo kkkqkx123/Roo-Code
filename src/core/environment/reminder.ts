@@ -17,7 +17,7 @@ export function formatReminderSection(todoList?: TodoItem[]): string {
 		"",
 		"REMINDERS",
 		"",
-		"Below is your current list of reminders for this task. Keep them updated as you progress.",
+		"Below is todo list.",
 		"",
 	]
 

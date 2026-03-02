@@ -55,15 +55,12 @@ export class ListFilesTool extends BaseTool<"list_files"> {
 
 		// Validate required parameters using structured errors
 		if (!relDirPath) {
-			task.consecutiveMistakeCount++
 			const error = new MissingParameterError("list_files", "path")
 			task.recordToolError("list_files", error.toLogEntry())
 			task.didToolFailInCurrentTurn = true
 			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 			return
 		}
-
-		task.consecutiveMistakeCount = 0
 
 		const absolutePath = path.resolve(task.cwd, relDirPath)
 		const isOutsideWorkspace = isPathOutsideWorkspace(absolutePath)

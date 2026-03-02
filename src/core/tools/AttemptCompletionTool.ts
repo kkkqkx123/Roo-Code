@@ -55,7 +55,6 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 		const hasIncompleteTodos = task.todoList && task.todoList.some((todo) => todo.status !== "completed")
 
 		if (preventCompletionWithOpenTodos && hasIncompleteTodos) {
-			task.consecutiveMistakeCount++
 			task.metricsService.recordToolError("attempt_completion")
 
 			pushToolResult(
@@ -63,19 +62,18 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 					"Cannot complete task while there are incomplete todos. Please finish all todos before attempting completion.",
 				),
 			)
+			task.didToolFailInCurrentTurn = true
 
 			return
 		}
 
 		try {
 			if (!result) {
-				task.consecutiveMistakeCount++
 				task.metricsService.recordToolError("attempt_completion")
 				pushToolResult(await task.sayAndCreateMissingParamError("attempt_completion", "result"))
+				task.didToolFailInCurrentTurn = true
 				return
 			}
-
-			task.consecutiveMistakeCount = 0
 
 			await task.say("completion_result", result)
 

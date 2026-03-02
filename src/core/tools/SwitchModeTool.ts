@@ -20,13 +20,11 @@ export class SwitchModeTool extends BaseTool<"switch_mode"> {
 
 		try {
 			if (!mode_slug) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				task.recordToolError("switch_mode")
 				pushToolResult(await task.sayAndCreateMissingParamError("switch_mode", "mode_slug"))
 				return
 			}
-
-			task.consecutiveMistakeCount = 0
 
 			// Verify the mode exists
 			const targetMode = getModeBySlug(mode_slug, (await task.providerRef.deref()?.configurationService.getState())?.customModes)

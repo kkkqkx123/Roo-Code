@@ -14,14 +14,11 @@ export class SkillTool extends BaseTool<"skill"> {
 		try {
 			// Validate skill name parameter
 			if (!skillName) {
-				task.consecutiveMistakeCount++
 				task.recordToolError("skill")
 				task.didToolFailInCurrentTurn = true
 				pushToolResult(await task.sayAndCreateMissingParamError("skill", "skill"))
 				return
 			}
-
-			task.consecutiveMistakeCount = 0
 
 			// Get SkillsManager from provider
 			const provider = task.providerRef.deref()

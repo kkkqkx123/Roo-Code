@@ -100,7 +100,6 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 
 		// Validate input
 		if (!filePath) {
-			task.consecutiveMistakeCount++
 			const error = new MissingParameterError("read_file", "path")
 			task.recordToolError("read_file", error.toLogEntry())
 			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
@@ -698,7 +697,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 	/**
 	 * Execute legacy multi-file format for backward compatibility.
 	 * This handles the old format: { files: [{ path: string, lineRanges?: [...] }] }
-	 * 
+	 *
 	 * Uses ToolExecutionResult to collect all errors and provide unified reporting.
 	 */
 	private async executeLegacy(fileEntries: FileEntry[], task: Task, callbacks: ToolCallbacks): Promise<void> {
@@ -709,7 +708,6 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 		console.warn("[read_file] Legacy format detected - using backward compatibility path")
 
 		if (!fileEntries || fileEntries.length === 0) {
-			task.consecutiveMistakeCount++
 			const error = new MissingParameterError("read_file", "files")
 			task.recordToolError("read_file", error.toLogEntry())
 			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))

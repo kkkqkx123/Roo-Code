@@ -34,10 +34,10 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 		try {
 			// Validate required parameters using structured errors
 			if (!command) {
-				task.consecutiveMistakeCount++
 				const error = new MissingParameterError("execute_command", "command")
 				task.recordToolError("execute_command", error.toLogEntry())
 				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
+				task.didToolFailInCurrentTurn = true
 				return
 			}
 
@@ -48,10 +48,9 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 			if (ignoredFileAttemptedToAccess) {
 				await task.say("rooignore_error", ignoredFileAttemptedToAccess)
 				pushToolResult(formatResponse.rooIgnoreError(ignoredFileAttemptedToAccess))
+				task.didToolFailInCurrentTurn = true
 				return
 			}
-
-			task.consecutiveMistakeCount = 0
 
 			const didApprove = await askApproval("command", canonicalCommand)
 

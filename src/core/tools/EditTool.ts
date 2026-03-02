@@ -40,7 +40,7 @@ export class EditTool extends BaseTool<"edit"> {
 		try {
 			// Validate required parameters using structured errors
 			if (!relPath) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const error = new MissingParameterError("edit", "file_path")
 				task.recordToolError("edit", error.toLogEntry())
 				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
@@ -48,7 +48,7 @@ export class EditTool extends BaseTool<"edit"> {
 			}
 
 			if (!oldString) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const error = new MissingParameterError("edit", "old_string")
 				task.recordToolError("edit", error.toLogEntry())
 				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
@@ -56,7 +56,7 @@ export class EditTool extends BaseTool<"edit"> {
 			}
 
 			if (newString === undefined) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const error = new MissingParameterError("edit", "new_string")
 				task.recordToolError("edit", error.toLogEntry())
 				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
@@ -65,7 +65,7 @@ export class EditTool extends BaseTool<"edit"> {
 
 			// Check old_string !== new_string
 			if (oldString === newString) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const error = new InvalidParameterError(
 					"edit",
 					"old_string",
@@ -95,7 +95,7 @@ export class EditTool extends BaseTool<"edit"> {
 
 			const fileExists = await fileExistsAtPath(absolutePath)
 			if (!fileExists) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const error = new FileNotFoundToolError("edit", relPath)
 				task.recordToolError("edit", error.toLogEntry())
 				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
@@ -108,7 +108,7 @@ export class EditTool extends BaseTool<"edit"> {
 				// Normalize line endings to LF for consistent matching
 				fileContent = fileContent.replace(/\r\n/g, "\n")
 			} catch (error) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const errorMessage = `Failed to read file '${relPath}'. Please verify file permissions and try again.`
 				await handleError("reading file", new Error(errorMessage))
 				return
@@ -122,7 +122,7 @@ export class EditTool extends BaseTool<"edit"> {
 			const matchCount = fileContent.split(normalizedOld).length - 1
 
 			if (matchCount === 0) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const error = new ContentNotFoundError("edit", relPath, normalizedOld)
 				task.recordToolError("edit", error.toLogEntry())
 				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
@@ -131,7 +131,7 @@ export class EditTool extends BaseTool<"edit"> {
 
 			// Uniqueness check when replace_all is not enabled
 			if (!replaceAll && matchCount > 1) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const error = new DuplicateMatchError("edit", relPath, normalizedOld, matchCount)
 				task.recordToolError("edit", error.toLogEntry())
 				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
@@ -154,8 +154,6 @@ export class EditTool extends BaseTool<"edit"> {
 				pushToolResult(`No changes needed for '${relPath}'`)
 				return
 			}
-
-			task.consecutiveMistakeCount = 0
 
 			// Initialize diff view
 			task.diffViewProvider.editType = "modify"

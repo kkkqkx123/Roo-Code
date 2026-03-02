@@ -31,21 +31,21 @@ export class SearchReplaceTool extends BaseTool<"search_replace"> {
 		try {
 			// Validate required parameters
 			if (!file_path) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				task.recordToolError("search_replace")
 				pushToolResult(await task.sayAndCreateMissingParamError("search_replace", "file_path"))
 				return
 			}
 
 			if (!old_string) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				task.recordToolError("search_replace")
 				pushToolResult(await task.sayAndCreateMissingParamError("search_replace", "old_string"))
 				return
 			}
 
 			if (new_string === undefined) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				task.recordToolError("search_replace")
 				pushToolResult(await task.sayAndCreateMissingParamError("search_replace", "new_string"))
 				return
@@ -53,7 +53,7 @@ export class SearchReplaceTool extends BaseTool<"search_replace"> {
 
 			// Validate that old_string and new_string are different
 			if (old_string === new_string) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				task.recordToolError("search_replace")
 				pushToolResult(
 					formatResponse.toolError("The 'old_string' and 'new_string' parameters must be different."),
@@ -84,7 +84,7 @@ export class SearchReplaceTool extends BaseTool<"search_replace"> {
 
 			const fileExists = await fileExistsAtPath(absolutePath)
 			if (!fileExists) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				task.recordToolError("search_replace")
 				const errorMessage = `File not found: ${relPath}. Cannot perform search and replace on a non-existent file.`
 				await task.say("error", errorMessage)
@@ -98,7 +98,7 @@ export class SearchReplaceTool extends BaseTool<"search_replace"> {
 				// Normalize line endings to LF for consistent matching
 				fileContent = fileContent.replace(/\r\n/g, "\n")
 			} catch (error) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				task.recordToolError("search_replace")
 				const errorMessage = `Failed to read file '${relPath}'. Please verify file permissions and try again.`
 				await task.say("error", errorMessage)
@@ -114,7 +114,7 @@ export class SearchReplaceTool extends BaseTool<"search_replace"> {
 			const matchCount = fileContent.split(normalizedOldString).length - 1
 
 			if (matchCount === 0) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				task.recordToolError("search_replace", "no_match")
 				pushToolResult(
 					formatResponse.toolError(
@@ -125,7 +125,7 @@ export class SearchReplaceTool extends BaseTool<"search_replace"> {
 			}
 
 			if (matchCount > 1) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				task.recordToolError("search_replace", "multiple_matches")
 				pushToolResult(
 					formatResponse.toolError(
@@ -143,8 +143,6 @@ export class SearchReplaceTool extends BaseTool<"search_replace"> {
 				pushToolResult(`No changes needed for '${relPath}'`)
 				return
 			}
-
-			task.consecutiveMistakeCount = 0
 
 			// Initialize diff view
 			task.diffViewProvider.editType = "modify"

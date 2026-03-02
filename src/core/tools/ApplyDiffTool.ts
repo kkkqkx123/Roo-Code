@@ -40,7 +40,7 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 		try {
 			// Validate required parameters using structured errors
 			if (!relPath) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const error = new MissingParameterError("apply_diff", "path")
 				task.recordToolError("apply_diff", error.toLogEntry())
 				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
@@ -48,7 +48,7 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 			}
 
 			if (!diffContent) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const error = new MissingParameterError("apply_diff", "diff")
 				task.recordToolError("apply_diff", error.toLogEntry())
 				pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
@@ -92,7 +92,7 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 			}
 
 			if (!diffResult.success) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const currentCount = (task.consecutiveMistakeCountForApplyDiff.get(relPath) || 0) + 1
 				task.consecutiveMistakeCountForApplyDiff.set(relPath, currentCount)
 
@@ -115,7 +115,6 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 				return
 			}
 
-			task.consecutiveMistakeCount = 0
 			task.consecutiveMistakeCountForApplyDiff.delete(relPath)
 
 			// Generate backend-unified diff for display in chat/webview

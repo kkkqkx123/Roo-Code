@@ -20,20 +20,18 @@ export class AccessMcpResourceTool extends BaseTool<"access_mcp_resource"> {
 
 		try {
 			if (!server_name) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				task.recordToolError("access_mcp_resource")
 				pushToolResult(await task.sayAndCreateMissingParamError("access_mcp_resource", "server_name"))
 				return
 			}
 
 			if (!uri) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				task.recordToolError("access_mcp_resource")
 				pushToolResult(await task.sayAndCreateMissingParamError("access_mcp_resource", "uri"))
 				return
 			}
-
-			task.consecutiveMistakeCount = 0
 
 			const completeMessage = JSON.stringify({
 				type: "access_mcp_resource",

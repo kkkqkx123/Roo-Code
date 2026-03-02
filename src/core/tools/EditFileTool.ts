@@ -190,7 +190,6 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 		try {
 			// Validate required parameters using structured errors
 			if (!file_path) {
-				task.consecutiveMistakeCount++
 				const error = new MissingParameterError("edit_file", "file_path")
 				task.recordToolError("edit_file", error.toLogEntry())
 				task.didToolFailInCurrentTurn = true
@@ -248,7 +247,6 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 					// Normalize line endings to LF for matching
 					currentContentLF = normalizeToLF(currentContent)
 				} catch (error) {
-					task.consecutiveMistakeCount++
 					task.didToolFailInCurrentTurn = true
 					const errorDetails = error instanceof Error ? error.message : String(error)
 					const formattedError = `Failed to read file: ${absolutePath}\n\n<error_details>\nRead error: ${errorDetails}\n\nRecovery suggestions:\n1. Verify the file exists and is readable\n2. Check file permissions\n3. If the file may have changed, use read_file to confirm its current contents\n</error_details>`
@@ -261,7 +259,6 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 
 				// Check if trying to create a file that already exists
 				if (old_string === "") {
-					task.consecutiveMistakeCount++
 					task.didToolFailInCurrentTurn = true
 					const formattedError = `File already exists: ${absolutePath}\n\n<error_details>\nYou provided an empty old_string, which indicates file creation, but the target file already exists.\n\nRecovery suggestions:\n1. To modify an existing file, provide a non-empty old_string that matches the current file contents\n2. Use read_file to confirm the exact text to match\n3. If you intended to overwrite the entire file, use write_to_file instead\n</error_details>`
 					await finalizePartialToolAskIfNeeded(relPath)
@@ -279,7 +276,6 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 					try {
 						await createDirectoriesForFile(absolutePath, task.cwd)
 					} catch (error) {
-						task.consecutiveMistakeCount++
 						task.didToolFailInCurrentTurn = true
 						const errorDetails = error instanceof Error ? error.message : String(error)
 						const formattedError = `Failed to create directories for file: ${absolutePath}\n\n<error_details>\n${errorDetails}\n\nRecovery suggestions:\n1. Verify the file path is within the workspace directory\n2. Check that you have permission to create directories\n3. Use a simpler path structure\n</error_details>`
@@ -291,7 +287,6 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 					}
 				} else {
 					// Trying to replace in non-existent file
-					task.consecutiveMistakeCount++
 					task.didToolFailInCurrentTurn = true
 					const formattedError = `File does not exist at path: ${absolutePath}\n\n<error_details>\nThe specified file could not be found, so the replacement could not be performed.\n\nRecovery suggestions:\n1. Verify the file path is correct\n2. If you intended to create a new file, set old_string to an empty string\n3. Use list_files or read_file to confirm the correct path\n</error_details>`
 					// Match apply_diff behavior: surface missing file via the generic error channel.
@@ -312,7 +307,6 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 			if (!isNewFile && currentContentLF !== null) {
 				// Validate that old_string and new_string are different (normalized for EOL)
 				if (oldLF === newLF) {
-					task.consecutiveMistakeCount++
 					task.didToolFailInCurrentTurn = true
 					const formattedError = `No changes to apply for file: ${absolutePath}\n\n<error_details>\nThe provided old_string and new_string are identical (after normalizing line endings), so there is nothing to change.\n\nRecovery suggestions:\n1. Update new_string to the intended replacement text\n2. If you intended to verify file state only, use read_file instead\n</error_details>`
 					await finalizePartialToolAskIfNeeded(relPath)
@@ -344,7 +338,6 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 							// Error reporting
 							const anyMatches = exactOccurrences > 0 || wsOccurrences > 0 || tokenOccurrences > 0
 							if (!anyMatches) {
-								task.consecutiveMistakeCount++
 								task.didToolFailInCurrentTurn = true
 								const error = new ContentNotFoundError("edit_file", relPath, old_string)
 								await finalizePartialToolAskIfNeeded(relPath)
@@ -356,7 +349,6 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 
 							// If exact matching finds occurrences but doesn't match expected, keep the existing message
 							if (exactOccurrences > 0) {
-								task.consecutiveMistakeCount++
 								task.didToolFailInCurrentTurn = true
 								const formattedError = `Occurrence count mismatch in file: ${absolutePath}\n\n<error_details>\nExpected ${expectedReplacements} occurrence(s) but found ${exactOccurrences} exact match(es).\n\nRecovery suggestions:\n1. Provide a more specific old_string so it matches exactly once\n2. If you intend to replace all occurrences, set expected_replacements to ${exactOccurrences}\n3. Use read_file to confirm the exact text and counts\n</error_details>`
 								await finalizePartialToolAskIfNeeded(relPath)
@@ -366,7 +358,6 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 								return
 							}
 
-							task.consecutiveMistakeCount++
 							task.didToolFailInCurrentTurn = true
 							const formattedError = `Occurrence count mismatch in file: ${absolutePath}\n\n<error_details>\nExpected ${expectedReplacements} occurrence(s), but matching found ${wsOccurrences} (whitespace-tolerant) and ${tokenOccurrences} (token-based).\n\nRecovery suggestions:\n1. Provide more surrounding context in old_string to make the match unique\n2. If multiple replacements are intended, adjust expected_replacements to the intended count\n3. Use read_file to confirm the current file contents and refine the match\n</error_details>`
 							await finalizePartialToolAskIfNeeded(relPath)
@@ -387,7 +378,6 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 			// Check if any changes were made
 			if (!isNewFile && newContent === currentContent) {
 				if (relPathForErrorHandling) {
-					task.consecutiveMistakeCount = 0
 					task.consecutiveMistakeCountForEditFile.delete(relPathForErrorHandling)
 				}
 				await finalizePartialToolAskIfNeeded(relPath)
@@ -395,7 +385,6 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 				return
 			}
 
-			task.consecutiveMistakeCount = 0
 			task.consecutiveMistakeCountForEditFile.delete(relPath)
 
 			// Initialize diff view
@@ -405,7 +394,6 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 			// Generate and validate diff
 			const diff = formatResponse.createPrettyPatch(relPath, currentContent || "", newContent)
 			if (!diff && !isNewFile) {
-				task.consecutiveMistakeCount = 0
 				task.consecutiveMistakeCountForEditFile.delete(relPath)
 				await finalizePartialToolAskIfNeeded(relPath)
 				pushToolResult(`No changes needed for '${relPath}'`)

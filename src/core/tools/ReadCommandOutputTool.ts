@@ -103,7 +103,6 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 
 		// Validate required parameters using structured errors
 		if (!artifact_id) {
-			task.consecutiveMistakeCount++
 			const error = new MissingParameterError("read_command_output", "artifact_id")
 			task.recordToolError("read_command_output", error.toLogEntry())
 			task.didToolFailInCurrentTurn = true
@@ -113,7 +112,6 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 
 		// Validate artifact_id format to prevent path traversal
 		if (!this.isValidArtifactId(artifact_id)) {
-			task.consecutiveMistakeCount++
 			task.recordToolError("read_command_output")
 			task.didToolFailInCurrentTurn = true
 			const errorMsg = `Invalid artifact_id format: "${artifact_id}". Expected format: cmd-{timestamp}.txt (e.g., "cmd-1706119234567.txt")`
@@ -190,7 +188,6 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 				...(search && { searchPattern: search, matchCount }),
 			}))
 
-			task.consecutiveMistakeCount = 0
 			pushToolResult(result)
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error)

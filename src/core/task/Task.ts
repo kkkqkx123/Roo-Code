@@ -1342,6 +1342,42 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	private async addToClineMessages(message: ClineMessage) {
+		// Check for duplicate messages to prevent UI showing the same content twice
+		// A message is considered duplicate if it has the same type, say/ask, text, and images
+		const isDuplicate = this.clineMessages.some((msg) => {
+			if (msg.type !== message.type) {
+				return false
+			}
+			if (msg.type === "say" && msg.say !== message.say) {
+				return false
+			}
+			if (msg.type === "ask" && msg.ask !== message.ask) {
+				return false
+			}
+			if (msg.text !== message.text) {
+				return false
+			}
+			// Compare images arrays
+			const msgImages = msg.images || []
+			const messageImages = message.images || []
+			if (msgImages.length !== messageImages.length) {
+				return false
+			}
+			for (let i = 0; i < msgImages.length; i++) {
+				if (msgImages[i] !== messageImages[i]) {
+					return false
+				}
+			}
+			return true
+		})
+
+		if (isDuplicate) {
+			console.warn(
+				`[Task#addToClineMessages] Skipping duplicate message: type=${message.type}, ${message.type === "say" ? `say=${message.say}` : message.type === "ask" ? `ask=${message.ask}` : ""}, text=${message.text?.substring(0, 50)}...`,
+			)
+			return
+		}
+
 		this.clineMessages.push(message)
 		const provider = this.providerRef.deref()
 		// Avoid resending large, mostly-static fields (notably taskHistory) on every chat message update.

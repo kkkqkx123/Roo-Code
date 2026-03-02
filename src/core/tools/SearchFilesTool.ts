@@ -59,7 +59,6 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 
 		// Validate required parameters using structured errors
 		if (!relDirPath) {
-			task.consecutiveMistakeCount++
 			const error = new MissingParameterError("search_files", "path")
 			task.recordToolError("search_files", error.toLogEntry())
 			task.didToolFailInCurrentTurn = true
@@ -68,15 +67,12 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 		}
 
 		if (!regex) {
-			task.consecutiveMistakeCount++
 			const error = new MissingParameterError("search_files", "regex")
 			task.recordToolError("search_files", error.toLogEntry())
 			task.didToolFailInCurrentTurn = true
 			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
 			return
 		}
-
-		task.consecutiveMistakeCount = 0
 
 		const absolutePath = path.resolve(task.cwd, relDirPath)
 		const isOutsideWorkspace = isPathOutsideWorkspace(absolutePath)

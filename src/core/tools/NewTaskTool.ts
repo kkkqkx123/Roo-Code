@@ -27,7 +27,6 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 		try {
 			// Validate required parameters.
 			if (!mode) {
-				task.consecutiveMistakeCount++
 				task.recordToolError("new_task")
 				task.didToolFailInCurrentTurn = true
 				pushToolResult(await task.sayAndCreateMissingParamError("new_task", "mode"))
@@ -35,7 +34,6 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 			}
 
 			if (!message) {
-				task.consecutiveMistakeCount++
 				task.recordToolError("new_task")
 				task.didToolFailInCurrentTurn = true
 				pushToolResult(await task.sayAndCreateMissingParamError("new_task", "message"))
@@ -61,7 +59,6 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 			// Check if todos are required based on VSCode setting.
 			// Note: `undefined` means not provided, empty string is valid.
 			if (requireTodos && todos === undefined) {
-				task.consecutiveMistakeCount++
 				task.recordToolError("new_task")
 				task.didToolFailInCurrentTurn = true
 				pushToolResult(await task.sayAndCreateMissingParamError("new_task", "todos"))
@@ -74,15 +71,12 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 				try {
 					todoItems = parseMarkdownChecklist(todos)
 				} catch (error) {
-					task.consecutiveMistakeCount++
 					task.recordToolError("new_task")
 					task.didToolFailInCurrentTurn = true
 					pushToolResult(formatResponse.toolError("Invalid todos format: must be a markdown checklist"))
 					return
 				}
 			}
-
-			task.consecutiveMistakeCount = 0
 
 			// Un-escape one level of backslashes before '@' for hierarchical subtasks
 			// Un-escape one level: \\@ -> \@ (removes one backslash for hierarchical subtasks)

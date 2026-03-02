@@ -39,7 +39,6 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 		try {
 			normalizedQueries = this.normalizeParams(params)
 		} catch (error) {
-			task.consecutiveMistakeCount++
 			task.didToolFailInCurrentTurn = true
 			const err = error as Error
 			task.recordToolError("codebase_search", err.message)
@@ -71,8 +70,6 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 			pushToolResult(formatResponse.toolDenied())
 			return
 		}
-
-		task.consecutiveMistakeCount = 0
 
 		try {
 			const context = task.providerRef.deref()?.context
@@ -174,6 +171,8 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 
 	/**
 	 * 结果聚合：去重 + 多次匹配加成
+	 * - 使用多次查询中最高的分数作为 baseScore
+	 * - 对数增长加成，最高 50% 提升
 	 */
 	private aggregateResults(allResults: VectorStoreSearchResult[][], maxResults: number): AggregatedResult[] {
 		const resultMap = new Map<string, AggregatedResult>()
@@ -187,8 +186,12 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 				if (existing) {
 					// 已存在：更新匹配次数和得分
 					existing.matchCount++
-					// 多次匹配加成：每次额外匹配增加5%
-					existing.finalScore = existing.baseScore * (1 + 0.05 * (existing.matchCount - 1))
+					// 更新 baseScore 为最高分数
+					existing.baseScore = Math.max(existing.baseScore, result.score)
+					// 对数加成：匹配次数越多，加成比例越小（递减增长）
+					// 最高加成 30%，通过 Math.log2 实现对数增长，系数 0.2 控制增长速度
+					const boost = Math.min(0.3, Math.log2(existing.matchCount) * 0.2)
+					existing.finalScore = existing.baseScore * (1 + boost)
 				} else {
 					// 新结果
 					resultMap.set(key, {
@@ -219,6 +222,7 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 
 	/**
 	 * 格式化输出结果
+	 * 注意：匹配分数仅用于排序和UI显示，不添加到给LLM的提示词中
 	 */
 	private formatResult(aggregatedResults: AggregatedResult[], normalizedQueries: NormalizedQuery[]): string {
 		const isBatchQuery = normalizedQueries.length > 1
@@ -246,14 +250,7 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 			const relativePath = vscode.workspace.asRelativePath(payload?.filePath, false)
 
 			output += `File path: ${relativePath}\n`
-			output += `Score: ${result.finalScore.toFixed(2)}`
-
-			// 只在批量查询且多次匹配时显示boost信息
-			if (isBatchQuery && result.matchCount > 1) {
-				output += ` (matched ${result.matchCount} queries, +${((result.matchCount - 1) * 5)}% boost)`
-			}
-			output += "\n"
-
+			// 匹配分数仅用于内部排序，不显示在给LLM的提示词中
 			output += `Lines: ${payload?.startLine}-${payload?.endLine}\n`
 			output += `Code Chunk: ${payload?.codeChunk?.trim()}\n\n`
 		})
@@ -306,7 +303,7 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 			isOutsideWorkspace: false,
 		}
 
-		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(() => {})
+		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(() => { })
 	}
 }
 

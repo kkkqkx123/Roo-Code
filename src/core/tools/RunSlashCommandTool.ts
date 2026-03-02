@@ -33,14 +33,11 @@ export class RunSlashCommandTool extends BaseTool<"run_slash_command"> {
 
 		try {
 			if (!commandName) {
-				task.consecutiveMistakeCount++
 				task.recordToolError("run_slash_command")
 				task.didToolFailInCurrentTurn = true
 				pushToolResult(await task.sayAndCreateMissingParamError("run_slash_command", "command"))
 				return
 			}
-
-			task.consecutiveMistakeCount = 0
 
 			// Get the command from the commands service
 			const command = await getCommand(task.cwd, commandName)

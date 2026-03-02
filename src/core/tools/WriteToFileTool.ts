@@ -34,19 +34,19 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 
 		// Validate required parameters using structured errors
 		if (!relPath) {
-			task.consecutiveMistakeCount++
 			const error = new MissingParameterError("write_to_file", "path")
 			task.recordToolError("write_to_file", error.toLogEntry())
 			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
+			task.didToolFailInCurrentTurn = true
 			await task.diffViewProvider.reset()
 			return
 		}
 
 		if (newContent === undefined) {
-			task.consecutiveMistakeCount++
 			const error = new MissingParameterError("write_to_file", "content")
 			task.recordToolError("write_to_file", error.toLogEntry())
 			pushToolResult(formatResponse.toolErrorFromInstance(error.toLLMMessage()))
+			task.didToolFailInCurrentTurn = true
 			await task.diffViewProvider.reset()
 			return
 		}
@@ -80,11 +80,11 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 			try {
 				await createDirectoriesForFile(absolutePath, task.cwd)
 			} catch (error) {
-				task.consecutiveMistakeCount++
 				const errorDetails = error instanceof Error ? error.message : String(error)
 				const dirError = new DirectoryCreationError("write_to_file", relPath, errorDetails)
 				task.recordToolError("write_to_file", dirError.toLogEntry())
 				pushToolResult(formatResponse.toolErrorFromInstance(dirError.toLLMMessage()))
+				task.didToolFailInCurrentTurn = true
 				await task.diffViewProvider.reset()
 				return
 			}
@@ -114,8 +114,6 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 		}
 
 		try {
-			task.consecutiveMistakeCount = 0
-
 			const provider = task.providerRef.deref()
 			const state = await provider?.configurationService.getState()
 			const diagnosticsEnabled = state?.diagnosticsEnabled ?? true

@@ -125,7 +125,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		try {
 			// Validate required parameters using structured errors
 			if (!patch) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const error = new MissingParameterError("apply_patch", "patch")
 				task.recordToolError("apply_patch", error.toLogEntry())
 				const result = this.createResult(false, [], error.message)
@@ -138,7 +138,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			try {
 				parsedPatch = parsePatch(patch)
 			} catch (error) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const patchError = new PatchParseError(
 					"apply_patch",
 					error instanceof PatchErrorType ? error.message : `Failed to parse patch: ${error instanceof Error ? error.message : String(error)}`
@@ -173,7 +173,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			try {
 				changes = await processAllHunks(parsedPatch.hunks, readFile)
 			} catch (error) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				const errorMessage = `Failed to process patch: ${error instanceof Error ? error.message : String(error)}`
 				const patchError = new PatchParseError("apply_patch", errorMessage)
 				task.recordToolError("apply_patch", patchError.toLogEntry())
@@ -293,7 +293,6 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 
 			// Check if all operations succeeded
 			const allSucceeded = toolResult.hasSuccesses() && !toolResult.hasErrors()
-			task.consecutiveMistakeCount = allSucceeded ? 0 : task.consecutiveMistakeCount + 1
 
 			if (allSucceeded) {
 				task.recordToolUsage("apply_patch")
@@ -402,7 +401,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		// Check if file already exists
 		const fileExists = await fileExistsAtPath(absolutePath)
 		if (fileExists) {
-			task.consecutiveMistakeCount++
+			task.didToolFailInCurrentTurn = true
 			const errorMessage = `File already exists: ${relPath}. Use Update File instead.`
 			await task.say("error", errorMessage)
 			return this.createFileResult(
@@ -418,7 +417,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		try {
 			await createDirectoriesForFile(absolutePath, cwd)
 		} catch (error) {
-			task.consecutiveMistakeCount++
+			task.didToolFailInCurrentTurn = true
 			const errorDetails = error instanceof Error ? error.message : String(error)
 			const errorMessage = `Failed to create directories for file: ${relPath}\n\n<error_details>\n${errorDetails}\n</error_details>`
 			await task.say("error", errorMessage)
@@ -515,7 +514,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		// Check if file exists
 		const fileExists = await fileExistsAtPath(absolutePath)
 		if (!fileExists) {
-			task.consecutiveMistakeCount++
+			task.didToolFailInCurrentTurn = true
 			const errorMessage = `File not found: ${relPath}. Cannot delete a non-existent file.`
 			await task.say("error", errorMessage)
 			return this.createFileResult(
@@ -582,7 +581,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		// Check if file exists
 		const fileExists = await fileExistsAtPath(absolutePath)
 		if (!fileExists) {
-			task.consecutiveMistakeCount++
+			task.didToolFailInCurrentTurn = true
 			const errorMessage = `File not found: ${relPath}. Cannot update a non-existent file.`
 			await task.say("error", errorMessage)
 			return this.createFileResult(
@@ -693,7 +692,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			// Check if destination path is write-protected
 			const isMovePathWriteProtected = task.rooProtectedController?.isWriteProtected(change.movePath) || false
 			if (isMovePathWriteProtected) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				task.recordToolError("apply_patch")
 				const errorMessage = `Cannot move file to write-protected path: ${change.movePath}`
 				await task.say("error", errorMessage)
@@ -712,7 +711,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			// Check if destination path is outside workspace
 			const isMoveOutsideWorkspace = isPathOutsideWorkspace(moveAbsolutePath)
 			if (isMoveOutsideWorkspace) {
-				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
 				task.recordToolError("apply_patch")
 				const errorMessage = `Cannot move file to path outside workspace: ${change.movePath}`
 				await task.say("error", errorMessage)
