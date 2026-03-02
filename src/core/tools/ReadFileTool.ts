@@ -22,7 +22,7 @@ import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { getReadablePath } from "../../utils/path"
 import { extractTextFromFile, addLineNumbers, getSupportedBinaryFormats } from "../../integrations/misc/extract-text"
 import { readWithIndentation, readWithSlice } from "../../integrations/misc/indentation-reader"
-import { DEFAULT_LINE_LIMIT } from "../prompts/tools/native-tools/read_file"
+import { DEFAULT_LINE_LIMIT } from "../tools/schemas/read_file"
 import type { ToolUse, PushToolResult } from "../../shared/tools"
 
 import {

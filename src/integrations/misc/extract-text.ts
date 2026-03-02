@@ -6,7 +6,7 @@ import fs from "fs/promises"
 import { isBinaryFile } from "isbinaryfile"
 import { extractTextFromXLSX } from "./extract-text-from-xlsx"
 import { readWithSlice } from "./indentation-reader"
-import { DEFAULT_LINE_LIMIT } from "../../core/prompts/tools/native-tools/read_file"
+import { DEFAULT_LINE_LIMIT } from "../../core/tools/schemas/read_file"
 
 async function extractTextFromPDF(filePath: string): Promise<string> {
 	const dataBuffer = await fs.readFile(filePath)

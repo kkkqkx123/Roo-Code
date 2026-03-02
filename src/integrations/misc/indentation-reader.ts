@@ -17,7 +17,7 @@ import {
 	DEFAULT_LINE_LIMIT,
 	DEFAULT_MAX_LEVELS,
 	MAX_LINE_LENGTH,
-} from "../../core/prompts/tools/native-tools/read_file"
+} from "../../core/tools/schemas/read_file"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
