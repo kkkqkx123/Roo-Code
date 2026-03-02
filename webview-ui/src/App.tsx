@@ -12,7 +12,6 @@ import { ExtensionStateContextProvider, useExtensionState } from "./context/Exte
 import ChatView, { ChatViewRef } from "./components/chat/ChatView"
 import HistoryView from "./components/history/HistoryView"
 import SettingsView, { SettingsViewRef } from "./components/settings/SettingsView"
-import WelcomeView from "./components/welcome/WelcomeViewProvider"
 import { CheckpointRestoreDialog } from "./components/chat/CheckpointRestoreDialog"
 import { DeleteMessageDialog, EditMessageDialog } from "./components/chat/MessageModificationConfirmationDialog"
 import ErrorBoundary from "./components/ErrorBoundary"
@@ -49,7 +48,6 @@ const tabsByMessageAction: Partial<Record<NonNullable<ExtensionMessage["action"]
 const App = () => {
 	const {
 		didHydrateState,
-		showWelcome,
 		shouldShowAnnouncement,
 		renderContext,
 		mdmCompliant,
@@ -185,9 +183,7 @@ const App = () => {
 
 	// Do not conditionally load ChatView, it's expensive and there's state we
 	// don't want to lose (user input, disableInput, askResponse promise, etc.)
-	return showWelcome ? (
-		<WelcomeView />
-	) : (
+	return (
 		<>
 			{tab === "history" && <HistoryView onDone={() => switchTab("chat")} />}
 			{tab === "settings" && (

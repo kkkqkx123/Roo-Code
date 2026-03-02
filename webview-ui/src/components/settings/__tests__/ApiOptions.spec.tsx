@@ -278,12 +278,6 @@ describe("ApiOptions", () => {
 		expect(screen.getByTestId("rate-limit-seconds-control")).toBeInTheDocument()
 	})
 
-	it("hides all controls when fromWelcomeView is true", () => {
-		renderApiOptions({ fromWelcomeView: true })
-		expect(screen.queryByTestId("temperature-control")).not.toBeInTheDocument()
-		expect(screen.queryByTestId("rate-limit-seconds-control")).not.toBeInTheDocument()
-	})
-
 	describe("thinking functionality", () => {
 		it("should show ThinkingBudget for Anthropic models that support thinking", () => {
 			renderApiOptions({

@@ -91,7 +91,6 @@ describe("ApiOptions Provider Filtering", () => {
 			apiKey: "test-key",
 		} as ProviderSettings,
 		setApiConfigurationField: vi.fn(),
-		fromWelcomeView: false,
 		errorMessage: undefined,
 		setErrorMessage: vi.fn(),
 	}

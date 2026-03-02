@@ -39,7 +39,6 @@ import { type RouterName, toRouterName } from "../../shared/api"
 import { MessageEnhancer } from "./messageEnhancer"
 
 import { CodeIndexManager } from "../../services/code-index/manager"
-import { checkExistKey } from "../../shared/checkExistApiConfig"
 import { experimentDefault } from "../../shared/experiments"
 import { Terminal } from "../../integrations/terminal/Terminal"
 import { openFile } from "../../integrations/misc/open-file"
@@ -502,28 +501,6 @@ export const webviewMessageHandler = async (
 				.then(async (listApiConfig) => {
 					if (!listApiConfig) {
 						return
-					}
-
-					if (listApiConfig.length === 1) {
-						// Check if first time init then sync with exist config.
-						if (listApiConfig[0] && !checkExistKey(listApiConfig[0])) {
-							const { apiConfiguration } = await provider.configurationService.getState()
-
-							// Only save if the current configuration has meaningful settings
-							// (e.g., API keys). This prevents saving a default "anthropic"
-							// fallback when no real config exists, which can happen during
-							// CLI initialization before provider settings are applied.
-							if (checkExistKey(apiConfiguration)) {
-								await provider.providerSettingsManager.saveConfig(
-									listApiConfig[0].name ?? "default",
-									apiConfiguration,
-								)
-
-								if (listApiConfig[0]) {
-									listApiConfig[0].apiProvider = apiConfiguration.apiProvider
-								}
-							}
-						}
 					}
 
 					const currentConfigName = getGlobalState("currentApiConfigName")

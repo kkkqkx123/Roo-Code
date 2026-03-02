@@ -58,7 +58,6 @@ export interface ApiOptionsProps {
 		value: ProviderSettings[K],
 		isUserAction?: boolean,
 	) => void
-	fromWelcomeView?: boolean
 	errorMessage: string | undefined
 	setErrorMessage: React.Dispatch<React.SetStateAction<string | undefined>>
 }
@@ -67,7 +66,6 @@ const ApiOptions = ({
 	uriScheme,
 	apiConfiguration,
 	setApiConfigurationField,
-	fromWelcomeView,
 	errorMessage,
 	setErrorMessage,
 }: ApiOptionsProps) => {
@@ -305,7 +303,7 @@ const ApiOptions = ({
 				<Anthropic
 					apiConfiguration={apiConfiguration}
 					setApiConfigurationField={setApiConfigurationField}
-					simplifySettings={fromWelcomeView}
+					simplifySettings={false}
 				/>
 			)}
 
@@ -314,7 +312,7 @@ const ApiOptions = ({
 					apiConfiguration={apiConfiguration}
 					setApiConfigurationField={setApiConfigurationField}
 					selectedModelInfo={selectedModelInfo}
-					simplifySettings={fromWelcomeView}
+					simplifySettings={false}
 				/>
 			)}
 
@@ -330,7 +328,7 @@ const ApiOptions = ({
 					apiConfiguration={apiConfiguration}
 					setApiConfigurationField={setApiConfigurationField}
 					modelValidationError={modelValidationError}
-					simplifySettings={fromWelcomeView}
+					simplifySettings={false}
 				/>
 			)}
 
@@ -344,7 +342,7 @@ const ApiOptions = ({
 					serviceName={getProviderServiceConfig(activeSelectedProvider).serviceName}
 					serviceUrl={getProviderServiceConfig(activeSelectedProvider).serviceUrl}
 					errorMessage={modelValidationError}
-					simplifySettings={fromWelcomeView}
+					simplifySettings={false}
 					onModelChange={(modelId) =>
 						handleModelChangeSideEffects(
 							activeSelectedProvider,
@@ -355,17 +353,15 @@ const ApiOptions = ({
 				/>
 			)}
 
-			{!fromWelcomeView && (
-				<ThinkingBudget
-					key={`${selectedProvider}-${selectedModelId}`}
-					apiConfiguration={apiConfiguration}
-					setApiConfigurationField={setApiConfigurationField}
-					modelInfo={selectedModelInfo}
-				/>
-			)}
+			<ThinkingBudget
+				key={`${selectedProvider}-${selectedModelId}`}
+				apiConfiguration={apiConfiguration}
+				setApiConfigurationField={setApiConfigurationField}
+				modelInfo={selectedModelInfo}
+			/>
 
 			{/* Gate Verbosity UI by capability flag */}
-			{!fromWelcomeView && selectedModelInfo?.supportsVerbosity && (
+			{selectedModelInfo?.supportsVerbosity && (
 				<Verbosity
 					apiConfiguration={apiConfiguration}
 					setApiConfigurationField={setApiConfigurationField}
@@ -373,7 +369,7 @@ const ApiOptions = ({
 				/>
 			)}
 
-			{!fromWelcomeView && (
+			{(
 				<Collapsible open={isAdvancedSettingsOpen} onOpenChange={setIsAdvancedSettingsOpen}>
 					<CollapsibleTrigger className="flex items-center gap-1 w-full cursor-pointer hover:opacity-80 mb-2">
 						<span
