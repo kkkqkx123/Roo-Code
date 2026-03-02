@@ -1,6 +1,7 @@
 // npx vitest run core/prompts/tools/__tests__/filter-tools-for-mode.spec.ts
 
 import type OpenAI from "openai"
+import { describe, expect, it } from 'vitest'
 
 import { filterNativeToolsForMode } from "../filter-tools-for-mode"
 

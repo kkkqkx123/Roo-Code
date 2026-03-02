@@ -1,7 +1,7 @@
 import type OpenAI from "openai"
-import { McpHub } from "../../../../services/mcp/McpHub"
-import { buildMcpToolName } from "../../../../utils/mcp-name"
-import { normalizeToolSchema, type JsonSchema } from "../../../../utils/json-schema"
+import { McpHub } from "./McpHub"
+import { buildMcpToolName } from "../../utils/mcp-name"
+import { normalizeToolSchema, type JsonSchema } from "../../utils/json-schema"
 
 /**
  * Dynamically generates native tool definitions for all enabled tools across connected MCP servers.

@@ -8,7 +8,8 @@ import { customToolRegistry, formatNative } from "@coder/core"
 import type { ClineProvider } from "../webview/ClineProvider"
 import { getRooDirectoriesForCwd } from "../../services/roo-config/index.js"
 
-import { getNativeTools, getMcpServerTools } from "../prompts/tools/native-tools"
+import { getAllNativeTools } from "../tools/schemas"
+import { getMcpServerTools } from "../../services/mcp/mcp-tools"
 import {
 	filterNativeToolsForMode,
 	filterMcpToolsForMode,
@@ -112,7 +113,7 @@ export async function buildNativeToolsArrayWithRestrictions(options: BuildToolsO
 	const supportsImages = modelInfo?.supportsImages ?? false
 
 	// Build native tools with dynamic read_file tool based on settings.
-	const nativeTools = getNativeTools({
+	const nativeTools = getAllNativeTools({
 		supportsImages,
 	})
 
