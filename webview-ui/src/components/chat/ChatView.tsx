@@ -971,24 +971,23 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 				}
 			}
 
-			if (everVisibleMessagesTsRef.current.has(message.ts)) {
-				const alwaysHiddenOnceProcessedAsk: ClineAsk[] = [
-					"api_req_failed",
-					"resume_task",
-					"resume_completed_task",
-				]
-				const alwaysHiddenOnceProcessedSay = [
-					"api_req_finished",
-					"api_req_retried",
-					"api_req_deleted",
-					"mcp_server_request_started",
-				]
-				if (message.ask && alwaysHiddenOnceProcessedAsk.includes(message.ask)) return false
-				if (message.say && alwaysHiddenOnceProcessedSay.includes(message.say)) return false
-				if (message.say === "text" && (message.text ?? "") === "" && (message.images?.length ?? 0) === 0) {
-					return false
-				}
-				return true
+			// Note: We no longer check everVisibleMessagesTsRef.current here during render
+			// That logic has been moved to a separate useEffect to avoid accessing refs during render
+			const alwaysHiddenOnceProcessedAsk: ClineAsk[] = [
+				"api_req_failed",
+				"resume_task",
+				"resume_completed_task",
+			]
+			const alwaysHiddenOnceProcessedSay = [
+				"api_req_finished",
+				"api_req_retried",
+				"api_req_deleted",
+				"mcp_server_request_started",
+			]
+			if (message.ask && alwaysHiddenOnceProcessedAsk.includes(message.ask)) return false
+			if (message.say && alwaysHiddenOnceProcessedSay.includes(message.say)) return false
+			if (message.say === "text" && (message.text ?? "") === "" && (message.images?.length ?? 0) === 0) {
+				return false
 			}
 
 			switch (message.ask) {
@@ -1036,13 +1035,17 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			return true
 		})
 
-		const viewportStart = Math.max(0, deduplicatedMessages.length - 100)
-		deduplicatedMessages
-			.slice(viewportStart)
-			.forEach((msg: ClineMessage) => everVisibleMessagesTsRef.current.set(msg.ts, true))
-
 		return deduplicatedMessages
 	}, [modifiedMessages])
+
+	// Update the everVisibleMessagesTsRef with visible message timestamps
+	// This is done in a separate effect to avoid accessing refs during render
+	useEffect(() => {
+		const viewportStart = Math.max(0, visibleMessages.length - 100)
+		visibleMessages
+			.slice(viewportStart)
+			.forEach((msg: ClineMessage) => everVisibleMessagesTsRef.current.set(msg.ts, true))
+	}, [visibleMessages])
 
 	useEffect(() => {
 		// Clean up cache more frequently to prevent stale state

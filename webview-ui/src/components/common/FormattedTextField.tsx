@@ -1,4 +1,4 @@
-import { useCallback, forwardRef, useState, useEffect } from "react"
+import { useCallback, forwardRef, useState, useEffect, useRef } from "react"
 import { DecoratedVSCodeTextField, VSCodeTextFieldWithNodesProps } from "./DecoratedVSCodeTextField"
 
 export interface InputFormatter<T> {
@@ -30,11 +30,13 @@ function FormattedTextFieldInner<T>(
 ) {
 	const [rawInput, setRawInput] = useState<string>("")
 	const [isTyping, setIsTyping] = useState(false)
+	const prevValueRef = useRef<T | undefined>(undefined)
 
 	// Update raw input when external value changes (but not when we're actively typing)
 	useEffect(() => {
-		if (!isTyping) {
+		if (!isTyping && prevValueRef.current !== value) {
 			setRawInput(formatter.format(value))
+			prevValueRef.current = value
 		}
 	}, [value, formatter, isTyping])
 

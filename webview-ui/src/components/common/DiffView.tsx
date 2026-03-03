@@ -1,4 +1,4 @@
-import { memo, useMemo, useEffect, useState } from "react"
+import { memo, useMemo, useEffect, useState, useRef } from "react"
 import { parseUnifiedDiff, type DiffLine } from "@src/utils/parseUnifiedDiff"
 import { normalizeLanguage } from "@src/utils/highlighter"
 import { getLanguageFromPath } from "@src/utils/getLanguageFromPath"
@@ -101,11 +101,15 @@ const DiffView = memo(({ source, filePath }: DiffViewProps) => {
 
 	// State for the processed hunks with highlighting
 	const [processedHunks, setProcessedHunks] = useState<Hunk[]>(hunks)
+	const prevHunksRef = useRef<Hunk[]>(hunks)
 
 	// Effect to handle async highlighting
 	useEffect(() => {
 		if (!shouldHighlight) {
-			setProcessedHunks(hunks)
+			if (prevHunksRef.current !== hunks) {
+				setProcessedHunks(hunks)
+				prevHunksRef.current = hunks
+			}
 			return
 		}
 
@@ -135,6 +139,7 @@ const DiffView = memo(({ source, filePath }: DiffViewProps) => {
 			}
 
 			setProcessedHunks(processed)
+			prevHunksRef.current = hunks
 		}
 
 		processHunks()

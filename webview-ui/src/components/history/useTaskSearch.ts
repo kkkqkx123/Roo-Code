@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { Fzf } from "fzf"
 
 import { highlightFzfMatch } from "@/utils/highlight"
@@ -12,15 +12,18 @@ export const useTaskSearch = () => {
 	const [sortOption, setSortOption] = useState<SortOption>("newest")
 	const [lastNonRelevantSort, setLastNonRelevantSort] = useState<SortOption | null>("newest")
 	const [showAllWorkspaces, setShowAllWorkspaces] = useState(false)
+	const prevSearchQueryRef = useRef(searchQuery)
 
 	useEffect(() => {
-		if (searchQuery && sortOption !== "mostRelevant" && !lastNonRelevantSort) {
+		const prevSearchQuery = prevSearchQueryRef.current
+		if (searchQuery && sortOption !== "mostRelevant" && !lastNonRelevantSort && prevSearchQuery !== searchQuery) {
 			setLastNonRelevantSort(sortOption)
 			setSortOption("mostRelevant")
-		} else if (!searchQuery && sortOption === "mostRelevant" && lastNonRelevantSort) {
+		} else if (!searchQuery && sortOption === "mostRelevant" && lastNonRelevantSort && prevSearchQuery !== searchQuery) {
 			setSortOption(lastNonRelevantSort)
 			setLastNonRelevantSort(null)
 		}
+		prevSearchQueryRef.current = searchQuery
 	}, [searchQuery, sortOption, lastNonRelevantSort])
 
 	const presentableTasks = useMemo(() => {

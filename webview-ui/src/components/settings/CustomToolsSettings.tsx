@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useEvent } from "react-use"
 import { VSCodeCheckbox } from "@vscode/webview-ui-toolkit/react"
 import { RefreshCw, Loader2, FileCode } from "lucide-react"
@@ -35,13 +35,15 @@ export const CustomToolsSettings = ({ enabled, onChange }: CustomToolsSettingsPr
 	const [tools, setTools] = useState<SerializedCustomToolDefinition[]>([])
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [refreshError, setRefreshError] = useState<string | null>(null)
+	const prevEnabledRef = useRef(enabled)
 
 	useEffect(() => {
-		if (enabled) {
+		if (enabled && prevEnabledRef.current !== enabled) {
 			vscode.postMessage({ type: "refreshCustomTools" })
-		} else {
+		} else if (!enabled && prevEnabledRef.current !== enabled) {
 			setTools([])
 		}
+		prevEnabledRef.current = enabled
 	}, [enabled])
 
 	useEvent("message", (event: MessageEvent) => {

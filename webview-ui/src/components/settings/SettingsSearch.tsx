@@ -78,15 +78,23 @@ export function SettingsSearch({ index, onNavigate, sections }: SettingsSearchPr
 	)
 
 	// Reset highlight based on focus and available results
+	const prevOpenRef = useRef(isOpen)
+	const prevResultsRef = useRef(results.length)
 	useEffect(() => {
-		if (!isOpen || !results.length) {
-			setHighlightedResultId(undefined)
-			return
-		}
+		const prevOpen = prevOpenRef.current
+		const prevResults = prevResultsRef.current
 
-		setHighlightedResultId((current) =>
-			current && results.some((r) => r.settingId === current) ? current : results[0]?.settingId,
-		)
+		if (!isOpen || !results.length) {
+			if (prevOpen !== isOpen || prevResults !== results.length) {
+				setHighlightedResultId(undefined)
+			}
+		} else {
+			setHighlightedResultId((current) =>
+				current && results.some((r) => r.settingId === current) ? current : results[0]?.settingId,
+			)
+		}
+		prevOpenRef.current = isOpen
+		prevResultsRef.current = results.length
 	}, [isOpen, results])
 
 	// Ensure highlighted search result stays visible within dropdown

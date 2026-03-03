@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useCopyToClipboard } from "@src/utils/clipboard"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { vscode } from "@src/utils/vscode"
@@ -28,8 +28,16 @@ export function MermaidButton({ containerRef, code, isLoading, svgToPng, childre
 	const [modalViewMode, setModalViewMode] = useState<"diagram" | "code">("diagram")
 	const [isDragging, setIsDragging] = useState(false)
 	const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 })
+	const [modalInnerHTML, setModalInnerHTML] = useState<string>("")
 	const { copyWithFeedback } = useCopyToClipboard()
 	const { t } = useAppTranslation()
+
+	// Sync innerHTML from containerRef to state when modal is open
+	useEffect(() => {
+		if (showModal && modalViewMode === "diagram" && containerRef.current) {
+			setModalInnerHTML(containerRef.current.innerHTML)
+		}
+	}, [showModal, modalViewMode])
 
 	/**
 	 * Opens a modal with the diagram for zooming
@@ -192,8 +200,8 @@ export function MermaidButton({ containerRef, code, isLoading, svgToPng, childre
 								}}
 								onMouseUp={() => setIsDragging(false)}
 								onMouseLeave={() => setIsDragging(false)}>
-								{containerRef.current && containerRef.current.innerHTML && (
-									<div dangerouslySetInnerHTML={{ __html: containerRef.current.innerHTML }} />
+								{modalInnerHTML && (
+									<div dangerouslySetInnerHTML={{ __html: modalInnerHTML }} />
 								)}
 							</div>
 							<div className="absolute bottom-4 left-4 bg-vscode-editor-background border border-vscode-editorGroup-border rounded px-2 py-1 text-xs text-vscode-descriptionForeground pointer-events-none opacity-80">

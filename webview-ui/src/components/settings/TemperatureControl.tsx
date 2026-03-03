@@ -16,14 +16,18 @@ export const TemperatureControl = ({ value, onChange, maxValue = 1, defaultValue
 	const { t } = useAppTranslation()
 	const [isCustomTemperature, setIsCustomTemperature] = useState(value !== undefined)
 	const [inputValue, setInputValue] = useState(value)
+	const prevValueRef = useRef(value)
 
 	useDebounce(() => onChange(inputValue), 50, [onChange, inputValue])
 
 	// Sync internal state with prop changes when switching profiles.
 	useEffect(() => {
-		const hasCustomTemperature = value !== undefined && value !== null
-		setIsCustomTemperature(hasCustomTemperature)
-		setInputValue(value)
+		if (prevValueRef.current !== value) {
+			const hasCustomTemperature = value !== undefined && value !== null
+			setIsCustomTemperature(hasCustomTemperature)
+			setInputValue(value)
+			prevValueRef.current = value
+		}
 	}, [value])
 
 	return (

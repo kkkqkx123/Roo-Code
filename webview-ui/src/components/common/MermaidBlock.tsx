@@ -94,11 +94,15 @@ export default function MermaidBlock({ code }: MermaidBlockProps) {
 	const [isErrorExpanded, setIsErrorExpanded] = useState(false)
 	const { showCopyFeedback, copyWithFeedback } = useCopyToClipboard()
 	const { t } = useAppTranslation()
+	const prevCodeRef = useRef<string>(code)
 
-	// 1) Whenever `code` changes, mark that we need to re-render a new chart
+	// Reset loading and error state when code changes
 	useEffect(() => {
-		setIsLoading(true)
-		setError(null)
+		if (prevCodeRef.current !== code) {
+			setIsLoading(true)
+			setError(null)
+			prevCodeRef.current = code
+		}
 	}, [code])
 
 	// 2) Debounce the actual parse/render

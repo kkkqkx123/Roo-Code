@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import { useEvent } from "react-use"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
@@ -53,18 +53,15 @@ const App = () => {
 	} = useExtensionState()
 
 	const [tab, setTab] = useState<Tab>("chat")
-	const didShowAnnouncementRef = useRef(false)
-
-	// Derive showAnnouncement from shouldShowAnnouncement and tab
-	const showAnnouncement = shouldShowAnnouncement && tab === "chat" && !didShowAnnouncementRef.current
+	const [showAnnouncement, setShowAnnouncement] = useState(false)
 
 	// Mark announcement as shown when conditions are met
 	useEffect(() => {
-		if (shouldShowAnnouncement && tab === "chat" && !didShowAnnouncementRef.current) {
-			didShowAnnouncementRef.current = true
+		if (shouldShowAnnouncement && tab === "chat" && !showAnnouncement) {
+			setShowAnnouncement(true)
 			vscode.postMessage({ type: "didShowAnnouncement" })
 		}
-	}, [shouldShowAnnouncement, tab])
+	}, [shouldShowAnnouncement, tab, showAnnouncement])
 
 	const [deleteMessageDialogState, setDeleteMessageDialogState] = useState<DeleteMessageDialogState>({
 		isOpen: false,
@@ -196,7 +193,7 @@ const App = () => {
 				ref={chatViewRef}
 				isHidden={tab !== "chat"}
 				showAnnouncement={showAnnouncement}
-				hideAnnouncement={() => { didShowAnnouncementRef.current = true }}
+				hideAnnouncement={() => setShowAnnouncement(false)}
 			/>
 			{deleteMessageDialogState.hasCheckpoint ? (
 				<MemoizedCheckpointRestoreDialog

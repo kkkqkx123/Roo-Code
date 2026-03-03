@@ -67,12 +67,15 @@ const ApiOptions = ({
 		const headers = apiConfiguration?.openAiHeaders || {}
 		return Object.entries(headers)
 	})
+	const prevHeadersRef = useRef<[string, string][]>(customHeaders)
 
 	useEffect(() => {
 		const propHeaders = apiConfiguration?.openAiHeaders || {}
+		const propHeadersEntries = Object.entries(propHeaders)
 
-		if (JSON.stringify(customHeaders) !== JSON.stringify(Object.entries(propHeaders))) {
-			setCustomHeaders(Object.entries(propHeaders))
+		if (JSON.stringify(customHeaders) !== JSON.stringify(propHeadersEntries) && prevHeadersRef.current !== propHeadersEntries) {
+			setCustomHeaders(propHeadersEntries)
+			prevHeadersRef.current = propHeadersEntries
 		}
 	}, [apiConfiguration?.openAiHeaders, customHeaders])
 

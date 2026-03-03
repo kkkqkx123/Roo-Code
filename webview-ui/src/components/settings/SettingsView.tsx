@@ -485,11 +485,13 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 	)
 
 	// Update target section logic to set active tab
+	const prevTargetSectionRef = useRef(targetSection)
 	useEffect(() => {
-		if (targetSection && sectionNames.includes(targetSection as SectionName)) {
+		if (targetSection && sectionNames.includes(targetSection as SectionName) && prevTargetSectionRef.current !== targetSection) {
 			setActiveTab(targetSection as SectionName)
+			prevTargetSectionRef.current = targetSection
 		}
-	}, [targetSection])
+	}, [targetSection, sectionNames])
 
 	// Function to scroll the active tab into view for vertical layout
 	const scrollToActiveTab = useCallback(() => {

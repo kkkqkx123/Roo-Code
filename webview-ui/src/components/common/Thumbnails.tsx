@@ -13,6 +13,7 @@ const Thumbnails = ({ images, style, setImages, onHeightChange }: ThumbnailsProp
 	const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 	const containerRef = useRef<HTMLDivElement>(null)
 	const { width } = useWindowSize()
+	const prevImagesRef = useRef<string[]>(images)
 
 	useLayoutEffect(() => {
 		if (containerRef.current) {
@@ -23,7 +24,10 @@ const Thumbnails = ({ images, style, setImages, onHeightChange }: ThumbnailsProp
 			}
 			onHeightChange?.(height)
 		}
-		setHoveredIndex(null)
+		if (prevImagesRef.current !== images) {
+			setHoveredIndex(null)
+			prevImagesRef.current = images
+		}
 	}, [images, width, onHeightChange])
 
 	const handleDelete = (index: number) => {

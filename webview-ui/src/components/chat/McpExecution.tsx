@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, memo } from "react"
+import { useCallback, useEffect, useMemo, useState, memo, useRef } from "react"
 import { Server, ChevronDown } from "lucide-react"
 import { useEvent } from "react-use"
 import { useTranslation } from "react-i18next"
@@ -56,9 +56,35 @@ export const McpExecution = ({
 	const [argumentsText, setArgumentsText] = useState(text || "")
 	const [serverName, setServerName] = useState(initialServerName)
 	const [toolName, setToolName] = useState(initialToolName)
+	const initializedRef = useRef(false)
 
 	// Only need expanded state for response section (like command output)
 	const [isResponseExpanded, setIsResponseExpanded] = useState(false)
+
+	// Initialize values once when props change significantly
+	useEffect(() => {
+		if (!initializedRef.current) {
+			// Handle arguments text - don't parse JSON here as it might be incomplete
+			if (text) {
+				setArgumentsText(text)
+			}
+
+			// Handle response text
+			if (useMcpServer?.response) {
+				setResponseText(useMcpServer.response)
+			}
+
+			if (initialServerName && initialServerName !== serverName) {
+				setServerName(initialServerName)
+			}
+
+			if (initialToolName && initialToolName !== toolName) {
+				setToolName(initialToolName)
+			}
+
+			initializedRef.current = true
+		}
+	}, [text, useMcpServer?.response, initialServerName, initialToolName])
 
 	// Try to parse JSON and return both the result and formatted text
 	const tryParseJson = useCallback((text: string): { isJson: boolean; formatted: string } => {
@@ -162,27 +188,6 @@ export const McpExecution = ({
 	)
 
 	useEvent("message", onMessage)
-
-	// Initialize with text if provided and parse command/response sections
-	useEffect(() => {
-		// Handle arguments text - don't parse JSON here as it might be incomplete
-		if (text) {
-			setArgumentsText(text)
-		}
-
-		// Handle response text
-		if (useMcpServer?.response) {
-			setResponseText(useMcpServer.response)
-		}
-
-		if (initialServerName && initialServerName !== serverName) {
-			setServerName(initialServerName)
-		}
-
-		if (initialToolName && initialToolName !== toolName) {
-			setToolName(initialToolName)
-		}
-	}, [text, useMcpServer, initialServerName, initialToolName, serverName, toolName, isArguments])
 
 	return (
 		<>
