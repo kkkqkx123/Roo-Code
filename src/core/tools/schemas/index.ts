@@ -204,14 +204,6 @@ export {
 	type GenerateImageParams,
 } from "./generate_image"
 
-// get_workspace_diagnostics
-export {
-	GetWorkspaceDiagnosticsParamsSchema,
-	createGetWorkspaceDiagnosticsTool,
-	getWorkspaceDiagnosticsTool,
-	type GetWorkspaceDiagnosticsParams,
-} from "./get_workspace_diagnostics"
-
 // ─── Tool Registry ──────────────────────────────────────────────────────────────
 
 export {
