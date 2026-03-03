@@ -144,6 +144,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 	
 	// Use codeIndexStore for UI state management
 	const {
+		isOpen,
 		saveStatus,
 		saveError,
 		formErrors,
@@ -174,7 +175,6 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 	// Use useIndexingStatus hook for polling (optional - can use external status instead)
 	// const { data: polledStatus } = useIndexingStatus(cwd)
 
-	const [open, setOpenLocal] = useState(false)
 	const confirmDialogHandler = useRef<(() => void) | null>(null)
 
 	// Sync external indexing status to store
@@ -222,13 +222,13 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 
 	// Combined message listener effect - reduces from 3 separate effects to 1
 	useEffect(() => {
-		if (open) {
+		if (isOpen) {
 			vscode.postMessage({ type: "requestIndexingStatus" })
 			vscode.postMessage({ type: "requestCodeIndexSecretStatus" })
 		}
 
 		const handleMessage = (event: MessageEvent<any>) => {
-			if (event.data.type === "workspaceUpdated" && open) {
+			if (event.data.type === "workspaceUpdated" && isOpen) {
 				vscode.postMessage({ type: "requestIndexingStatus" })
 				vscode.postMessage({ type: "requestCodeIndexSecretStatus" })
 			} else if (event.data.type === "indexingStatusUpdate") {
@@ -288,7 +288,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 
 		window.addEventListener("message", handleMessage)
 		return () => window.removeEventListener("message", handleMessage)
-	}, [open, cwd, t, saveStatus, setIndexingStatus, setSaveStatus, setSaveError, setCurrentSettings, setInitialSettings, currentSettings])
+	}, [isOpen, cwd, t, saveStatus, setIndexingStatus, setSaveStatus, setSaveError, setCurrentSettings, setInitialSettings, currentSettings])
 
 	// Use a ref to capture current settings for the save handler
 	const currentSettingsRef = useRef(currentSettings)
@@ -415,7 +415,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 	}, [checkUnsavedChanges])
 
 	// Use the shared ESC key handler hook - respects unsaved changes logic
-	useEscapeKey(open, handlePopoverClose)
+	useEscapeKey(isOpen, handlePopoverClose)
 
 	const handleSaveSettings = () => {
 		// Validate settings before saving
@@ -486,7 +486,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 	return (
 		<>
 			<Popover
-				open={open}
+				open={isOpen}
 				onOpenChange={(newOpen) => {
 					if (!newOpen) {
 						// User is trying to close the popover
