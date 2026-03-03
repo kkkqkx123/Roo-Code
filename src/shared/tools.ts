@@ -67,7 +67,7 @@ export type ToolGroupConfig = {
  */
 export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 	read: {
-		tools: ["read_file", "search_files", "list_files", "codebase_search", "get_workspace_diagnostics"],
+		tools: ["read_file", "search_files", "list_files", "codebase_search"],
 	},
 	edit: {
 		tools: ["apply_diff", "write_to_file", "generate_image", "apply_patch"],
@@ -80,7 +80,15 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 		tools: ["use_mcp"],
 	},
 	modes: {
-		tools: ["switch_mode", "new_task"],
+		tools: [
+			"switch_mode",
+			"new_task",
+			"ask_followup_question",
+			"attempt_completion",
+			"update_todo_list",
+			"run_slash_command",
+			"skill",
+		],
 		alwaysAvailable: true,
 	},
 }

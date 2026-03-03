@@ -262,23 +262,6 @@ case "attempt_completion":
 | 阶段 4：测试 | 2 小时 | 阶段 2 |
 | **总计** | **6 小时** | - |
 
-## 验收标准
-
-- [ ] 长文本 `attempt_completion` 结果能在流式传输期间开始显示
-- [ ] 流式内容与最终内容平滑过渡，无明显跳变
-- [ ] 所有现有测试通过
-- [ ] 新增流式测试覆盖关键场景
-- [ ] Lint 和 Type Check 通过
-- [ ] 手动验证常见使用场景
-
-## 相关文件
-
-- `src/core/assistant-message/presentAssistantMessage.ts`
-- `src/core/tools/AttemptCompletionTool.ts`
-- `src/core/assistant-message/NativeToolCallParser.ts`
-- `src/core/tools/core/BaseTool.ts`
-- `src/core/task/streaming/handlers/ToolCallHandler.ts`
-
 ## 参考
 
 - Partial JSON Parser: https://github.com/partial-json/partial-json-parser
