@@ -122,6 +122,8 @@ const ModesView = () => {
 
 	// Optimistic rename map so search reflects new names immediately
 	const [localRenames, setLocalRenames] = useState<Record<string, string>>({})
+	// Get all modes (built-in + custom)
+	const modes = getAllModes(customModes)
 	// Display list that overlays optimistic names
 	const displayModes = (modes || []).map((m) => (localRenames[m.slug] ? { ...m, name: localRenames[m.slug] } : m))
 

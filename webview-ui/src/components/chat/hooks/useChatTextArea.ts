@@ -7,6 +7,7 @@ interface UseChatTextAreaOptions {
 	inputValue: string
 	setInputValue: (value: string) => void
 	setIsEnhancingPrompt: (isEnhancing: boolean) => void
+	setShowContextMenu?: (show: boolean) => void
 }
 
 interface UseChatTextAreaReturn {

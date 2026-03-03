@@ -14,7 +14,6 @@ import {
 	getDefaultModelIdForProvider,
 	getStaticModelsForProvider,
 	shouldUseGenericModelPicker,
-	handleModelChangeSideEffects,
 } from "./utils/providerModelConfig"
 
 import { vscode } from "@src/utils/vscode"
@@ -39,6 +38,8 @@ import { RateLimitSecondsControl } from "./RateLimitSecondsControl"
 import { ConsecutiveMistakeLimitControl } from "./ConsecutiveMistakeLimitControl"
 import { buildDocLink } from "@src/utils/docLinks"
 import { BookOpenText } from "lucide-react"
+import { MODELS_BY_PROVIDER, PROVIDERS } from "./constants"
+import { Anthropic, Gemini, OpenAI, OpenAICompatible } from "./providers"
 
 export interface ApiOptionsProps {
 	uriScheme: string | undefined
@@ -333,13 +334,12 @@ const ApiOptions = ({
 					serviceUrl={getProviderServiceConfig(activeSelectedProvider).serviceUrl}
 					errorMessage={modelValidationError}
 					simplifySettings={false}
-					onModelChange={(modelId) =>
-						handleModelChangeSideEffects(
-							activeSelectedProvider,
-							modelId,
-							setApiConfigurationField,
-						)
-					}
+					onModelChange={() => {
+						// Clear reasoning-related fields when switching models to allow
+						// the new model's default to take effect.
+						setApiConfigurationField("reasoningEffort", undefined)
+						setApiConfigurationField("enableReasoningEffort", undefined)
+					}}
 				/>
 			)}
 

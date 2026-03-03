@@ -10,6 +10,7 @@ import { Split } from "lucide-react"
 
 export interface TaskItemFooterProps {
 	item: HistoryItem
+	variant?: "full" | "compact"
 	isSelectionMode?: boolean
 	isSubtask?: boolean
 	onDelete?: (taskId: string) => void
@@ -17,6 +18,7 @@ export interface TaskItemFooterProps {
 
 const TaskItemFooter: React.FC<TaskItemFooterProps> = ({
 	item,
+	variant = "full",
 	isSelectionMode = false,
 	isSubtask = false,
 	onDelete,
