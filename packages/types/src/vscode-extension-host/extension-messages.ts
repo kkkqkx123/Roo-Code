@@ -116,6 +116,8 @@ export interface ExtensionMessageBase {
 		path?: string
 	}>
 	clineMessage?: ClineMessage
+	/** Sequence number for messageUpdated events to prevent stale updates */
+	seq?: number
 	openAiModels?: string[]
 	mcpServers?: McpServer[]
 	commits?: GitCommit[]

@@ -146,6 +146,14 @@ export class ClineProvider
 	 */
 	private clineMessagesSeq = 0
 
+	/**
+	 * Get the current message sequence number.
+	 * Used by Task to include seq in messageUpdated events for frontend validation.
+	 */
+	public getClineMessagesSeq(): number {
+		return this.clineMessagesSeq
+	}
+
 	public isViewLaunched = false
 	public settingsImportedAt?: number
 	public readonly latestAnnouncementId = "feb-2026-v3.50.0-gemini-31-pro-cli-ndjson-cli-v010" // v3.50.0 Gemini 3.1 Pro Support, CLI NDJSON Protocol, CLI v0.1.0

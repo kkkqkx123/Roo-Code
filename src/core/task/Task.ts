@@ -1398,7 +1398,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	private async updateClineMessage(message: ClineMessage) {
 		const provider = this.providerRef.deref()
-		await provider?.postMessageToWebview({ type: "messageUpdated", clineMessage: message })
+		// Include sequence number to prevent stale updates from overwriting newer messages
+		const seq = provider?.getClineMessagesSeq() ?? 0
+		await provider?.postMessageToWebview({ type: "messageUpdated", clineMessage: message, seq })
 		this.emit(CoderEventName.Message, { action: "updated", message })
 	}
 
@@ -1718,10 +1720,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				const followUpMsg = this.clineMessages[lastFollowUpIndex]
 				if (followUpMsg) {
 					followUpMsg.isAnswered = true
-					// Save the updated messages
-					this.saveClineMessages().catch((error) => {
-						console.error("Failed to save answered follow-up state:", error)
-					})
+					// Use incremental update to avoid race condition with full state push
+					// The message will be saved when the next message is added or on task completion
+					void this.updateClineMessage(followUpMsg)
 				}
 			}
 		}
@@ -1736,10 +1737,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				const toolAskMsg = this.clineMessages[lastToolAskIndex]
 				if (toolAskMsg) {
 					toolAskMsg.isAnswered = true
+					// Use incremental update to avoid race condition with full state push
+					// The message will be saved when the next message is added or on task completion
 					void this.updateClineMessage(toolAskMsg)
-					this.saveClineMessages().catch((error) => {
-						console.error("Failed to save answered tool-ask state:", error)
-					})
 				}
 			}
 		}

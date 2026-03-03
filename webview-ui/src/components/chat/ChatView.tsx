@@ -1025,27 +1025,42 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			return true
 		})
 
-		const viewportStart = Math.max(0, newVisibleMessages.length - 100)
-		newVisibleMessages
+		// Deduplicate messages by timestamp to prevent duplicate displays
+		// This can happen when both incremental updates and full state pushes arrive
+		const seen = new Set<number>()
+		const deduplicatedMessages = newVisibleMessages.filter((msg: ClineMessage) => {
+			if (seen.has(msg.ts)) {
+				console.warn(`[ChatView] Duplicate message detected and filtered: ts=${msg.ts}`)
+				return false
+			}
+			seen.add(msg.ts)
+			return true
+		})
+
+		const viewportStart = Math.max(0, deduplicatedMessages.length - 100)
+		deduplicatedMessages
 			.slice(viewportStart)
 			.forEach((msg: ClineMessage) => everVisibleMessagesTsRef.current.set(msg.ts, true))
 
-		return newVisibleMessages
+		return deduplicatedMessages
 	}, [modifiedMessages])
 
 	useEffect(() => {
+		// Clean up cache more frequently to prevent stale state
+		// This helps avoid duplicate message displays when messages are rapidly updated
 		const cleanupInterval = setInterval(() => {
 			const cache = everVisibleMessagesTsRef.current
 			const currentMessageIds = new Set(modifiedMessages.map((m: ClineMessage) => m.ts))
 			const viewportMessages = visibleMessages.slice(Math.max(0, visibleMessages.length - 100))
 			const viewportMessageIds = new Set(viewportMessages.map((m: ClineMessage) => m.ts))
 
+			// Only keep messages that exist in current state or are in viewport
 			cache.forEach((_value: boolean, key: number) => {
 				if (!currentMessageIds.has(key) && !viewportMessageIds.has(key)) {
 					cache.delete(key)
 				}
 			})
-		}, 60000)
+		}, 5000) // Clean every 5 seconds instead of 60 seconds
 
 		return () => clearInterval(cleanupInterval)
 	}, [modifiedMessages, visibleMessages])

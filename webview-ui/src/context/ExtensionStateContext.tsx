@@ -354,7 +354,17 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 				}
 				case "messageUpdated": {
 					const clineMessage = message.clineMessage!
+					const seq = message.seq
 					setState((prevState) => {
+						// Check sequence number to prevent stale updates from overwriting newer messages
+						// This is critical for preventing duplicate tool result displays
+						if (seq !== undefined && prevState.clineMessagesSeq !== undefined && seq <= prevState.clineMessagesSeq) {
+							console.warn(
+								`[messageUpdated] Dropping stale update with seq=${seq} (current seq=${prevState.clineMessagesSeq})`,
+							)
+							return prevState
+						}
+
 						// worth noting it will never be possible for a more up-to-date message to be sent here or in normal messages post since the presentAssistantContent function uses lock
 						const lastIndex = findLastIndex(prevState.clineMessages, (msg) => msg.ts === clineMessage.ts)
 						if (lastIndex !== -1) {
