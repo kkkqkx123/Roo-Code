@@ -299,7 +299,7 @@ export const ChatRowContent = ({
 							style={{ color: normalColor, marginBottom: "-1.5px" }}></span>
 					),
 					<span style={{ color: normalColor, fontWeight: "bold" }}>
-						{mcpServerUse.type === "use_mcp_tool"
+						{mcpServerUse.toolName
 							? t("chat:mcp.wantsToUseTool", { serverName: mcpServerUse.serverName })
 							: t("chat:mcp.wantsToAccessResource", { serverName: mcpServerUse.serverName })}
 					</span>,
@@ -1617,7 +1617,7 @@ export const ChatRowContent = ({
 								{title}
 							</div>
 							<div className="w-full bg-vscode-editor-background border border-vscode-border rounded-xs p-2 mt-2">
-								{useMcpServer.type === "access_mcp_resource" && (
+								{useMcpServer.uri && (
 									<McpResourceRow
 										item={{
 											// Use the matched resource/template details, with fallbacks
@@ -1635,7 +1635,7 @@ export const ChatRowContent = ({
 										}}
 									/>
 								)}
-								{useMcpServer.type === "use_mcp_tool" && (
+								{useMcpServer.toolName && (
 									<McpExecution
 										executionId={message.ts.toString()}
 										text={useMcpServer.arguments !== "{}" ? useMcpServer.arguments : undefined}

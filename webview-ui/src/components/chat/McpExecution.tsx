@@ -56,33 +56,38 @@ export const McpExecution = ({
 	const [argumentsText, setArgumentsText] = useState(text || "")
 	const [serverName, setServerName] = useState(initialServerName)
 	const [toolName, setToolName] = useState(initialToolName)
-	const initializedRef = useRef(false)
 
 	// Only need expanded state for response section (like command output)
 	const [isResponseExpanded, setIsResponseExpanded] = useState(false)
 
-	// Initialize values once when props change significantly
+	// Refs to track previous prop values for synchronization
+	const prevTextRef = useRef<string | undefined>(text)
+	const prevResponseRef = useRef<string | undefined>(useMcpServer?.response)
+	const prevServerNameRef = useRef<string | undefined>(initialServerName)
+	const prevToolNameRef = useRef<string | undefined>(initialToolName)
+
+	// Sync values when props change
 	useEffect(() => {
-		if (!initializedRef.current) {
-			// Handle arguments text - don't parse JSON here as it might be incomplete
-			if (text) {
-				setArgumentsText(text)
-			}
+		// Handle arguments text - don't parse JSON here as it might be incomplete
+		if (text && text !== prevTextRef.current) {
+			setArgumentsText(text)
+			prevTextRef.current = text
+		}
 
-			// Handle response text
-			if (useMcpServer?.response) {
-				setResponseText(useMcpServer.response)
-			}
+		// Handle response text
+		if (useMcpServer?.response && useMcpServer.response !== prevResponseRef.current) {
+			setResponseText(useMcpServer.response)
+			prevResponseRef.current = useMcpServer.response
+		}
 
-			if (initialServerName && initialServerName !== serverName) {
-				setServerName(initialServerName)
-			}
+		if (initialServerName && initialServerName !== prevServerNameRef.current) {
+			setServerName(initialServerName)
+			prevServerNameRef.current = initialServerName
+		}
 
-			if (initialToolName && initialToolName !== toolName) {
-				setToolName(initialToolName)
-			}
-
-			initializedRef.current = true
+		if (initialToolName && initialToolName !== prevToolNameRef.current) {
+			setToolName(initialToolName)
+			prevToolNameRef.current = initialToolName
 		}
 	}, [text, useMcpServer?.response, initialServerName, initialToolName])
 
@@ -240,7 +245,7 @@ export const McpExecution = ({
 
 			<div className="w-full bg-vscode-editor-background rounded-xs p-2">
 				{/* Tool information section */}
-				{useMcpServer?.type === "use_mcp_tool" && (
+				{useMcpServer?.toolName && (
 					<div onClick={(e) => e.stopPropagation()}>
 						<McpToolRow
 							tool={{
@@ -280,7 +285,7 @@ export const McpExecution = ({
 					<div
 						className={cn({
 							"mt-1 pt-1":
-								!isArguments && (useMcpServer?.type === "use_mcp_tool" || (toolName && serverName)),
+								!isArguments && (useMcpServer?.toolName || (toolName && serverName)),
 						})}>
 						<CodeBlock source={formattedArgumentsText} language="json" />
 					</div>

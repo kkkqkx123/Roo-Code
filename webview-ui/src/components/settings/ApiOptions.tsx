@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react"
+import React, { memo, useCallback, useEffect, useMemo, useState, useRef } from "react"
 import { convertHeadersToObject } from "./utils/headers"
 import { useDebounce } from "react-use"
 import { VSCodeLink } from "@vscode/webview-ui-toolkit/react"
@@ -69,15 +69,26 @@ const ApiOptions = ({
 	})
 	const prevHeadersRef = useRef<[string, string][]>(customHeaders)
 
-	useEffect(() => {
-		const propHeaders = apiConfiguration?.openAiHeaders || {}
-		const propHeadersEntries = Object.entries(propHeaders)
+	// Memoize prop headers entries to avoid unnecessary recalculations
+	const propHeadersEntries = useMemo(
+		() => Object.entries(apiConfiguration?.openAiHeaders || {}),
+		[apiConfiguration?.openAiHeaders],
+	)
 
-		if (JSON.stringify(customHeaders) !== JSON.stringify(propHeadersEntries) && prevHeadersRef.current !== propHeadersEntries) {
+	// Sync local state with prop changes, avoiding dependency on customHeaders
+	useEffect(() => {
+		// Compare using JSON.stringify for deep comparison
+		const currentHeadersStr = JSON.stringify(customHeaders)
+		const propHeadersStr = JSON.stringify(propHeadersEntries)
+		const prevHeadersStr = JSON.stringify(prevHeadersRef.current)
+
+		// Only update if props have changed and are different from current local state
+		// and different from previous props (to avoid sync loops)
+		if (currentHeadersStr !== propHeadersStr && prevHeadersStr !== propHeadersStr) {
 			setCustomHeaders(propHeadersEntries)
-			prevHeadersRef.current = propHeadersEntries
+			prevHeadersRef.current = [...propHeadersEntries]
 		}
-	}, [apiConfiguration?.openAiHeaders, customHeaders])
+	}, [propHeadersEntries]) // Only depend on propHeadersEntries, not customHeaders
 
 	// Helper to convert array of tuples to object (filtering out empty keys).
 
@@ -94,7 +105,7 @@ const ApiOptions = ({
 			}
 		},
 		300,
-		[customHeaders, apiConfiguration?.openAiHeaders, setApiConfigurationField],
+		[customHeaders, setApiConfigurationField], // Remove apiConfiguration?.openAiHeaders from dependencies
 	)
 
 	const [isAdvancedSettingsOpen, setIsAdvancedSettingsOpen] = useState(false)

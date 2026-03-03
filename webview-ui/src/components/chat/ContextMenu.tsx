@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from "react"
+import React, { useMemo, useRef, useEffect, useCallback } from "react"
 import { getIconForFilePath, getIconUrlByName, getIconForDirectoryPath } from "vscode-material-icons"
 import { Trans } from "react-i18next"
 import { t } from "i18next"
@@ -242,23 +242,22 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
 
 	const isOptionSelectable = (option: ContextMenuQueryItem): boolean => {
 		return (
-			option.type !== ContextMenuOptionType.NoResults &&
-			option.type !== ContextMenuOptionType.URL &&
-			option.type !== ContextMenuOptionType.SectionHeader
-		)
-	}
-
-	const handleSettingsClick = (e: React.MouseEvent) => {
-		// Prevent any default behavior
-		e.preventDefault()
-		// Switch to settings tab and navigate to slash commands section
-		vscode.postMessage({
-			type: "switchTab",
-			tab: "settings",
-			values: { section: "slashCommands" },
-		})
-	}
-
+				option.type !== ContextMenuOptionType.NoResults &&
+				option.type !== ContextMenuOptionType.URL &&
+				option.type !== ContextMenuOptionType.SectionHeader
+				)
+			}
+		
+			const handleSettingsClick = useCallback((e: React.MouseEvent) => {
+				// Prevent any default behavior
+				e.preventDefault()
+				// Switch to settings tab and navigate to slash commands section
+				vscode.postMessage({
+					type: "switchTab",
+					tab: "settings",
+					values: { section: "slashCommands" },
+				})
+			}, [])
 	return (
 		<div
 			style={{

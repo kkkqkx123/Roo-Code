@@ -39,7 +39,6 @@ export const usePromptHistory = ({
 	const [tempInput, setTempInput] = useState("")
 	// promptHistory is now derived from filteredPromptHistory to avoid setState in effect
 	const prevFilteredHistoryRef = useRef<string[]>([])
-	const [resetCounter, setResetCounter] = useState(0)
 
 	// Initialize prompt history with hybrid approach: conversation messages if in task, otherwise task history
 	const filteredPromptHistory = useMemo(() => {
@@ -85,11 +84,14 @@ export const usePromptHistory = ({
 
 	// Reset history navigation when user types (but not when we're setting it programmatically)
 	const resetOnInputChange = useCallback(() => {
-		if (historyIndex !== -1) {
-			setHistoryIndex(-1)
-			setTempInput("")
-		}
-	}, [historyIndex])
+		setHistoryIndex((prevIndex) => {
+			if (prevIndex !== -1) {
+				setTempInput("")
+				return -1
+			}
+			return prevIndex
+		})
+	}, [])
 
 	// Helper to set cursor position after React renders
 	const setCursorPosition = useCallback(

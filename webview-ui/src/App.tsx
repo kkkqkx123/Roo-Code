@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useState, useRef } from "react"
 import { useEvent } from "react-use"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
@@ -57,11 +57,16 @@ const App = () => {
 
 	// Mark announcement as shown when conditions are met
 	useEffect(() => {
-		if (shouldShowAnnouncement && tab === "chat" && !showAnnouncement) {
-			setShowAnnouncement(true)
-			vscode.postMessage({ type: "didShowAnnouncement" })
+		if (shouldShowAnnouncement && tab === "chat") {
+			setShowAnnouncement((prev) => {
+				if (!prev) {
+					vscode.postMessage({ type: "didShowAnnouncement" })
+					return true
+				}
+				return prev
+			})
 		}
-	}, [shouldShowAnnouncement, tab, showAnnouncement])
+	}, [shouldShowAnnouncement, tab])
 
 	const [deleteMessageDialogState, setDeleteMessageDialogState] = useState<DeleteMessageDialogState>({
 		isOpen: false,
