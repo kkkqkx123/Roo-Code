@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useEffect, useMemo } from "react"
 import { Database } from "lucide-react"
 
-import type { IndexingStatus, IndexingStatusUpdateMessage } from "@coder/types"
+import type { IndexingStatusUpdateMessage } from "@coder/types"
 
 import { cn } from "@src/lib/utils"
 import { vscode } from "@src/utils/vscode"
@@ -9,6 +9,7 @@ import { useAppTranslation } from "@/i18n/TranslationContext"
 
 import { useExtensionState } from "@src/context/ExtensionStateContext"
 import { PopoverTrigger, StandardTooltip, Button } from "@src/components/ui"
+import { useCodeIndexStore } from "@src/stores/codeIndexStore"
 
 import { CodeIndexPopover } from "./CodeIndexPopover"
 
@@ -19,16 +20,11 @@ interface IndexingStatusBadgeProps {
 export const IndexingStatusBadge: React.FC<IndexingStatusBadgeProps> = ({ className }) => {
 	const { t } = useAppTranslation()
 	const { cwd } = useExtensionState()
-
-	const [indexingStatus, setIndexingStatus] = useState<IndexingStatus>({
-		systemStatus: "Standby",
-		processedItems: 0,
-		totalItems: 0,
-		currentItemUnit: "items",
-	})
+	const { indexingStatus, setIndexingStatus } = useCodeIndexStore()
 
 	useEffect(() => {
-		// Request initial indexing status.
+		// Request initial indexing status only once on mount.
+		// Subsequent updates are pushed from backend via indexingStatusUpdate messages.
 		vscode.postMessage({ type: "requestIndexingStatus" })
 
 		// Set up message listener for status updates.
@@ -46,7 +42,7 @@ export const IndexingStatusBadge: React.FC<IndexingStatusBadgeProps> = ({ classN
 		return () => {
 			window.removeEventListener("message", handleMessage)
 		}
-	}, [cwd])
+	}, [cwd, setIndexingStatus])
 
 	const progressPercentage = useMemo(
 		() =>

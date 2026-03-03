@@ -19,6 +19,7 @@ interface UseChatTextAreaReturn {
 	// State setters
 	setSearchLoading: (loading: boolean) => void
 	setFileSearchResults: (results: SearchResult[]) => void
+	setSearchRequestId: (requestId: string) => void
 }
 
 export function useChatTextArea({
@@ -29,7 +30,7 @@ export function useChatTextArea({
 	const [gitCommits, setGitCommits] = useState<any[]>([])
 	const [fileSearchResults, setFileSearchResults] = useState<SearchResult[]>([])
 	const [searchLoading, setSearchLoading] = useState(false)
-	const searchRequestId = ""
+	const searchRequestIdRef = useRef("")
 	const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 
 	// Handle enhanced prompt response and search results
@@ -95,7 +96,7 @@ export function useChatTextArea({
 				setGitCommits(commits)
 			} else if (message.type === "fileSearchResults") {
 				setSearchLoading(false)
-				if (message.requestId === searchRequestId) {
+				if (message.requestId === searchRequestIdRef.current) {
 					setFileSearchResults(message.results || [])
 				}
 			}
@@ -103,7 +104,7 @@ export function useChatTextArea({
 
 		window.addEventListener("message", messageHandler)
 		return () => window.removeEventListener("message", messageHandler)
-	}, [setInputValue, searchRequestId, inputValue, setIsEnhancingPrompt])
+	}, [setInputValue, inputValue, setIsEnhancingPrompt])
 
 	return {
 		gitCommits,
@@ -111,5 +112,8 @@ export function useChatTextArea({
 		searchLoading,
 		setSearchLoading,
 		setFileSearchResults,
+		setSearchRequestId: (requestId: string) => {
+			searchRequestIdRef.current = requestId
+		},
 	}
 }

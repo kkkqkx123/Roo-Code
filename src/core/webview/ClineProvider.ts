@@ -1328,8 +1328,20 @@ export class ClineProvider
 	private setWebviewMessageListener(webview: vscode.Webview) {
 		this.log(`[setWebviewMessageListener] Setting up message listener`)
 
+		// Messages that are frequently polled and should not clutter the output channel
+		const verboseMessageTypes = new Set([
+			"requestIndexingStatus",
+			"requestCodeIndexSecretStatus",
+		])
+
 		const onReceiveMessage = async (message: WebviewInboundMessage) => {
-			this.log(`[setWebviewMessageListener] Received message from webview: ${message.type}`)
+			// Only log non-verbose messages to avoid cluttering output during polling
+			if (!verboseMessageTypes.has(message.type)) {
+				this.log(`[setWebviewMessageListener] Received message from webview: ${message.type}`)
+			} else {
+				// Log verbose messages only to console for debugging
+				console.debug(`[setWebviewMessageListener] Received message from webview: ${message.type}`)
+			}
 			return webviewMessageHandler(this, message)
 		}
 

@@ -129,6 +129,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			searchLoading,
 			setSearchLoading,
 			setFileSearchResults,
+			setSearchRequestId,
 		} = useChatTextArea({
 			inputValue,
 			setInputValue,
@@ -562,6 +563,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 									searchTimeoutRef.current = setTimeout(() => {
 										// Generate a request ID for this search.
 										const reqId = Math.random().toString(36).substring(2, 9)
+										setSearchRequestId(reqId)
 										setSearchLoading(true)
 
 										// Send message to extension to search files.

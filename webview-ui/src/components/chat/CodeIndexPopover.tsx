@@ -172,9 +172,6 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 		resetSettings,
 	} = useCodeIndexStore()
 
-	// Use useIndexingStatus hook for polling (optional - can use external status instead)
-	// const { data: polledStatus } = useIndexingStatus(cwd)
-
 	const confirmDialogHandler = useRef<(() => void) | null>(null)
 
 	// Sync external indexing status to store
@@ -220,18 +217,19 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 		}
 	}, [codebaseIndexConfig, setInitialSettings, setCurrentSettings])
 
-	// Combined message listener effect - reduces from 3 separate effects to 1
+	// Combined message listener effect - unified status management
 	useEffect(() => {
+		// Request secret status when popover opens (only needed here)
 		if (isOpen) {
-			vscode.postMessage({ type: "requestIndexingStatus" })
 			vscode.postMessage({ type: "requestCodeIndexSecretStatus" })
 		}
 
 		const handleMessage = (event: MessageEvent<any>) => {
 			if (event.data.type === "workspaceUpdated" && isOpen) {
-				vscode.postMessage({ type: "requestIndexingStatus" })
+				// Re-request secret status when workspace changes
 				vscode.postMessage({ type: "requestCodeIndexSecretStatus" })
 			} else if (event.data.type === "indexingStatusUpdate") {
+				// Update shared store - IndexingStatusBadge and this component both use it
 				if (!event.data.values.workspacePath || event.data.values.workspacePath === cwd) {
 					setIndexingStatus({
 						systemStatus: event.data.values.systemStatus,
@@ -244,6 +242,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 			} else if (event.data.type === "codeIndexSettingsSaved") {
 				if (event.data.success) {
 					setSaveStatus("saved")
+					// Refresh secret status after successful save
 					vscode.postMessage({ type: "requestCodeIndexSecretStatus" })
 					setTimeout(() => setSaveStatus("idle"), 1000)
 				} else {
