@@ -116,8 +116,7 @@
 			"thinking_complete_safety": "（思考完成，但由于安全设置输出被阻止。）",
 			"thinking_complete_recitation": "（思考完成，但由于引用检查输出被阻止。）"
 		},
-		"roo": {
-		},
+		"roo": {},
 		"api": {
 			"invalidKeyInvalidChars": "API 密钥包含无效字符.",
 			"apiRequestFailed": "API 请求失败 ({{status}})"
@@ -218,19 +217,6 @@
 		"scope": {
 			"project": "项目",
 			"global": "全局"
-		}
-	},
-	"mdm": {
-		"errors": {
-			"manual_url_empty": "请输入有效的回调 URL",
-			"manual_url_no_query": "无效的回调 URL：缺少查询参数",
-			"manual_url_missing_params": "无效的回调 URL：缺少必需参数（code 和 state）",
-			"manual_url_auth_failed": "手动 URL 身份验证失败",
-			"manual_url_auth_error": "身份验证失败",
-			"verification_failed": "无法验证组织身份验证。"
-		},
-		"info": {
-			"organization_requires_auth": "您的组织需要身份验证。"
 		}
 	},
 	"prompts": {

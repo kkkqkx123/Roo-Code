@@ -1973,7 +1973,7 @@ export const webviewMessageHandler = async (
 
 			try {
 				provider.log("[saveCodeIndexSettingsAtomic] Starting to save code index settings")
-				
+
 				// Check if embedder provider has changed
 				const currentConfig = getGlobalState("codebaseIndexConfig") || {}
 				const embedderProviderChanged =
@@ -2651,11 +2651,6 @@ export const webviewMessageHandler = async (
 					text: text,
 				})
 			}
-			break
-		}
-		case "showMdmAuthRequiredNotification": {
-			// Show notification that organization requires authentication
-			vscode.window.showWarningMessage(t("common:mdm.info.organization_requires_auth"))
 			break
 		}
 

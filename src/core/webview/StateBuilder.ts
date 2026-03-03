@@ -50,7 +50,6 @@ export interface BuildStateForWebviewOptions {
 	} | undefined
 	cwd: string | undefined
 	mcpServers: import("@coder/types").McpServer[]
-	mdmCompliant?: boolean
 }
 
 /**
@@ -62,7 +61,7 @@ export class StateBuilder {
 		private readonly contextProxy: ContextProxy,
 		private readonly customModesManager: CustomModesManager,
 		private readonly taskHistoryStore: TaskHistoryStore,
-	) {}
+	) { }
 
 	/**
 	 * Build the base configuration state
@@ -347,7 +346,6 @@ export class StateBuilder {
 				vectorStorageThresholds: codebaseIndexConfig?.vectorStorageThresholds,
 				codebaseIndexAllowedProjects: codebaseIndexConfig?.codebaseIndexAllowedProjects ?? [],
 			},
-			mdmCompliant: options.mdmCompliant,
 			profileThresholds: profileThresholds ?? {},
 			hasOpenedModeSelector: this.contextProxy.getValue("hasOpenedModeSelector") ?? false,
 			lockApiConfigAcrossModes: lockApiConfigAcrossModes ?? false,

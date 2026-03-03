@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, useRef } from "react"
 import { ClipboardCopy, Timer } from "lucide-react"
 
 import { Button, StandardTooltip } from "@/components/ui"
@@ -32,19 +32,23 @@ export const FollowUpSuggest = ({
 	const [countdown, setCountdown] = useState<number | null>(null)
 	const [suggestionSelected, setSuggestionSelected] = useState(false)
 	const { t } = useAppTranslation()
+	const timerStartedRef = useRef(false)
+	const intervalIdRef = useRef<NodeJS.Timeout | null>(null)
 
 	// Start countdown timer when auto-approval is enabled for follow-up questions
 	useEffect(() => {
 		// Only start countdown if auto-approval is enabled for follow-up questions and no suggestion has been selected
 		// Also stop countdown if the question has been answered or auto-approval is paused (user is typing)
-		if (
+		const shouldStartTimer =
 			autoApprovalEnabled &&
 			alwaysAllowFollowupQuestions &&
 			suggestions.length > 0 &&
 			!suggestionSelected &&
 			!isAnswered &&
 			!isFollowUpAutoApprovalPaused
-		) {
+
+		if (shouldStartTimer && !timerStartedRef.current) {
+			timerStartedRef.current = true
 			// Start with the configured timeout in seconds
 			const timeoutMs =
 				typeof followupAutoApproveTimeoutMs === "number" && !isNaN(followupAutoApproveTimeoutMs)
@@ -55,25 +59,37 @@ export const FollowUpSuggest = ({
 			setCountdown(Math.floor(timeoutMs / 1000))
 
 			// Update countdown every second
-			const intervalId = setInterval(() => {
+			intervalIdRef.current = setInterval(() => {
 				setCountdown((prevCountdown) => {
 					if (prevCountdown === null || prevCountdown <= 1) {
-						clearInterval(intervalId)
+						if (intervalIdRef.current) {
+							clearInterval(intervalIdRef.current)
+							intervalIdRef.current = null
+						}
 						return null
 					}
 					return prevCountdown - 1
 				})
 			}, COUNTDOWN_INTERVAL_MS)
-
-			// Clean up interval on unmount and notify parent component
-			return () => {
-				clearInterval(intervalId)
-				// Notify parent component that this component is unmounting
-				// so it can clear any related timeouts
-				onCancelAutoApproval?.()
+		} else if (!shouldStartTimer) {
+			// Clean up if conditions are no longer met
+			if (intervalIdRef.current) {
+				clearInterval(intervalIdRef.current)
+				intervalIdRef.current = null
 			}
-		} else {
+			timerStartedRef.current = false
 			setCountdown(null)
+		}
+
+		// Clean up interval on unmount
+		return () => {
+			if (intervalIdRef.current) {
+				clearInterval(intervalIdRef.current)
+				intervalIdRef.current = null
+			}
+			// Notify parent component that this component is unmounting
+			// so it can clear any related timeouts
+			onCancelAutoApproval?.()
 		}
 	}, [
 		autoApprovalEnabled,

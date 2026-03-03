@@ -5,7 +5,6 @@ import { createPowerShellStream } from "./pwshStream"
 import {
 	createBaseMockStream,
 	createBashMockStream,
-	createCmdMockStream,
 	createPowerShellMockStream,
 	createChunkedMockStream,
 } from "./mockStream"
@@ -52,7 +51,6 @@ export {
 	// Mock streams
 	createBaseMockStream,
 	createBashMockStream,
-	createCmdMockStream,
 	createPowerShellMockStream,
 	createChunkedMockStream,
 }

@@ -957,11 +957,11 @@ export class ClineProvider
 		const { apiConfiguration, enableCheckpoints, checkpointTimeout, experiments } = await this.configurationService.getState()
 
 		const shouldStartTask = options?.startTask ?? true
-		
+
 		// Use Task.create to get the initialization promise when starting from history
 		let task: Task
 		let initPromise: Promise<void> | undefined
-		
+
 		if (shouldStartTask && historyItem) {
 			// Use Task.create to get the initialization promise
 			const [taskInstance, promise] = Task.create({
@@ -1488,9 +1488,9 @@ export class ClineProvider
 
 	async showTaskWithId(id: string) {
 		this.log(`[showTaskWithId] Starting with id: ${id}`)
-		
+
 		const currentTask = this.getCurrentTask()
-		
+
 		// If trying to show the current task, sync state and switch to chat view
 		if (currentTask && currentTask.taskId === id) {
 			this.log(`[showTaskWithId] Same task, syncing state and sending chatButtonClicked`)
@@ -1499,7 +1499,7 @@ export class ClineProvider
 			await this.postMessageToWebview({ type: "action", action: "chatButtonClicked" })
 			return
 		}
-		
+
 		// Save current task state before switching to ensure persistence
 		if (currentTask) {
 			try {
@@ -1509,17 +1509,17 @@ export class ClineProvider
 				this.log(`[showTaskWithId] Failed to save current task state: ${error instanceof Error ? error.message : String(error)}`)
 			}
 		}
-		
+
 		try {
 			// Load and display the requested task
 			this.log(`[showTaskWithId] Getting task with id: ${id}`)
 			const { historyItem } = await this.getTaskWithId(id)
 			this.log(`[showTaskWithId] Got historyItem: ${historyItem.id}`)
-			
+
 			this.log(`[showTaskWithId] Creating task with history item`)
 			await this.createTaskWithHistoryItem(historyItem) // Clears existing task.
 			this.log(`[showTaskWithId] Task created successfully`)
-			
+
 			this.log(`[showTaskWithId] Sending chatButtonClicked`)
 			await this.postMessageToWebview({ type: "action", action: "chatButtonClicked" })
 		} catch (error) {
@@ -1682,9 +1682,6 @@ export class ClineProvider
 		state.clineMessagesSeq = this.clineMessagesSeq
 		this.log(`postStateToWebview: sending state with skillsEnabled=${state.skillsEnabled}, disabledSkills=${JSON.stringify(state.disabledSkills)}`)
 		this.postMessageToWebview({ type: "state", state })
-
-		// Check MDM compliance and send user to account tab if not compliant
-		// Only redirect if there's an actual MDM policy requiring authentication
 	}
 
 	/**
@@ -1701,8 +1698,6 @@ export class ClineProvider
 		state.clineMessagesSeq = this.clineMessagesSeq
 		const { taskHistory: _omit, ...rest } = state
 		this.postMessageToWebview({ type: "state", state: rest })
-
-		// Preserve existing MDM redirect behavior
 	}
 
 	/**
@@ -1720,8 +1715,6 @@ export class ClineProvider
 		const state = await this.getStateToPostToWebview()
 		const { clineMessages: _omitMessages, taskHistory: _omitHistory, ...rest } = state
 		this.postMessageToWebview({ type: "state", state: rest })
-
-		// Preserve existing MDM redirect behavior
 	}
 
 	/**

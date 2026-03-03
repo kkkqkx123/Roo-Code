@@ -39,18 +39,6 @@ export function createBashMockStream(output: string, exitCode: number = 0): Comm
 }
 
 /**
- * Creates a mock stream for CMD output
- * @param output The output to return in the stream
- * @param exitCode The exit code to return
- * @returns An object containing the stream and exit code
- */
-export function createCmdMockStream(output: string, exitCode: number = 0): CommandStream {
-	// For CMD, we ensure Windows-style line endings
-	const windowsOutput = output.replace(/\n/g, "\r\n").replace(/\r\r\n/g, "\r\n")
-	return createBaseMockStream(windowsOutput, exitCode)
-}
-
-/**
  * Creates a mock stream for PowerShell output
  * @param output The output to return in the stream
  * @param exitCode The exit code to return

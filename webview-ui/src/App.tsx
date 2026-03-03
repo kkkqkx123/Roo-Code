@@ -50,11 +50,21 @@ const App = () => {
 		didHydrateState,
 		shouldShowAnnouncement,
 		renderContext,
-		mdmCompliant,
 	} = useExtensionState()
 
-	const [showAnnouncement, setShowAnnouncement] = useState(false)
 	const [tab, setTab] = useState<Tab>("chat")
+	const didShowAnnouncementRef = useRef(false)
+
+	// Derive showAnnouncement from shouldShowAnnouncement and tab
+	const showAnnouncement = shouldShowAnnouncement && tab === "chat" && !didShowAnnouncementRef.current
+
+	// Mark announcement as shown when conditions are met
+	useEffect(() => {
+		if (shouldShowAnnouncement && tab === "chat" && !didShowAnnouncementRef.current) {
+			didShowAnnouncementRef.current = true
+			vscode.postMessage({ type: "didShowAnnouncement" })
+		}
+	}, [shouldShowAnnouncement, tab])
 
 	const [deleteMessageDialogState, setDeleteMessageDialogState] = useState<DeleteMessageDialogState>({
 		isOpen: false,
@@ -85,7 +95,7 @@ const App = () => {
 				setTab(newTab)
 			}
 		},
-		[mdmCompliant],
+		[],
 	)
 
 	const onMessage = useCallback(
@@ -139,13 +149,6 @@ const App = () => {
 
 	useEvent("message", onMessage)
 
-	useEffect(() => {
-		if (shouldShowAnnouncement && tab === "chat") {
-			setShowAnnouncement(true)
-			vscode.postMessage({ type: "didShowAnnouncement" })
-		}
-	}, [shouldShowAnnouncement, tab])
-
 	// Tell the extension that we are ready to receive messages.
 	useEffect(() => {
 		console.log('[WebView App] Sending webviewDidLaunch message to extension')
@@ -193,7 +196,7 @@ const App = () => {
 				ref={chatViewRef}
 				isHidden={tab !== "chat"}
 				showAnnouncement={showAnnouncement}
-				hideAnnouncement={() => setShowAnnouncement(false)}
+				hideAnnouncement={() => { didShowAnnouncementRef.current = true }}
 			/>
 			{deleteMessageDialogState.hasCheckpoint ? (
 				<MemoizedCheckpointRestoreDialog

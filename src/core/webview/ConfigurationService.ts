@@ -121,7 +121,6 @@ export class ConfigurationService {
 		} | undefined
 		cwd: string | undefined
 		mcpServers: import("@coder/types").McpServer[]
-		mdmCompliant?: boolean
 	}): Promise<import("@coder/types").ExtensionState> {
 		return this.stateBuilder.buildStateForWebview(options)
 	}

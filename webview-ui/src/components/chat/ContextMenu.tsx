@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import React, { useMemo, useRef } from "react"
 import { getIconForFilePath, getIconUrlByName, getIconForDirectoryPath } from "vscode-material-icons"
 import { Trans } from "react-i18next"
 import { t } from "i18next"
@@ -44,7 +44,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
 	dynamicSearchResults = [],
 	commands = [],
 }) => {
-	const [materialIconsBaseUri, setMaterialIconsBaseUri] = useState("")
+	const materialIconsBaseUri = (window as any).MATERIAL_ICONS_BASE_URI || ""
 	const menuRef = useRef<HTMLDivElement>(null)
 
 	const filteredOptions = useMemo(() => {
@@ -66,12 +66,6 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
 			}
 		}
 	}, [selectedIndex])
-
-	// get the icons base uri on mount
-	useEffect(() => {
-		const w = window as any
-		setMaterialIconsBaseUri(w.MATERIAL_ICONS_BASE_URI)
-	}, [])
 
 	const renderOptionContent = (option: ContextMenuQueryItem) => {
 		switch (option.type) {
