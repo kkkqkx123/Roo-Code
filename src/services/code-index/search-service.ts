@@ -1,4 +1,3 @@
-import * as path from "path"
 import { VectorStoreSearchResult } from "./interfaces"
 import { IEmbedder } from "./interfaces/embedder"
 import { IVectorStore } from "./interfaces/vector-store"
@@ -46,11 +45,9 @@ export class CodeIndexSearchService {
 				throw new Error("Failed to generate embedding for query.")
 			}
 
-			// Handle directory prefix
-			let normalizedPrefix: string | undefined = undefined
-			if (directoryPrefix) {
-				normalizedPrefix = path.normalize(directoryPrefix)
-			}
+			// Handle directory prefix - pass directly to vectorStore which handles
+			// cross-platform path normalization internally
+			const normalizedPrefix = directoryPrefix
 
 			// Perform search
 			const results = await this.vectorStore.search(vector, normalizedPrefix, minScore, maxResults)
