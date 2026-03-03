@@ -20,8 +20,7 @@ import type {
 	AttemptCompletionParams,
 	CodebaseSearchParams,
 	UpdateTodoListParams,
-	AccessMcpResourceParams,
-	UseMcpToolParams,
+	UseMcpParams,
 	RunSlashCommandParams,
 	SkillParams,
 	SwitchModeParams,
@@ -49,8 +48,7 @@ export interface ToolParamsMap {
 	edit_file: EditFileParams
 	apply_patch: ApplyPatchParams
 	update_todo_list: UpdateTodoListParams
-	access_mcp_resource: AccessMcpResourceParams
-	use_mcp_tool: UseMcpToolParams
+	use_mcp: UseMcpParams
 	run_slash_command: RunSlashCommandParams
 	skill: SkillParams
 	switch_mode: SwitchModeParams

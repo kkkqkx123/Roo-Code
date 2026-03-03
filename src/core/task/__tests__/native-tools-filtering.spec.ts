@@ -79,7 +79,7 @@ describe("Native Tools Filtering by Mode", () => {
 			expect(codeAllowedTools.has("execute_command")).toBe(true)
 		})
 
-		it("should filter MCP tools based on use_mcp_tool permission", async () => {
+		it("should filter MCP tools based on use_mcp permission", async () => {
 			const modeWithMcp: ModeConfig = {
 				slug: "test-mode-with-mcp",
 				name: "Test Mode",
@@ -96,11 +96,11 @@ describe("Native Tools Filtering by Mode", () => {
 
 			const { isToolAllowedForMode } = await import("../../tools/core/validateToolUse")
 
-			// Mode with MCP group should allow use_mcp_tool
-			expect(isToolAllowedForMode("use_mcp_tool", "test-mode-with-mcp", [modeWithMcp])).toBe(true)
+			// Mode with MCP group should allow use_mcp
+			expect(isToolAllowedForMode("use_mcp", "test-mode-with-mcp", [modeWithMcp])).toBe(true)
 
-			// Mode without MCP group should NOT allow use_mcp_tool
-			expect(isToolAllowedForMode("use_mcp_tool", "test-mode-no-mcp", [modeWithoutMcp])).toBe(false)
+			// Mode without MCP group should NOT allow use_mcp
+			expect(isToolAllowedForMode("use_mcp", "test-mode-no-mcp", [modeWithoutMcp])).toBe(false)
 		})
 
 		it("should always include always-available tools regardless of mode", async () => {

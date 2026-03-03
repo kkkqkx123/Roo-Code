@@ -77,7 +77,7 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 		tools: ["execute_command", "read_command_output"],
 	},
 	mcp: {
-		tools: ["use_mcp_tool", "access_mcp_resource"],
+		tools: ["use_mcp"],
 	},
 	modes: {
 		tools: ["switch_mode", "new_task"],

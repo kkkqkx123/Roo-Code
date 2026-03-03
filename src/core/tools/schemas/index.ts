@@ -156,21 +156,13 @@ export {
 	type UpdateTodoListParams,
 } from "./update_todo_list"
 
-// access_mcp_resource
+// use_mcp (unified MCP tool)
 export {
-	AccessMcpResourceParamsSchema,
-	createAccessMcpResourceTool,
-	accessMcpResourceTool,
-	type AccessMcpResourceParams,
-} from "./access_mcp_resource"
-
-// use_mcp_tool
-export {
-	UseMcpToolParamsSchema,
-	createUseMcpToolTool,
-	useMcpToolTool,
-	type UseMcpToolParams,
-} from "./use_mcp_tool"
+	UseMcpParamsSchema,
+	createUseMcpTool,
+	useMcpTool,
+	type UseMcpParams,
+} from "./use_mcp"
 
 // run_slash_command
 export {

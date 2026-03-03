@@ -644,12 +644,13 @@ export class NativeToolCallParser {
 				}
 				break
 
-			case "use_mcp_tool":
-				if (partialArgs.server_name !== undefined || partialArgs.tool_name !== undefined) {
+			case "use_mcp":
+				if (partialArgs.server_name !== undefined) {
 					nativeArgs = {
 						server_name: partialArgs.server_name,
 						tool_name: partialArgs.tool_name,
 						arguments: partialArgs.arguments,
+						uri: partialArgs.uri,
 					}
 				}
 				break
@@ -1002,20 +1003,12 @@ export class NativeToolCallParser {
 					}
 					break
 
-				case "use_mcp_tool":
-					if (args.server_name !== undefined && args.tool_name !== undefined) {
+				case "use_mcp":
+					if (args.server_name !== undefined) {
 						nativeArgs = {
 							server_name: args.server_name,
 							tool_name: args.tool_name,
 							arguments: args.arguments,
-						} as NativeArgsFor<TName>
-					}
-					break
-
-				case "access_mcp_resource":
-					if (args.server_name !== undefined && args.uri !== undefined) {
-						nativeArgs = {
-							server_name: args.server_name,
 							uri: args.uri,
 						} as NativeArgsFor<TName>
 					}

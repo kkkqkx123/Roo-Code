@@ -10,7 +10,7 @@ vi.mock("../../task/Task")
 vi.mock("../../tools/validateToolUse", () => ({
 	validateToolUse: vi.fn(),
 	isValidToolName: vi.fn((toolName: string) =>
-		["read_file", "write_to_file", "ask_followup_question", "attempt_completion", "use_mcp_tool"].includes(
+		["read_file", "write_to_file", "ask_followup_question", "attempt_completion", "use_mcp"].includes(
 			toolName,
 		),
 	),

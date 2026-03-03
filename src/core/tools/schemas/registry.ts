@@ -54,10 +54,10 @@ import {
 	type UpdateTodoListParams,
 } from "./update_todo_list"
 import {
-	createAccessMcpResourceTool,
-	AccessMcpResourceParamsSchema,
-	type AccessMcpResourceParams,
-} from "./access_mcp_resource"
+	createUseMcpTool,
+	UseMcpParamsSchema,
+	type UseMcpParams,
+} from "./use_mcp"
 import {
 	createRunSlashCommandTool,
 	RunSlashCommandParamsSchema,
@@ -93,11 +93,6 @@ import {
 	EditFileParamsSchema,
 	type EditFileParams,
 } from "./edit_file"
-import {
-	createUseMcpToolTool,
-	UseMcpToolParamsSchema,
-	type UseMcpToolParams,
-} from "./use_mcp_tool"
 import {
 	createSwitchModeTool,
 	SwitchModeParamsSchema,
@@ -261,20 +256,12 @@ export const ToolRegistry = {
 		createTool: () => createUpdateTodoListTool(),
 	},
 
-	access_mcp_resource: {
-		name: "access_mcp_resource" as const,
-		schema: AccessMcpResourceParamsSchema,
-		description: "Access a resource provided by a connected MCP server",
+	use_mcp: {
+		name: "use_mcp" as const,
+		schema: UseMcpParamsSchema,
+		description: "Use a capability (tool or resource) provided by a connected MCP server",
 		group: "mcp" as ToolGroup,
-		createTool: () => createAccessMcpResourceTool(),
-	},
-
-	use_mcp_tool: {
-		name: "use_mcp_tool" as const,
-		schema: UseMcpToolParamsSchema,
-		description: "Call a tool provided by a connected MCP server",
-		group: "mcp" as ToolGroup,
-		createTool: () => createUseMcpToolTool(),
+		createTool: () => createUseMcpTool(),
 	},
 
 	run_slash_command: {
@@ -433,8 +420,7 @@ export interface ToolParamsMap {
 	edit_file: EditFileParams
 	apply_patch: ApplyPatchParams
 	update_todo_list: UpdateTodoListParams
-	access_mcp_resource: AccessMcpResourceParams
-	use_mcp_tool: UseMcpToolParams
+	use_mcp: UseMcpParams
 	run_slash_command: RunSlashCommandParams
 	skill: SkillParams
 	switch_mode: SwitchModeParams

@@ -13,28 +13,9 @@ import type { ToolResponse, ToolUse, McpToolUse } from "../../shared/tools"
 import { AskIgnoredError } from "../task/AskIgnoredError"
 import { Task } from "../task/Task"
 
-import { listFilesTool } from "../tools/ListFilesTool"
-import { readFileTool } from "../tools/ReadFileTool"
-import { readCommandOutputTool } from "../tools/ReadCommandOutputTool"
-import { writeToFileTool } from "../tools/WriteToFileTool"
-import { editTool } from "../tools/EditTool"
-import { searchReplaceTool } from "../tools/SearchReplaceTool"
-import { editFileTool } from "../tools/EditFileTool"
-import { applyPatchTool } from "../tools/ApplyPatchTool"
-import { searchFilesTool } from "../tools/SearchFilesTool"
-import { executeCommandTool } from "../tools/ExecuteCommandTool"
-import { useMcpToolTool } from "../tools/UseMcpToolTool"
-import { accessMcpResourceTool } from "../tools/accessMcpResourceTool"
-import { askFollowupQuestionTool } from "../tools/AskFollowupQuestionTool"
-import { switchModeTool } from "../tools/SwitchModeTool"
-import { attemptCompletionTool, AttemptCompletionCallbacks } from "../tools/AttemptCompletionTool"
-import { newTaskTool } from "../tools/NewTaskTool"
-import { updateTodoListTool } from "../tools/UpdateTodoListTool"
-import { runSlashCommandTool } from "../tools/RunSlashCommandTool"
-import { skillTool } from "../tools/SkillTool"
-import { applyDiffTool as applyDiffToolClass } from "../tools/ApplyDiffTool"
+import { toolExecutorRegistry, attemptCompletionTool, readFileTool, useMcpTool } from "../tools"
+import { AttemptCompletionCallbacks } from "../tools/AttemptCompletionTool"
 import { isValidToolName, validateToolUse } from "../tools/core/validateToolUse"
-import { codebaseSearchTool } from "../tools/CodebaseSearchTool"
 
 import { formatResponse } from "../prompts/responses"
 import { sanitizeToolUseId } from "../../utils/tool-id"
@@ -111,7 +92,7 @@ export async function presentAssistantMessage(cline: Task) {
 	switch (block.type) {
 		case "mcp_tool_use": {
 			// Handle native MCP tool calls (from mcp_serverName_toolName dynamic tools)
-			// These are converted to the same execution path as use_mcp_tool but preserve
+			// These are converted to the same execution path as use_mcp but preserve
 			// their original name in API history
 			const mcpBlock = block as McpToolUse
 
@@ -256,7 +237,7 @@ export async function presentAssistantMessage(cline: Task) {
 			}
 
 			if (!mcpBlock.partial) {
-				cline.recordToolUsage("use_mcp_tool") // Record as use_mcp_tool for analytics
+				cline.recordToolUsage("use_mcp") // Record as use_mcp for analytics
 			}
 
 			// Resolve sanitized server name back to original server name
@@ -271,12 +252,12 @@ export async function presentAssistantMessage(cline: Task) {
 				}
 			}
 
-			// Execute the MCP tool using the same handler as use_mcp_tool
-			// Create a synthetic ToolUse block that the useMcpToolTool can handle
-			const syntheticToolUse: ToolUse<"use_mcp_tool"> = {
+			// Execute the MCP tool using the same handler as use_mcp
+			// Create a synthetic ToolUse block that the useMcpTool can handle
+			const syntheticToolUse: ToolUse<"use_mcp"> = {
 				type: "tool_use",
 				id: mcpBlock.id,
-				name: "use_mcp_tool",
+				name: "use_mcp",
 				params: {
 					server_name: resolvedServerName,
 					tool_name: mcpBlock.toolName,
@@ -290,7 +271,7 @@ export async function presentAssistantMessage(cline: Task) {
 				},
 			}
 
-			await useMcpToolTool.handle(cline, syntheticToolUse, {
+			await useMcpTool.handle(cline, syntheticToolUse, {
 				askApproval,
 				handleError,
 				pushToolResult,
@@ -385,9 +366,7 @@ export async function presentAssistantMessage(cline: Task) {
 						return `[${block.name}]`
 					case "list_files":
 						return `[${block.name} for '${block.params.path}']`
-					case "use_mcp_tool":
-						return `[${block.name} for '${block.params.server_name}']`
-					case "access_mcp_resource":
+					case "use_mcp":
 						return `[${block.name} for '${block.params.server_name}']`
 					case "ask_followup_question":
 						return `[${block.name} for '${block.params.question}']`
@@ -690,144 +669,35 @@ export async function presentAssistantMessage(cline: Task) {
 				}
 			}
 
-			switch (block.name) {
-				case "write_to_file":
+			// Tools that require checkpoint before execution
+			const checkpointTools = new Set([
+				"write_to_file",
+				"apply_diff",
+				"edit",
+				"search_and_replace",
+				"search_replace",
+				"edit_file",
+				"apply_patch",
+				"new_task",
+			])
+
+			// Resolve alias names to canonical tool names
+			const resolveToolName = (name: string): string => {
+				if (name === "search_and_replace") return "edit"
+				return name
+			}
+
+			const resolvedName = resolveToolName(block.name) as ToolName
+			const executor = toolExecutorRegistry.get(resolvedName)
+
+			if (executor) {
+				// Apply checkpoint for tools that modify files
+				if (checkpointTools.has(block.name)) {
 					await checkpointSaveAndMark(cline)
-					await writeToFileTool.handle(cline, block as ToolUse<"write_to_file">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "update_todo_list":
-					await updateTodoListTool.handle(cline, block as ToolUse<"update_todo_list">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "apply_diff":
-					await checkpointSaveAndMark(cline)
-					await applyDiffToolClass.handle(cline, block as ToolUse<"apply_diff">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "edit":
-				case "search_and_replace":
-					await checkpointSaveAndMark(cline)
-					await editTool.handle(cline, block as ToolUse<"edit">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "search_replace":
-					await checkpointSaveAndMark(cline)
-					await searchReplaceTool.handle(cline, block as ToolUse<"search_replace">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "edit_file":
-					await checkpointSaveAndMark(cline)
-					await editFileTool.handle(cline, block as ToolUse<"edit_file">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "apply_patch":
-					await checkpointSaveAndMark(cline)
-					await applyPatchTool.handle(cline, block as ToolUse<"apply_patch">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "read_file":
-					// Type assertion is safe here because we're in the "read_file" case
-					await readFileTool.handle(cline, block as ToolUse<"read_file">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "list_files":
-					await listFilesTool.handle(cline, block as ToolUse<"list_files">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "codebase_search":
-					await codebaseSearchTool.handle(cline, block as ToolUse<"codebase_search">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "search_files":
-					await searchFilesTool.handle(cline, block as ToolUse<"search_files">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "execute_command":
-					await executeCommandTool.handle(cline, block as ToolUse<"execute_command">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "read_command_output":
-					await readCommandOutputTool.handle(cline, block as ToolUse<"read_command_output">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "use_mcp_tool":
-					await useMcpToolTool.handle(cline, block as ToolUse<"use_mcp_tool">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "access_mcp_resource":
-					await accessMcpResourceTool.handle(cline, block as ToolUse<"access_mcp_resource">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "ask_followup_question":
-					await askFollowupQuestionTool.handle(cline, block as ToolUse<"ask_followup_question">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "switch_mode":
-					await switchModeTool.handle(cline, block as ToolUse<"switch_mode">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "new_task":
-					await checkpointSaveAndMark(cline)
-					await newTaskTool.handle(cline, block as ToolUse<"new_task">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-						toolCallId: block.id,
-					})
-					break
-				case "attempt_completion": {
+				}
+
+				// Special handling for attempt_completion (needs extra callbacks)
+				if (block.name === "attempt_completion") {
 					const completionCallbacks: AttemptCompletionCallbacks = {
 						askApproval,
 						handleError,
@@ -840,89 +710,79 @@ export async function presentAssistantMessage(cline: Task) {
 						block as ToolUse<"attempt_completion">,
 						completionCallbacks,
 					)
+				} else {
+					// Standard tool execution via registry
+					await executor.handle(cline, block as ToolUse<any>, {
+						askApproval,
+						handleError,
+						pushToolResult,
+					})
+				}
+			} else {
+				// Handle unknown/invalid tool names OR custom tools
+				// This is critical for native tool calling where every tool_use MUST have a tool_result
+
+				// CRITICAL: Don't process partial blocks for unknown tools - just let them stream in.
+				// If we try to show errors for partial blocks, we'd show the error on every streaming chunk,
+				// creating a loop that appears to freeze the extension. Only handle complete blocks.
+				if (block.partial) {
 					break
 				}
-				case "run_slash_command":
-					await runSlashCommandTool.handle(cline, block as ToolUse<"run_slash_command">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				case "skill":
-					await skillTool.handle(cline, block as ToolUse<"skill">, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
-					break
-				default: {
-					// Handle unknown/invalid tool names OR custom tools
-					// This is critical for native tool calling where every tool_use MUST have a tool_result
 
-					// CRITICAL: Don't process partial blocks for unknown tools - just let them stream in.
-					// If we try to show errors for partial blocks, we'd show the error on every streaming chunk,
-					// creating a loop that appears to freeze the extension. Only handle complete blocks.
-					if (block.partial) {
-						break
-					}
+				const customTool = stateExperiments?.customTools ? customToolRegistry.get(block.name) : undefined
 
-					const customTool = stateExperiments?.customTools ? customToolRegistry.get(block.name) : undefined
+				if (customTool) {
+					try {
+						let customToolArgs
 
-					if (customTool) {
-						try {
-							let customToolArgs
-
-							if (customTool.parameters) {
-								try {
-									customToolArgs = customTool.parameters.parse(block.nativeArgs || block.params || {})
-								} catch (parseParamsError) {
-									const errorMsg = parseParamsError instanceof Error ? parseParamsError.message : String(parseParamsError)
-									const message = `Custom tool "${block.name}" argument validation failed: ${errorMsg}`
-									console.error(message)
-									cline.consecutiveMistakeCount++
-									await cline.say("error", message)
-									pushToolResult(formatResponse.toolError(message))
-									break
-								}
+						if (customTool.parameters) {
+							try {
+								customToolArgs = customTool.parameters.parse(block.nativeArgs || block.params || {})
+							} catch (parseParamsError) {
+								const errorMsg = parseParamsError instanceof Error ? parseParamsError.message : String(parseParamsError)
+								const message = `Custom tool "${block.name}" argument validation failed: ${errorMsg}`
+								console.error(message)
+								cline.consecutiveMistakeCount++
+								await cline.say("error", message)
+								pushToolResult(formatResponse.toolError(message))
+								break
 							}
-
-							const result = await customTool.execute(customToolArgs, {
-								mode: mode ?? defaultModeSlug,
-								task: cline,
-							})
-
-							console.log(
-								`${customTool.name}.execute(): ${JSON.stringify(customToolArgs)} -> ${JSON.stringify(result)}`,
-							)
-
-							pushToolResult(result)
-							cline.consecutiveMistakeCount = 0
-						} catch (executionError: any) {
-							cline.consecutiveMistakeCount++
-							// Record custom tool error with static name
-							cline.recordToolError("custom_tool", executionError.message)
-							await handleError(`executing custom tool "${block.name}"`, executionError)
 						}
 
-						break
+						const result = await customTool.execute(customToolArgs, {
+							mode: mode ?? defaultModeSlug,
+							task: cline,
+						})
+
+						console.log(
+							`${customTool.name}.execute(): ${JSON.stringify(customToolArgs)} -> ${JSON.stringify(result)}`,
+						)
+
+						pushToolResult(result)
+						cline.consecutiveMistakeCount = 0
+					} catch (executionError: any) {
+						cline.consecutiveMistakeCount++
+						// Record custom tool error with static name
+						cline.recordToolError("custom_tool", executionError.message)
+						await handleError(`executing custom tool "${block.name}"`, executionError)
 					}
 
-					// Not a custom tool - handle as unknown tool error
-					const errorMessage = `Unknown tool "${block.name}". This tool does not exist. Please use one of the available tools.`
-					cline.consecutiveMistakeCount++
-					cline.recordToolError(block.name as ToolName, errorMessage)
-					await cline.say("error", t("tools:unknownToolError", { toolName: block.name }))
-					// Push tool_result directly WITHOUT setting didAlreadyUseTool
-					// This prevents the stream from being interrupted with "Response interrupted by tool use result"
-					cline.pushToolResultToUserContent({
-						type: "tool_result",
-						tool_use_id: sanitizeToolUseId(toolCallId),
-						content: formatResponse.toolError(errorMessage),
-						is_error: true,
-					})
 					break
 				}
+
+				// Not a custom tool - handle as unknown tool error
+				const errorMessage = `Unknown tool "${block.name}". This tool does not exist. Please use one of the available tools.`
+				cline.consecutiveMistakeCount++
+				cline.recordToolError(block.name as ToolName, errorMessage)
+				await cline.say("error", t("tools:unknownToolError", { toolName: block.name }))
+				// Push tool_result directly WITHOUT setting didAlreadyUseTool
+				// This prevents the stream from being interrupted with "Response interrupted by tool use result"
+				cline.pushToolResultToUserContent({
+					type: "tool_result",
+					tool_use_id: sanitizeToolUseId(toolCallId),
+					content: formatResponse.toolError(errorMessage),
+					is_error: true,
+				})
 			}
 
 			break

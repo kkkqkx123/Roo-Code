@@ -97,11 +97,14 @@ export async function checkAutoApproval({
 		try {
 			const mcpServerUse = JSON.parse(text) as McpServerUse
 
-			if (mcpServerUse.type === "use_mcp_tool") {
-				return state.alwaysAllowMcp === true && isMcpToolAlwaysAllowed(mcpServerUse, state.mcpServers)
-					? { decision: "approve" }
-					: { decision: "ask" }
-			} else if (mcpServerUse.type === "access_mcp_resource") {
+			if (mcpServerUse.type === "use_mcp") {
+				// For tool calls, check if the tool is always allowed
+				if (mcpServerUse.toolName) {
+					return state.alwaysAllowMcp === true && isMcpToolAlwaysAllowed(mcpServerUse, state.mcpServers)
+						? { decision: "approve" }
+						: { decision: "ask" }
+				}
+				// For resource access, always allow if alwaysAllowMcp is true
 				return state.alwaysAllowMcp === true ? { decision: "approve" } : { decision: "ask" }
 			}
 		} catch (error) {

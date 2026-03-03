@@ -146,20 +146,14 @@ export interface ReadCommandOutputParams {
 // ─── MCP Operations ─────────────────────────────────────────────────────────
 
 /**
- * Parameters for the use_mcp_tool tool.
+ * Parameters for the use_mcp tool.
+ * Unified tool that handles both MCP tool calls and resource access.
  */
-export interface UseMcpToolParams {
+export interface UseMcpParams {
 	server_name: string
-	tool_name: string
+	tool_name?: string
 	arguments?: Record<string, unknown>
-}
-
-/**
- * Parameters for the access_mcp_resource tool.
- */
-export interface AccessMcpResourceParams {
-	server_name: string
-	uri: string
+	uri?: string
 }
 
 // ─── Mode Operations ─────────────────────────────────────────────────────────

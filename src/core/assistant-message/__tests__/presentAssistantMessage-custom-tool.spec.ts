@@ -9,7 +9,7 @@ vi.mock("../../task/Task")
 vi.mock("../../tools/validateToolUse", () => ({
 	validateToolUse: vi.fn(),
 	isValidToolName: vi.fn((toolName: string) =>
-		["read_file", "write_to_file", "ask_followup_question", "attempt_completion", "use_mcp_tool"].includes(
+		["read_file", "write_to_file", "ask_followup_question", "attempt_completion", "use_mcp"].includes(
 			toolName,
 		),
 	),
@@ -161,13 +161,13 @@ describe("presentAssistantMessage - Custom Tool Recording", () => {
 			expect(mockTask.recordToolUsage).toHaveBeenCalledWith("read_file")
 		})
 
-		it("should record MCP tool usage as 'use_mcp_tool' (not custom_tool)", async () => {
+		it("should record MCP tool usage as 'use_mcp' (not custom_tool)", async () => {
 			const toolCallId = "tool_call_mcp_123"
 			mockTask.assistantMessageContent = [
 				{
 					type: "tool_use",
 					id: toolCallId,
-					name: "use_mcp_tool",
+					name: "use_mcp",
 					params: {
 						server_name: "test-server",
 						tool_name: "test-tool",
@@ -179,7 +179,7 @@ describe("presentAssistantMessage - Custom Tool Recording", () => {
 
 			vi.mocked(customToolRegistry.has).mockReturnValue(false)
 
-			// Mock MCP hub for use_mcp_tool
+			// Mock MCP hub for use_mcp
 			mockTask.providerRef = {
 				deref: () => ({
 					getState: vi.fn().mockResolvedValue({
@@ -198,8 +198,8 @@ describe("presentAssistantMessage - Custom Tool Recording", () => {
 
 			await presentAssistantMessage(mockTask)
 
-			// Should record as "use_mcp_tool", not "custom_tool"
-			expect(mockTask.recordToolUsage).toHaveBeenCalledWith("use_mcp_tool")
+			// Should record as "use_mcp", not "custom_tool"
+			expect(mockTask.recordToolUsage).toHaveBeenCalledWith("use_mcp")
 		})
 	})
 

@@ -239,7 +239,7 @@ describe("isToolAllowedForMode", () => {
 
 			// Should maintain read capabilities
 			expect(isToolAllowedForMode("read_file", "architect", [])).toBe(true)
-			expect(isToolAllowedForMode("use_mcp_tool", "architect", [])).toBe(true)
+			expect(isToolAllowedForMode("use_mcp", "architect", [])).toBe(true)
 		})
 
 		it("applies restrictions to apply_diff", () => {

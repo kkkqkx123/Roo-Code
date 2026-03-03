@@ -306,9 +306,9 @@ export function filterNativeToolsForMode(
 		}
 	}
 
-	// Conditionally exclude access_mcp_resource if MCP is not enabled or there are no resources
-	if (!mcpHub || !hasAnyMcpResources(mcpHub)) {
-		allowedToolNames.delete("access_mcp_resource")
+	// Conditionally exclude use_mcp if MCP is not enabled
+	if (!mcpHub) {
+		allowedToolNames.delete("use_mcp")
 	}
 
 	// Filter native tools based on allowed tool names and apply alias renames
@@ -332,14 +332,6 @@ export function filterNativeToolsForMode(
 	}
 
 	return filteredTools
-}
-
-/**
- * Helper function to check if any MCP server has resources available
- */
-function hasAnyMcpResources(mcpHub: McpHub): boolean {
-	const servers = mcpHub.getServers()
-	return servers.some((server) => server.resources && server.resources.length > 0)
 }
 
 /**
@@ -431,13 +423,13 @@ export function getAvailableToolsInGroup(
 }
 
 /**
- * Filters MCP tools based on whether use_mcp_tool is allowed in the current mode.
+ * Filters MCP tools based on whether use_mcp is allowed in the current mode.
  *
  * @param mcpTools - Array of MCP tools
  * @param mode - Current mode slug
  * @param customModes - Custom mode configurations
  * @param experiments - Experiment flags
- * @returns Filtered array of MCP tools if use_mcp_tool is allowed, empty array otherwise
+ * @returns Filtered array of MCP tools if use_mcp is allowed, empty array otherwise
  */
 export function filterMcpToolsForMode(
 	mcpTools: OpenAI.Chat.ChatCompletionTool[],
@@ -447,9 +439,9 @@ export function filterMcpToolsForMode(
 ): OpenAI.Chat.ChatCompletionTool[] {
 	const modeSlug = mode ?? defaultModeSlug
 
-	// MCP tools are always in the mcp group, check if use_mcp_tool is allowed
+	// MCP tools are always in the mcp group, check if use_mcp is allowed
 	const isMcpAllowed = isToolAllowedForMode(
-		"use_mcp_tool",
+		"use_mcp",
 		modeSlug,
 		customModes ?? [],
 		undefined,
