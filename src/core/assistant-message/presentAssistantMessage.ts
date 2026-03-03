@@ -49,8 +49,9 @@ export async function presentAssistantMessage(cline: Task) {
 		throw new Error(`[Task#presentAssistantMessage] task ${cline.taskId}.${cline.instanceId} aborted`)
 	}
 
-	// Try to acquire the mutex lock
-	if (!messageMutex.isLocked()) {
+	// If mutex is already locked (another call is in progress), set pending flag and return.
+	// The current lock holder will re-invoke this function after releasing the lock.
+	if (messageMutex.isLocked()) {
 		cline.presentAssistantMessageHasPendingUpdates = true
 		return
 	}
@@ -101,6 +102,8 @@ export async function presentAssistantMessage(cline: Task) {
 			// leave tool calls unprocessed when additional chunks arrive.
 			if (cline.isStreaming === true && cline.didCompleteReadingStream !== true && !mcpBlock.partial) {
 				if (cline.presentAssistantMessageHasPendingUpdates) {
+					// CRITICAL: Release the lock before recursive call to prevent deadlock
+					release()
 					presentAssistantMessage(cline)
 				}
 				return
@@ -325,22 +328,13 @@ export async function presentAssistantMessage(cline: Task) {
 			// Defer execution of complete tool calls until the stream finishes.
 			// Running tools during active streaming can supersede pending asks and
 			// leave tool calls unprocessed when additional chunks arrive.
-			//
-			// EXCEPTION: attempt_completion is allowed to execute early because:
-			// 1. It's a read-only operation (no side effects on file system)
-			// 2. Early display significantly improves UX for long completion results
-			// 3. The completion result is what users are most interested in seeing
 			if (cline.isStreaming === true && cline.didCompleteReadingStream !== true && !block.partial) {
-				// Special case: allow attempt_completion to start displaying early
-				if (block.name === "attempt_completion") {
-					// Continue to execute - handlePartial will show partial content
-					// and execute() will update with final content when complete
-				} else {
-					if (cline.presentAssistantMessageHasPendingUpdates) {
-						presentAssistantMessage(cline)
-					}
-					return
+				if (cline.presentAssistantMessageHasPendingUpdates) {
+					// CRITICAL: Release the lock before recursive call to prevent deadlock
+					release()
+					presentAssistantMessage(cline)
 				}
+				return
 			}
 
 			// Fetch state early so it's available for toolDescription and validation
@@ -813,15 +807,16 @@ export async function presentAssistantMessage(cline: Task) {
 	// set to message length and it sets userMessageContentReady to true itself
 	// (instead of preemptively doing it in iterator).
 	if (!block.partial || cline.didRejectTool || cline.didAlreadyUseTool) {
-		// Block is finished streaming and executing.
+		// CRITICAL FIX: Set userMessageContentReady BEFORE executing the tool.
+		// Tools may call task.ask() which waits for user response asynchronously.
+		// If we wait for tool execution to complete before setting userMessageContentReady,
+		// the main loop will deadlock waiting for userMessageContentReady while the tool
+		// waits for user response.
+		// This is safe because:
+		// 1. The tool result will be added to userMessageContent via pushToolResult
+		// 2. The main loop can proceed to wait for user response via task.ask()
+		// 3. completion_result and other IdleAsk types don't block the conversation flow
 		if (cline.currentStreamingContentIndex === cline.assistantMessageContent.length - 1) {
-			// It's okay that we increment if !didCompleteReadingStream, it'll
-			// just return because out of bounds and as streaming continues it
-			// will call `presentAssitantMessage` if a new block is ready. If
-			// streaming is finished then we set `userMessageContentReady` to
-			// true when out of bounds. This gracefully allows the stream to
-			// continue on and all potential content blocks be presented.
-			// Last block is complete and it is finished executing
 			cline.userMessageContentReady = true // Will allow `pWaitFor` to continue.
 		}
 
@@ -834,6 +829,8 @@ export async function presentAssistantMessage(cline: Task) {
 		if (cline.currentStreamingContentIndex < cline.assistantMessageContent.length) {
 			// There are already more content blocks to stream, so we'll call
 			// this function ourselves.
+			// CRITICAL: Release the lock before recursive call to prevent deadlock
+			release()
 			presentAssistantMessage(cline)
 			return
 		} else {
@@ -847,10 +844,14 @@ export async function presentAssistantMessage(cline: Task) {
 
 	// Block is partial, but the read stream may have finished.
 	if (cline.presentAssistantMessageHasPendingUpdates) {
+		// CRITICAL: Release the lock before recursive call to prevent deadlock
+		release()
 		presentAssistantMessage(cline)
+		return
 	}
 	} finally {
 		// Always release the lock, even if an error occurred
+		// Note: release() is idempotent, so calling it multiple times is safe
 		release()
 	}
 }

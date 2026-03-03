@@ -67,7 +67,7 @@ export type ToolGroupConfig = {
  */
 export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 	read: {
-		tools: ["read_file", "search_files", "list_files", "codebase_search"],
+		tools: ["read_file", "search_files", "list_files", "codebase_search", "get_workspace_diagnostics"],
 	},
 	edit: {
 		tools: ["apply_diff", "write_to_file", "generate_image", "apply_patch"],
