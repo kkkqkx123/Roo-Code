@@ -35,6 +35,12 @@ interface DelegationProvider {
 export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 	readonly name = "attempt_completion" as const
 
+	/**
+	 * Track the last streamed result to avoid duplicate rendering during streaming.
+	 * This ensures we only update the UI when the content actually changes.
+	 */
+	private lastStreamedResult: string | undefined = undefined
+
 	async execute(params: AttemptCompletionParams, task: Task, callbacks: AttemptCompletionCallbacks): Promise<void> {
 		const { result } = params
 		const { handleError, pushToolResult, askFinishSubTaskApproval } = callbacks
@@ -55,7 +61,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 		const hasIncompleteTodos = task.todoList && task.todoList.some((todo) => todo.status !== "completed")
 
 		if (preventCompletionWithOpenTodos && hasIncompleteTodos) {
-			task.metricsService.recordToolError("attempt_completion")
+			task.metricsService?.recordToolError("attempt_completion")
 
 			pushToolResult(
 				formatResponse.toolError(
@@ -69,11 +75,17 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 
 		try {
 			if (!result) {
-				task.metricsService.recordToolError("attempt_completion")
+				// Reset streaming state on error
+				this.lastStreamedResult = undefined
+
+				task.metricsService?.recordToolError("attempt_completion")
 				pushToolResult(await task.sayAndCreateMissingParamError("attempt_completion", "result"))
 				task.didToolFailInCurrentTurn = true
 				return
 			}
+
+			// Reset streaming state before final display to ensure clean transition
+			this.lastStreamedResult = undefined
 
 			await task.say("completion_result", result)
 
@@ -142,6 +154,8 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 			const feedbackText = `<user_message>\n${text}\n</user_message>`
 			pushToolResult(formatResponse.toolResult(feedbackText, images))
 		} catch (error) {
+			// Reset streaming state on error
+			this.lastStreamedResult = undefined
 			await handleError("inspecting site", error as Error)
 		}
 	}
@@ -179,12 +193,13 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 		const result: string | undefined = block.params.result
 		const command: string | undefined = block.params.command
 
-		const lastMessage = task.clineMessages.at(-1)
-
+		// Handle command parameter separately
 		if (command) {
+			const lastMessage = task.clineMessages.at(-1)
 			if (lastMessage && lastMessage.ask === "command") {
-				await task.ask("command", command ?? "", block.partial).catch(() => { })
+				await task.ask("command", command, block.partial).catch(() => { })
 			} else {
+				// For command with result, show result and emit completion event
 				await task.say("completion_result", result ?? "")
 
 				// Force final token usage update before emitting TaskCompleted for consistency
@@ -192,10 +207,16 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 
 				task.emit(CoderEventName.TaskCompleted, task.taskId, task.metricsService.getTokenUsage(task.clineMessages.slice(1)), task.metricsService.getToolUsage())
 
-				await task.ask("command", command ?? "", block.partial).catch(() => { })
+				await task.ask("command", command, block.partial).catch(() => { })
 			}
-		} else {
-			await task.say("completion_result", result ?? "", undefined, block.partial)
+			return
+		}
+
+		// For result-only cases, show streaming content only if we have something new
+		// This prevents duplicate rendering and ensures smooth visual updates
+		if (result !== undefined && result !== this.lastStreamedResult) {
+			await task.say("completion_result", result, undefined, block.partial)
+			this.lastStreamedResult = result
 		}
 	}
 }

@@ -325,11 +325,22 @@ export async function presentAssistantMessage(cline: Task) {
 			// Defer execution of complete tool calls until the stream finishes.
 			// Running tools during active streaming can supersede pending asks and
 			// leave tool calls unprocessed when additional chunks arrive.
+			//
+			// EXCEPTION: attempt_completion is allowed to execute early because:
+			// 1. It's a read-only operation (no side effects on file system)
+			// 2. Early display significantly improves UX for long completion results
+			// 3. The completion result is what users are most interested in seeing
 			if (cline.isStreaming === true && cline.didCompleteReadingStream !== true && !block.partial) {
-				if (cline.presentAssistantMessageHasPendingUpdates) {
-					presentAssistantMessage(cline)
+				// Special case: allow attempt_completion to start displaying early
+				if (block.name === "attempt_completion") {
+					// Continue to execute - handlePartial will show partial content
+					// and execute() will update with final content when complete
+				} else {
+					if (cline.presentAssistantMessageHasPendingUpdates) {
+						presentAssistantMessage(cline)
+					}
+					return
 				}
-				return
 			}
 
 			// Fetch state early so it's available for toolDescription and validation

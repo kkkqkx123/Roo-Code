@@ -1,4 +1,5 @@
 import { TodoItem } from "@coder/types"
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AttemptCompletionToolUse } from "../../../shared/tools"
 
@@ -59,6 +60,9 @@ describe("attemptCompletionTool", () => {
 		mockTask = {
 			consecutiveMistakeCount: 0,
 			recordToolError: vi.fn(),
+			metricsService: {
+				recordToolError: vi.fn(),
+			} as any,
 			todoList: undefined,
 			say: vi.fn().mockResolvedValue(undefined),
 			ask: vi.fn().mockResolvedValue({ response: "yesButtonClicked", text: "", images: [] }),
@@ -187,7 +191,7 @@ describe("attemptCompletionTool", () => {
 			await attemptCompletionTool.handle(mockTask as Task, block, callbacks)
 
 			expect(mockTask.consecutiveMistakeCount).toBe(1)
-			expect(mockTask.recordToolError).toHaveBeenCalledWith("attempt_completion")
+			expect(mockTask.metricsService.recordToolError).toHaveBeenCalledWith("attempt_completion")
 			expect(mockPushToolResult).toHaveBeenCalledWith(
 				expect.stringContaining("Cannot complete task while there are incomplete todos"),
 			)
@@ -229,7 +233,7 @@ describe("attemptCompletionTool", () => {
 			await attemptCompletionTool.handle(mockTask as Task, block, callbacks)
 
 			expect(mockTask.consecutiveMistakeCount).toBe(1)
-			expect(mockTask.recordToolError).toHaveBeenCalledWith("attempt_completion")
+			expect(mockTask.metricsService.recordToolError).toHaveBeenCalledWith("attempt_completion")
 			expect(mockPushToolResult).toHaveBeenCalledWith(
 				expect.stringContaining("Cannot complete task while there are incomplete todos"),
 			)
@@ -272,7 +276,7 @@ describe("attemptCompletionTool", () => {
 			await attemptCompletionTool.handle(mockTask as Task, block, callbacks)
 
 			expect(mockTask.consecutiveMistakeCount).toBe(1)
-			expect(mockTask.recordToolError).toHaveBeenCalledWith("attempt_completion")
+			expect(mockTask.metricsService.recordToolError).toHaveBeenCalledWith("attempt_completion")
 			expect(mockPushToolResult).toHaveBeenCalledWith(
 				expect.stringContaining("Cannot complete task while there are incomplete todos"),
 			)
@@ -358,7 +362,7 @@ describe("attemptCompletionTool", () => {
 
 			// Should prevent completion when setting is enabled and there are incomplete todos
 			expect(mockTask.consecutiveMistakeCount).toBe(1)
-			expect(mockTask.recordToolError).toHaveBeenCalledWith("attempt_completion")
+			expect(mockTask.metricsService.recordToolError).toHaveBeenCalledWith("attempt_completion")
 			expect(mockPushToolResult).toHaveBeenCalledWith(
 				expect.stringContaining("Cannot complete task while there are incomplete todos"),
 			)
@@ -467,6 +471,162 @@ describe("attemptCompletionTool", () => {
 				expect(mockTask.consecutiveMistakeCount).toBe(0)
 				expect(mockTask.recordToolError).not.toHaveBeenCalled()
 			})
+		})
+	})
+
+	describe("handlePartial - streaming display", () => {
+		it("should display partial result content", async () => {
+			const partialBlock = {
+				type: "tool_use" as const,
+				name: "attempt_completion" as const,
+				params: { result: "This is a partial result" },
+				partial: true as const,
+			}
+
+			await attemptCompletionTool.handlePartial(mockTask as Task, partialBlock)
+
+			expect(mockTask.say).toHaveBeenCalledWith("completion_result", "This is a partial result", undefined, true)
+		})
+
+		it("should not display when result is undefined", async () => {
+			const partialBlock = {
+				type: "tool_use" as const,
+				name: "attempt_completion" as const,
+				params: { result: undefined },
+				partial: true as const,
+			}
+
+			await attemptCompletionTool.handlePartial(mockTask as Task, partialBlock)
+
+			expect(mockTask.say).not.toHaveBeenCalled()
+		})
+
+		it("should not re-display the same content (deduplication)", async () => {
+			const partialBlock1 = {
+				type: "tool_use" as const,
+				name: "attempt_completion" as const,
+				params: { result: "Same content" },
+				partial: true as const,
+			}
+
+			const partialBlock2 = {
+				type: "tool_use" as const,
+				name: "attempt_completion" as const,
+				params: { result: "Same content" },
+				partial: true as const,
+			}
+
+			// First call should display
+			await attemptCompletionTool.handlePartial(mockTask as Task, partialBlock1)
+			expect(mockTask.say).toHaveBeenCalledTimes(1)
+
+			// Second call with same content should NOT display again
+			await attemptCompletionTool.handlePartial(mockTask as Task, partialBlock2)
+			expect(mockTask.say).toHaveBeenCalledTimes(1)
+		})
+
+		it("should display when content changes", async () => {
+			const partialBlock1 = {
+				type: "tool_use" as const,
+				name: "attempt_completion" as const,
+				params: { result: "Initial content" },
+				partial: true as const,
+			}
+
+			const partialBlock2 = {
+				type: "tool_use" as const,
+				name: "attempt_completion" as const,
+				params: { result: "Updated content" },
+				partial: true as const,
+			}
+
+			// First call
+			await attemptCompletionTool.handlePartial(mockTask as Task, partialBlock1)
+			expect(mockTask.say).toHaveBeenCalledWith("completion_result", "Initial content", undefined, true)
+
+			// Second call with different content should update
+			await attemptCompletionTool.handlePartial(mockTask as Task, partialBlock2)
+			expect(mockTask.say).toHaveBeenCalledWith("completion_result", "Updated content", undefined, true)
+			expect(mockTask.say).toHaveBeenCalledTimes(2)
+		})
+
+		it("should reset streaming state after successful execute", async () => {
+			const block = {
+				type: "tool_use" as const,
+				name: "attempt_completion" as const,
+				params: { result: "Final result" },
+				nativeArgs: { result: "Final result" },
+				partial: false as const,
+			}
+
+			const callbacks: AttemptCompletionCallbacks = {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
+				askFinishSubTaskApproval: mockAskFinishSubTaskApproval,
+				toolDescription: mockToolDescription,
+			}
+
+			// First, simulate some streaming calls
+			await attemptCompletionTool.handlePartial(mockTask as Task, {
+				type: "tool_use" as const,
+				name: "attempt_completion" as const,
+				params: { result: "Streaming..." },
+				partial: true as const,
+			})
+
+			// Then execute the full tool
+			await attemptCompletionTool.handle(mockTask as Task, block, callbacks)
+
+			// Verify execute succeeded
+			expect(mockTask.say).toHaveBeenCalledWith("completion_result", "Final result")
+		})
+
+		it("should reset streaming state on execute error", async () => {
+			const block = {
+				type: "tool_use" as const,
+				name: "attempt_completion" as const,
+				params: { result: "" },
+				nativeArgs: { result: "" },
+				partial: false as const,
+			}
+
+			const callbacks: AttemptCompletionCallbacks = {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
+				askFinishSubTaskApproval: mockAskFinishSubTaskApproval,
+				toolDescription: mockToolDescription,
+			}
+
+			// First, simulate some streaming calls
+			await attemptCompletionTool.handlePartial(mockTask as Task, {
+				type: "tool_use" as const,
+				name: "attempt_completion" as const,
+				params: { result: "Streaming..." },
+				partial: true as const,
+			})
+
+			// Then execute with empty result (should fail)
+			await attemptCompletionTool.handle(mockTask as Task, block, callbacks)
+
+			// Verify error handling - metricsService.recordToolError should be called
+			expect(mockTask.metricsService.recordToolError).toHaveBeenCalledWith("attempt_completion")
+		})
+
+		it("should handle partial command parameter", async () => {
+			const partialBlock = {
+				type: "tool_use" as const,
+				name: "attempt_completion" as const,
+				params: { result: "Result", command: "npm test" },
+				partial: true as const,
+			}
+
+			mockTask.clineMessages = [{ ask: "command" } as any]
+
+			await attemptCompletionTool.handlePartial(mockTask as Task, partialBlock)
+
+			expect(mockTask.ask).toHaveBeenCalledWith("command", "npm test", true)
 		})
 	})
 })
