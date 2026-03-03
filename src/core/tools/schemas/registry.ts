@@ -108,6 +108,11 @@ import {
 	GenerateImageParamsSchema,
 	type GenerateImageParams,
 } from "./generate_image"
+import {
+	createGetWorkspaceDiagnosticsTool,
+	GetWorkspaceDiagnosticsParamsSchema,
+	type GetWorkspaceDiagnosticsParams,
+} from "./get_workspace_diagnostics"
 
 // ─── Tool Definition Interface ──────────────────────────────────────────────────
 
@@ -303,6 +308,14 @@ export const ToolRegistry = {
 		group: "edit" as ToolGroup,
 		createTool: () => createGenerateImageTool(),
 	},
+
+	get_workspace_diagnostics: {
+		name: "get_workspace_diagnostics" as const,
+		schema: GetWorkspaceDiagnosticsParamsSchema,
+		description: "Query diagnostic information for specific files, folders, or the entire workspace",
+		group: "read" as ToolGroup,
+		createTool: () => createGetWorkspaceDiagnosticsTool(),
+	},
 } as const
 
 // ─── Type Utilities ──────────────────────────────────────────────────────────────
@@ -426,4 +439,5 @@ export interface ToolParamsMap {
 	switch_mode: SwitchModeParams
 	new_task: NewTaskParams
 	generate_image: GenerateImageParams
+	get_workspace_diagnostics: GetWorkspaceDiagnosticsParams
 }

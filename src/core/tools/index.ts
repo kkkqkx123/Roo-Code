@@ -58,6 +58,7 @@ import { newTaskTool } from "./NewTaskTool"
 import { runSlashCommandTool } from "./RunSlashCommandTool"
 import { skillTool } from "./SkillTool"
 import { useMcpTool } from "./UseMcpTool"
+import { getWorkspaceDiagnosticsTool } from "./GetWorkspaceDiagnostics"
 
 // ─── Register All Built-in Tools ──────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ toolExecutorRegistry.register("read_file", readFileTool)
 toolExecutorRegistry.register("list_files", listFilesTool)
 toolExecutorRegistry.register("search_files", searchFilesTool)
 toolExecutorRegistry.register("codebase_search", codebaseSearchTool)
+toolExecutorRegistry.register("get_workspace_diagnostics", getWorkspaceDiagnosticsTool)
 
 // Edit group
 toolExecutorRegistry.register("write_to_file", writeToFileTool)
@@ -113,3 +115,4 @@ export { newTaskTool } from "./NewTaskTool"
 export { runSlashCommandTool } from "./RunSlashCommandTool"
 export { skillTool } from "./SkillTool"
 export { useMcpTool } from "./UseMcpTool"
+export { getWorkspaceDiagnosticsTool } from "./GetWorkspaceDiagnostics"
