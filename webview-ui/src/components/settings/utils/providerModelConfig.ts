@@ -58,18 +58,3 @@ export const PROVIDERS_WITH_CUSTOM_MODEL_UI: ProviderName[] = [
 export const shouldUseGenericModelPicker = (provider: ProviderName): boolean => {
 	return isStaticModelProvider(provider) && !PROVIDERS_WITH_CUSTOM_MODEL_UI.includes(provider)
 }
-
-/**
- * Handles provider-specific side effects when a model is changed.
- * Centralizes provider-specific logic to keep it out of the ApiOptions template.
- */
-export const handleModelChangeSideEffects = <K extends keyof ProviderSettings>(
-	provider: ProviderName,
-	modelId: string,
-	setApiConfigurationField: (field: K, value: ProviderSettings[K]) => void,
-): void => {
-	// All providers: Clear reasoning effort when switching models to allow
-	// the new model's default to take effect. Different models within the
-	// same provider can have different reasoning effort defaults/options.
-	setApiConfigurationField("reasoningEffort" as K, undefined as ProviderSettings[K])
-}

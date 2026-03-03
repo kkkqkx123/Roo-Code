@@ -73,9 +73,6 @@ export const ModelPicker = ({
 
 	const { id: selectedModelId, info: selectedModelInfo } = useSelectedModel(apiConfiguration)
 
-
-	const activeProvider = apiConfiguration.apiProvider
-
 	const modelIds = useMemo(() => {
 		// Include the currently selected model even if deprecated (so users can see what they have selected)
 		// But filter out other deprecated models from being newly selectable

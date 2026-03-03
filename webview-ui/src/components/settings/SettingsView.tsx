@@ -33,9 +33,7 @@ import {
 
 import {
 	type ProviderSettings,
-	type ExperimentId,
 	DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
-	ImageGenerationProvider,
 } from "@coder/types"
 
 import { vscode } from "@src/utils/vscode"
@@ -43,7 +41,6 @@ import { cn } from "@src/lib/utils"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { ExtensionStateContextType, useExtensionState } from "@src/context/ExtensionStateContext"
 import { useSettingsStore } from "@src/stores/settingsStore"
-import { useStore } from "zustand"
 import {
 	AlertDialog,
 	AlertDialogContent,
@@ -132,7 +129,6 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 	const store = useSettingsStore()
 	const {
 		cachedState,
-		originalState,
 		isDirty,
 		setCachedState,
 		updateCachedField,
@@ -308,27 +304,6 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 	const setDebug = useCallback(
 		(debug: boolean) => {
 			updateCachedField("debug", debug)
-		},
-		[updateCachedField],
-	)
-
-	const setImageGenerationProvider = useCallback(
-		(provider: ImageGenerationProvider) => {
-			updateCachedField("imageGenerationProvider", provider)
-		},
-		[updateCachedField],
-	)
-
-	const setOpenRouterImageApiKey = useCallback(
-		(apiKey: string) => {
-			updateCachedField("openRouterImageApiKey", apiKey)
-		},
-		[updateCachedField],
-	)
-
-	const setImageGenerationSelectedModel = useCallback(
-		(model: string) => {
-			updateCachedField("openRouterImageGenerationSelectedModel", model)
 		},
 		[updateCachedField],
 	)

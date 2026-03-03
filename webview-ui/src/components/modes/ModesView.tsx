@@ -77,12 +77,10 @@ const ModesView = () => {
 		customModes,
 	} = useExtensionState()
 
-	// Use useModes hook for mode management
-	const { modes: customModesFromQuery, isLoading: isModesLoading, updateMode, deleteMode } = useModes()
-
-	// Use customModes from extension state (authoritative source)
-	// useModes provides optimistic updates and query management
-	const modes = getAllModes(customModes)
+	// Use useModes hook for mutation functions (update and delete)
+	// Note: modes data comes from useExtensionState (customModes) as the authoritative source
+	// useModes hook is used here only for its mutation functions with optimistic updates
+	const { updateMode, deleteMode } = useModes()
 
 	// Use a local state to track the visually active mode
 	// This prevents flickering when switching modes rapidly by:

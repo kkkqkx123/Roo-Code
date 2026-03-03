@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 
 import { useChatStore } from '@src/stores/chatStore'
-import type { ClineAsk, ClineMessage, ClineSayTool } from '@coder/types'
+import type { ClineMessage, ClineSayTool } from '@coder/types'
 
 interface UseChatButtonStatesOptions {
   t: (key: string) => string
@@ -21,7 +21,7 @@ export function useChatButtonStates({
   const { updateButtonStates } = useChatStore()
 
   // Process message and update button states
-  const processMessage = useCallback((lastMessage: ClineMessage | undefined, secondLastMessage: ClineMessage | undefined) => {
+  const processMessage = useCallback((lastMessage: ClineMessage | undefined) => {
     if (!lastMessage) {
       updateButtonStates({
         sendingDisabled: false,

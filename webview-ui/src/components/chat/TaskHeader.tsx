@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, useMemo } from "react"
+import { memo, useRef, useState, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronUp, ChevronDown, HardDriveDownload, HardDriveUpload, FoldVertical, ArrowLeft } from "lucide-react"
 import prettyBytes from "pretty-bytes"
@@ -6,7 +6,6 @@ import prettyBytes from "pretty-bytes"
 import type { ClineMessage } from "@coder/types"
 
 import { getModelMaxOutputTokens } from "@coder/api"
-import { findLastIndex } from "@coder/array"
 
 import { formatLargeNumber } from "@src/utils/format"
 import { cn } from "@src/lib/utils"
@@ -57,34 +56,9 @@ const TaskHeader = ({
 	todos,
 }: TaskHeaderProps) => {
 	const { t } = useTranslation()
-	const { apiConfiguration, currentTaskItem, clineMessages } = useExtensionState()
+	const { apiConfiguration, currentTaskItem } = useExtensionState()
 	const { id: modelId, info: model } = useSelectedModel(apiConfiguration)
 	const [isTaskExpanded, setIsTaskExpanded] = useState(false)
-	const [showLongRunningTaskMessage, setShowLongRunningTaskMessage] = useState(false)
-
-	// Check if the task is complete by looking at the last relevant message (skipping resume messages)
-	const isTaskComplete =
-		clineMessages && clineMessages.length > 0
-			? (() => {
-				const lastRelevantIndex = findLastIndex(
-					clineMessages,
-					(m) => !(m.ask === "resume_task" || m.ask === "resume_completed_task"),
-				)
-				return lastRelevantIndex !== -1
-					? clineMessages[lastRelevantIndex]?.ask === "completion_result"
-					: false
-			})()
-			: false
-
-	useEffect(() => {
-		const timer = setTimeout(() => {
-			if (currentTaskItem && !isTaskComplete) {
-				setShowLongRunningTaskMessage(true)
-			}
-		}, 120_000) // Show upsell after 2 minutes
-
-		return () => clearTimeout(timer)
-	}, [currentTaskItem, isTaskComplete])
 
 	const textContainerRef = useRef<HTMLDivElement>(null)
 	const textRef = useRef<HTMLDivElement>(null)

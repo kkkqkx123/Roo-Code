@@ -44,7 +44,6 @@ import {
 } from "@src/components/ui"
 import { useEscapeKey } from "@src/hooks/useEscapeKey"
 import { useCodeIndexStore } from "@src/stores/codeIndexStore"
-import { useIndexingStatus } from "@src/hooks/useIndexingStatus"
 
 // Default URLs for providers
 const DEFAULT_QDRANT_URL = "http://localhost:6333"
@@ -145,7 +144,6 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 	
 	// Use codeIndexStore for UI state management
 	const {
-		isOpen,
 		saveStatus,
 		saveError,
 		formErrors,

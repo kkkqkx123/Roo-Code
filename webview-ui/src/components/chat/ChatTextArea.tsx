@@ -19,7 +19,6 @@ import {
 	insertMention,
 	removeMention,
 	shouldShowContextMenu,
-	SearchResult,
 } from "@src/utils/context-mentions"
 import { cn } from "@src/lib/utils"
 import { convertToMentionPath } from "@src/utils/path-mentions"
@@ -113,7 +112,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const [isDraggingOver, setIsDraggingOver] = useState(false)
 		const [textAreaBaseHeight, setTextAreaBaseHeight] = useState<number | undefined>(undefined)
 		const [showContextMenu, setShowContextMenu] = useState(false)
-		const [cursorPosition, setCursorPosition] = useState(0)
 		const [searchQuery, setSearchQuery] = useState("")
 		const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 		const [isMouseDownOnMenu, setIsMouseDownOnMenu] = useState(false)
@@ -129,8 +127,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			gitCommits,
 			fileSearchResults,
 			searchLoading,
-			showDropdown,
-			setShowDropdown,
 			setSearchLoading,
 			setFileSearchResults,
 		} = useChatTextArea({
@@ -254,7 +250,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					// Insert the command mention into the textarea
 					const commandMention = `/${value}`
 					setInputValue(commandMention + " ")
-					setCursorPosition(commandMention.length + 1)
 					setIntendedCursorPosition(commandMention.length + 1)
 
 					// Focus the textarea
@@ -312,7 +307,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
 					setInputValue(newValue)
 					const newCursorPosition = newValue.indexOf(" ", mentionIndex + insertValue.length) + 1
-					setCursorPosition(newCursorPosition)
 					setIntendedCursorPosition(newCursorPosition)
 					cursorPositionRef.current = newCursorPosition
 
@@ -452,11 +446,9 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						if (!charAfterIsWhitespace) {
 							event.preventDefault()
 							textAreaRef.current?.setSelectionRange(newCursorPosition, newCursorPosition)
-							setCursorPosition(newCursorPosition)
 							cursorPositionRef.current = newCursorPosition
 						}
 
-						setCursorPosition(newCursorPosition)
 						setJustDeletedSpaceAfterMention(true)
 					} else if (justDeletedSpaceAfterMention) {
 						const { newText, newPosition } = removeMention(inputValue, pos)
@@ -509,15 +501,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		// Ref to store full text for incremental update detection.
 		const fullTextRef = useRef("")
 
-		// Check if input is a simple tail append (optimization for common case)
-		const isTailAppend = useCallback((oldText: string, newText: string, cursorPos: number): boolean => {
-			return (
-				cursorPos === newText.length &&           // Cursor at end
-				newText.length > oldText.length &&        // Text got longer
-				newText.startsWith(oldText)               // Old text is prefix
-			)
-		}, [])
-
 		// Check if menu computation is needed (optimization for tail typing)
 		const shouldComputeMenu = useCallback((text: string, cursorPos: number): boolean => {
 			// Quick check: is there @ or / within 100 chars before cursor?
@@ -530,20 +513,17 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			(e: React.ChangeEvent<HTMLTextAreaElement>) => {
 				const newValue = e.target.value
 				const newCursorPosition = e.target.selectionStart
-				const oldText = fullTextRef.current
 
 				// Update refs immediately (for fast access in other handlers)
 				cursorPositionRef.current = newCursorPosition
 				fullTextRef.current = newValue
 
-				// Detect input type for optimization
-				const isSimpleTailAppend = isTailAppend(oldText, newValue, newCursorPosition)
+				// Check if menu computation is needed (optimization for tail typing)
 				const needsMenuComputation = shouldComputeMenu(newValue, newCursorPosition)
 
 				// Batch all state updates to reduce re-renders
 				unstable_batchedUpdates(() => {
 					setInputValue(newValue)
-					setCursorPosition(newCursorPosition)
 
 					// Skip menu computation for simple tail append (common case optimization)
 					if (needsMenuComputation) {
@@ -612,7 +592,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				// Reset history navigation when user types (non-urgent, outside batch)
 				resetOnInputChange()
 			},
-			[setInputValue, setFileSearchResults, setSearchLoading, resetOnInputChange, isTailAppend, shouldComputeMenu],
+			[setInputValue, setFileSearchResults, setSearchLoading, resetOnInputChange, shouldComputeMenu],
 		)
 
 		useEffect(() => {
@@ -646,7 +626,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						inputValue.slice(0, pos) + trimmedUrl + " " + inputValue.slice(pos)
 					setInputValue(newValue)
 					const newCursorPosition = pos + trimmedUrl.length + 1
-					setCursorPosition(newCursorPosition)
 					setIntendedCursorPosition(newCursorPosition)
 					cursorPositionRef.current = newCursorPosition
 					setShowContextMenu(false)
@@ -717,7 +696,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const updateCursorPosition = useCallback(() => {
 			if (textAreaRef.current) {
 				const newPos = textAreaRef.current.selectionStart
-				setCursorPosition(newPos)
 				cursorPositionRef.current = newPos
 			}
 		}, [])
@@ -771,7 +749,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
 						setInputValue(newValue)
 						const newCursorPosition = pos + totalLength
-						setCursorPosition(newCursorPosition)
 						setIntendedCursorPosition(newCursorPosition)
 						cursorPositionRef.current = newCursorPosition
 					}

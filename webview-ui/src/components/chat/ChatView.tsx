@@ -144,7 +144,6 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		setPrimaryButtonText,
 		setSecondaryButtonText,
 		setSendingDisabled,
-		updateButtonStates,
 	} = useChatStore()
 
 	const [_didClickCancel, setDidClickCancel] = useState(false)

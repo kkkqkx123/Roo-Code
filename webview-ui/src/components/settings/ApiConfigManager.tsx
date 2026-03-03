@@ -1,12 +1,10 @@
 import { memo, useEffect, useRef, useState } from "react"
 import { VSCodeTextField } from "@vscode/webview-ui-toolkit/react"
-import { AlertTriangle } from "lucide-react"
 
 import type { ProviderSettingsEntry } from "@coder/types"
 
 import { useAppTranslation } from "@/i18n/TranslationContext"
 import {
-	type SearchableSelectOption,
 	Button,
 	Input,
 	Dialog,

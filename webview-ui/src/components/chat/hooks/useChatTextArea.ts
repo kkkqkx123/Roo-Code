@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef } from "react"
 
-import { vscode } from "@src/utils/vscode"
 import type { SearchResult } from "@src/utils/context-mentions"
 import { ContextMenuOptionType } from "@src/utils/context-mentions"
 
 interface UseChatTextAreaOptions {
 	inputValue: string
 	setInputValue: (value: string) => void
-	setShowContextMenu: (show: boolean) => void
 	setIsEnhancingPrompt: (isEnhancing: boolean) => void
 }
 
@@ -16,10 +14,8 @@ interface UseChatTextAreaReturn {
 	gitCommits: any[]
 	fileSearchResults: SearchResult[]
 	searchLoading: boolean
-	showDropdown: boolean
 
 	// State setters
-	setShowDropdown: (show: boolean) => void
 	setSearchLoading: (loading: boolean) => void
 	setFileSearchResults: (results: SearchResult[]) => void
 }
@@ -27,28 +23,13 @@ interface UseChatTextAreaReturn {
 export function useChatTextArea({
 	inputValue,
 	setInputValue,
-	setShowContextMenu,
 	setIsEnhancingPrompt,
 }: UseChatTextAreaOptions): UseChatTextAreaReturn {
 	const [gitCommits, setGitCommits] = useState<any[]>([])
 	const [fileSearchResults, setFileSearchResults] = useState<SearchResult[]>([])
 	const [searchLoading, setSearchLoading] = useState(false)
-	const [searchRequestId, setSearchRequestId] = useState<string>("")
-	const [showDropdown, setShowDropdown] = useState(false)
-
+	const searchRequestId = ""
 	const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
-
-	// Close dropdown when clicking outside
-	useEffect(() => {
-		const handleClickOutside = () => {
-			if (showDropdown) {
-				setShowDropdown(false)
-			}
-		}
-
-		document.addEventListener("mousedown", handleClickOutside)
-		return () => document.removeEventListener("mousedown", handleClickOutside)
-	}, [showDropdown])
 
 	// Handle enhanced prompt response and search results
 	useEffect(() => {
@@ -127,8 +108,6 @@ export function useChatTextArea({
 		gitCommits,
 		fileSearchResults,
 		searchLoading,
-		showDropdown,
-		setShowDropdown,
 		setSearchLoading,
 		setFileSearchResults,
 	}

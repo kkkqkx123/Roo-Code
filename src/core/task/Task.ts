@@ -345,7 +345,6 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	currentStreamingContentIndex = 0
 	currentStreamingDidCheckpoint = false
 	assistantMessageContent: AssistantMessageContent[] = []
-	presentAssistantMessageLocked = false
 	presentAssistantMessageHasPendingUpdates = false
 	userMessageContent: (Anthropic.TextBlockParam | Anthropic.ImageBlockParam | Anthropic.ToolResultBlockParam)[] = []
 	userMessageContentReady = false
@@ -2789,7 +2788,6 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// only prevent attempt_completion within the same assistant message, not across turns
 		// (e.g., if a tool fails, then user sends a message saying "just complete anyway")
 		this.didToolFailInCurrentTurn = false
-		this.presentAssistantMessageLocked = false
 		this.presentAssistantMessageHasPendingUpdates = false
 	}
 
