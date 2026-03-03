@@ -1,5 +1,6 @@
 import { serializeError } from "serialize-error"
 import { Anthropic } from "@anthropic-ai/sdk"
+import { Mutex } from "async-mutex"
 
 import type { ToolName, ClineAsk, ToolProgressStatus } from "@coder/types"
 import { customToolRegistry } from "@coder/core"
@@ -39,6 +40,13 @@ import { formatResponse } from "../prompts/responses"
 import { sanitizeToolUseId } from "../../utils/tool-id"
 
 /**
+ * Mutex for protecting presentAssistantMessage execution.
+ * This replaces the previous boolean lock to prevent deadlocks and ensure
+ * automatic lock release even in error scenarios.
+ */
+const messageMutex = new Mutex()
+
+/**
  * Processes and presents assistant message content to the user interface.
  *
  * This function is the core message handling system that:
@@ -49,7 +57,7 @@ import { sanitizeToolUseId } from "../../utils/tool-id"
  * - Coordinates file system checkpointing for modified files.
  * - Controls the conversation state to determine when to continue to the next request.
  *
- * The function uses a locking mechanism to prevent concurrent execution and handles
+ * The function uses a mutex locking mechanism to prevent concurrent execution and handles
  * partial content blocks during streaming. It's designed to work with the streaming
  * API response pattern, where content arrives incrementally and needs to be processed
  * as it becomes available.
@@ -60,44 +68,45 @@ export async function presentAssistantMessage(cline: Task) {
 		throw new Error(`[Task#presentAssistantMessage] task ${cline.taskId}.${cline.instanceId} aborted`)
 	}
 
-	if (cline.presentAssistantMessageLocked) {
+	// Try to acquire the mutex lock
+	if (!messageMutex.isLocked()) {
 		cline.presentAssistantMessageHasPendingUpdates = true
 		return
 	}
 
-	cline.presentAssistantMessageLocked = true
+	// Acquire lock and ensure it's released in finally block
+	const release = await messageMutex.acquire()
 	cline.presentAssistantMessageHasPendingUpdates = false
 
-	if (cline.currentStreamingContentIndex >= cline.assistantMessageContent.length) {
-		// This may happen if the last content block was completed before
-		// streaming could finish. If streaming is finished, and we're out of
-		// bounds then this means we already  presented/executed the last
-		// content block and are ready to continue to next request.
-		if (cline.didCompleteReadingStream) {
-			cline.userMessageContentReady = true
+	try {
+		if (cline.currentStreamingContentIndex >= cline.assistantMessageContent.length) {
+			// This may happen if the last content block was completed before
+			// streaming could finish. If streaming is finished, and we're out of
+			// bounds then this means we already  presented/executed the last
+			// content block and are ready to continue to next request.
+			if (cline.didCompleteReadingStream) {
+				cline.userMessageContentReady = true
+			}
+
+			return
 		}
 
-		cline.presentAssistantMessageLocked = false
-		return
-	}
-
-	let block: any
-	try {
-		// Performance optimization: Use shallow copy instead of deep clone.
-		// The block is used read-only throughout this function - we never mutate its properties.
-		// We only need to protect against the reference changing during streaming, not nested mutations.
-		// This provides 80-90% reduction in cloning overhead (5-100ms saved per block).
-		block = { ...cline.assistantMessageContent[cline.currentStreamingContentIndex] }
-	} catch (error) {
-		const errorMessage = error instanceof Error ? error.message : String(error)
-		console.error(`ERROR cloning block:`, errorMessage)
-		console.error(
-			`Block content:`,
-			JSON.stringify(cline.assistantMessageContent[cline.currentStreamingContentIndex], null, 2),
-		)
-		cline.presentAssistantMessageLocked = false
-		return
-	}
+		let block: any
+		try {
+			// Performance optimization: Use shallow copy instead of deep clone.
+			// The block is used read-only throughout this function - we never mutate its properties.
+			// We only need to protect against the reference changing during streaming, not nested mutations.
+			// This provides 80-90% reduction in cloning overhead (5-100ms saved per block).
+			block = { ...cline.assistantMessageContent[cline.currentStreamingContentIndex] }
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			console.error(`ERROR cloning block:`, errorMessage)
+			console.error(
+				`Block content:`,
+				JSON.stringify(cline.assistantMessageContent[cline.currentStreamingContentIndex], null, 2),
+			)
+			return
+		}
 
 	switch (block.type) {
 		case "mcp_tool_use": {
@@ -110,7 +119,6 @@ export async function presentAssistantMessage(cline: Task) {
 			// Running tools during active streaming can supersede pending asks and
 			// leave tool calls unprocessed when additional chunks arrive.
 			if (cline.isStreaming === true && cline.didCompleteReadingStream !== true && !mcpBlock.partial) {
-				cline.presentAssistantMessageLocked = false
 				if (cline.presentAssistantMessageHasPendingUpdates) {
 					presentAssistantMessage(cline)
 				}
@@ -337,7 +345,6 @@ export async function presentAssistantMessage(cline: Task) {
 			// Running tools during active streaming can supersede pending asks and
 			// leave tool calls unprocessed when additional chunks arrive.
 			if (cline.isStreaming === true && cline.didCompleteReadingStream !== true && !block.partial) {
-				cline.presentAssistantMessageLocked = false
 				if (cline.presentAssistantMessageHasPendingUpdates) {
 					presentAssistantMessage(cline)
 				}
@@ -928,10 +935,6 @@ export async function presentAssistantMessage(cline: Task) {
 	// breaking without presenting any UI. For example the write_to_file tool
 	// was breaking when relpath was undefined, and for invalid relpath it never
 	// presented UI.
-	// This needs to be placed here, if not then calling
-	// cline.presentAssistantMessage below would fail (sometimes) since it's
-	// locked.
-	cline.presentAssistantMessageLocked = false
 
 	// NOTE: When tool is rejected, iterator stream is interrupted and it waits
 	// for `userMessageContentReady` to be true. Future calls to present will
@@ -974,6 +977,10 @@ export async function presentAssistantMessage(cline: Task) {
 	// Block is partial, but the read stream may have finished.
 	if (cline.presentAssistantMessageHasPendingUpdates) {
 		presentAssistantMessage(cline)
+	}
+	} finally {
+		// Always release the lock, even if an error occurred
+		release()
 	}
 }
 
