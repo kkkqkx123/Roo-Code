@@ -20,7 +20,6 @@ import {
 	type TaskEvents,
 	type ProviderSettings,
 	type TokenUsage,
-	type ToolUsage,
 	type ToolName,
 	type ContextCondense,
 	type ContextTruncation,
@@ -1286,22 +1285,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	private async saveApiConversationHistory(): Promise<boolean> {
 		try {
-			// Get the current system prompt for debugging purposes
-			const systemPrompt = await this.getSystemPrompt()
-
-			// Create a system prompt message for debugging
-			const systemPromptMessage: ApiMessage = {
-				role: "system",
-				content: systemPrompt,
-				ts: Date.now(),
-				isSystemPrompt: true,
-			}
-
-			// Prepend system prompt to history for debugging
-			const messagesWithSystemPrompt = [systemPromptMessage, ...structuredClone(this.apiConversationHistory)]
-
+			// Save only user/assistant messages (system prompt is dynamically generated per request)
 			await saveApiMessages({
-				messages: messagesWithSystemPrompt,
+				messages: this.apiConversationHistory,
 				taskId: this.taskId,
 				globalStoragePath: this.globalStoragePath,
 			})
@@ -1429,8 +1415,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				apiConfigName: this._taskApiConfigName, // Use the task's own provider profile, not the current provider profile.
 				initialStatus: this.initialStatus,
 				// Map TaskState to HistoryItem status (exclude 'idle' and 'paused')
-				taskState: (this.taskState === 'idle' || this.taskState === 'paused' 
-					? undefined 
+				taskState: (this.taskState === 'idle' || this.taskState === 'paused'
+					? undefined
 					: this.taskState) as "active" | "completed" | "delegated" | "running" | "aborted" | "error" | undefined,
 			})
 

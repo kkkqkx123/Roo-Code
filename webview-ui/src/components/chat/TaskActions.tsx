@@ -8,7 +8,16 @@ import { useCopyToClipboard } from "@/utils/clipboard"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 
 import { DeleteTaskDialog } from "../history/DeleteTaskDialog"
-import { CopyIcon, DownloadIcon, Trash2Icon, FileJsonIcon, MessageSquareCodeIcon, FileTextIcon } from "lucide-react"
+import { SystemPromptPreviewDialog } from "./SystemPromptPreviewDialog"
+import {
+	CopyIcon,
+	DownloadIcon,
+	Trash2Icon,
+	FileJsonIcon,
+	MessageSquareCodeIcon,
+	FileTextIcon,
+	BookOpenIcon,
+} from "lucide-react"
 import { LucideIconButton } from "./LucideIconButton"
 
 interface TaskActionsProps {
@@ -18,6 +27,7 @@ interface TaskActionsProps {
 
 export const TaskActions = ({ item, buttonsDisabled }: TaskActionsProps) => {
 	const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null)
+	const [showSystemPromptPreview, setShowSystemPromptPreview] = useState(false)
 	const { t } = useTranslation()
 	const { copyWithFeedback } = useCopyToClipboard()
 	const { debug } = useExtensionState()
@@ -33,6 +43,11 @@ export const TaskActions = ({ item, buttonsDisabled }: TaskActionsProps) => {
 				icon={FileTextIcon}
 				title={t("chat:task.exportContext")}
 				onClick={() => vscode.postMessage({ type: "exportCurrentTaskContext" })}
+			/>
+			<LucideIconButton
+				icon={BookOpenIcon}
+				title={t("chat:task.previewSystemPrompt")}
+				onClick={() => setShowSystemPromptPreview(true)}
 			/>
 
 			{item?.task && (
@@ -79,6 +94,10 @@ export const TaskActions = ({ item, buttonsDisabled }: TaskActionsProps) => {
 						onClick={() => vscode.postMessage({ type: "openDebugUiHistory" })}
 					/>
 				</>
+			)}
+
+			{showSystemPromptPreview && (
+				<SystemPromptPreviewDialog open={showSystemPromptPreview} onOpenChange={setShowSystemPromptPreview} />
 			)}
 		</div>
 	)

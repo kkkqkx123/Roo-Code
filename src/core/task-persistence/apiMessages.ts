@@ -65,7 +65,8 @@ export async function readApiMessages({
 					`[Roo-Debug] readApiMessages: Found API conversation history file, but it's empty (parsed as []). TaskId: ${taskId}, Path: ${filePath}`,
 				)
 			}
-			return parsedData
+			// Filter out system prompt messages (they are dynamically generated per request, not persisted)
+			return parsedData.filter((msg) => !(msg as any).isSystemPrompt)
 		} catch (error) {
 			console.warn(
 				`[readApiMessages] Error parsing API conversation history file, returning empty. TaskId: ${taskId}, Path: ${filePath}, Error: ${error}`,
@@ -91,7 +92,8 @@ export async function readApiMessages({
 					)
 				}
 				await fs.unlink(oldPath)
-				return parsedData
+				// Filter out system prompt messages (they are dynamically generated per request, not persisted)
+				return parsedData.filter((msg) => !(msg as any).isSystemPrompt)
 			} catch (error) {
 				console.warn(
 					`[readApiMessages] Error parsing OLD API conversation history file (claude_messages.json), returning empty. TaskId: ${taskId}, Path: ${oldPath}, Error: ${error}`,

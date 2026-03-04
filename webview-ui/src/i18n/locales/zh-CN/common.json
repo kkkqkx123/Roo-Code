@@ -23,6 +23,12 @@
 		"search_placeholder": "搜索...",
 		"no_results": "未找到结果"
 	},
+	"loading": "加载中...",
+	"actions": {
+		"copy": "复制",
+		"export": "导出",
+		"close": "关闭"
+	},
 	"mermaid": {
 		"loading": "生成 Mermaid 图表中...",
 		"render_error": "无法渲染图表",
