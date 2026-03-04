@@ -9,10 +9,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { Task } from "../../task/Task"
 import { attemptCompletionTool, type AttemptCompletionCallbacks } from "../AttemptCompletionTool"
 import { CoderEventName } from "@coder/types"
-import { formatResponse } from "../../../shared/prompts/responses"
+import { formatResponse } from "../../prompts/responses"
 
 describe("AttemptCompletionTool", () => {
 	let mockTask: any

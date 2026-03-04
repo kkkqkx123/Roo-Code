@@ -1,10 +1,12 @@
 import * as vscode from "vscode"
 import type { WebviewMessage } from "@coder/types"
 import { defaultModeSlug } from "../../shared/modes"
+import pWaitFor from "p-wait-for"
 
 import { SystemPromptBuilder } from "../prompts/SystemPromptBuilder"
 import { MultiSearchReplaceDiffStrategy } from "../diff/strategies/multi-search-replace"
 import { Package } from "../../shared/package"
+import { McpHub } from "../../services/mcp/McpHub"
 
 import { ClineProvider } from "./ClineProvider"
 
@@ -41,10 +43,25 @@ export const generateSystemPrompt = async (provider: ClineProvider, message: Web
 		disabledSkills: disabledSkills ?? [],
 	}
 
+	// Get MCP hub if enabled - wait for it to be fully initialized
+	const mcpHub: McpHub | undefined = mcpEnabled ? provider.getMcpHub() : undefined
+	
+	// Wait for MCP servers to be connected before generating system prompt
+	if (mcpHub) {
+		try {
+			await pWaitFor(() => !mcpHub.isConnecting, { timeout: 10_000 }).catch(() => {
+				console.error("MCP servers failed to connect in time for system prompt preview")
+			})
+		} catch (error) {
+			// Continue even if MCP times out
+			provider.log(`[generateSystemPrompt] MCP wait timeout: ${error}`)
+		}
+	}
+
 	const systemPrompt = await SystemPromptBuilder.create()
 		.withContext(provider.context, cwd)
 		.withMode(mode, customModes, customModePrompts)
-		.withMcp(mcpEnabled ? provider.getMcpHub() : undefined)
+		.withMcp(mcpHub)
 		.withDiffStrategy(diffStrategy)
 		.withCustomInstructions(customInstructions, rooIgnoreInstructions)
 		.withExperiments(experiments)

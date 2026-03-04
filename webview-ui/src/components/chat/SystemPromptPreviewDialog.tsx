@@ -76,7 +76,7 @@ export const SystemPromptPreviewDialog = ({ open, onOpenChange }: SystemPromptPr
 						</div>
 					) : (
 						<div className="h-full overflow-auto">
-							<pre className="whitespace-pre-wrap text-sm font-mono bg-muted p-4 rounded-md">
+							<pre className="whitespace-pre-wrap text-sm font-mono bg-black text-white dark:bg-zinc-900 dark:text-zinc-100 p-4 rounded-md">
 								{systemPrompt || t("chat:task.noSystemPrompt")}
 							</pre>
 						</div>

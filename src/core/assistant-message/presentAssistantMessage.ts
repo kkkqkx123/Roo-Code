@@ -24,6 +24,10 @@ import { sanitizeToolUseId } from "../../utils/tool-id"
  * Mutex for protecting presentAssistantMessage execution.
  * This replaces the previous boolean lock to prevent deadlocks and ensure
  * automatic lock release even in error scenarios.
+ * 
+ * OPTIMIZATION: The mutex is now used only for coordinating message processing,
+ * not for blocking tool execution. Tools are executed asynchronously without
+ * holding the lock, allowing concurrent tool execution.
  */
 const messageMutex = new Mutex()
 
@@ -42,6 +46,10 @@ const messageMutex = new Mutex()
  * partial content blocks during streaming. It's designed to work with the streaming
  * API response pattern, where content arrives incrementally and needs to be processed
  * as it becomes available.
+ * 
+ * OPTIMIZATION: The mutex is released before tool execution to prevent blocking
+ * the entire task. This allows multiple tools to execute concurrently while
+ * maintaining message processing order.
  */
 
 export async function presentAssistantMessage(cline: Task) {
@@ -274,12 +282,45 @@ export async function presentAssistantMessage(cline: Task) {
 				},
 			}
 
-			await useMcpTool.handle(cline, syntheticToolUse, {
-				askApproval,
-				handleError,
-				pushToolResult,
+			// CRITICAL: Handle partial blocks synchronously for streaming
+			if (mcpBlock.partial) {
+				await useMcpTool.handle(cline, syntheticToolUse, {
+					askApproval,
+					handleError,
+					pushToolResult,
+				})
+				// Don't return - let the normal flow continue for partial blocks
+				break
+			}
+
+			// CRITICAL OPTIMIZATION: For complete blocks, execute asynchronously without holding the lock
+			const mcpToolExecutionPromise = (async () => {
+				try {
+					await useMcpTool.handle(cline, syntheticToolUse, {
+						askApproval,
+						handleError,
+						pushToolResult,
+					})
+				} finally {
+					// CRITICAL: After tool execution completes, ensure proper state updates
+					if (cline.currentStreamingContentIndex === cline.assistantMessageContent.length - 1) {
+						cline.userMessageContentReady = true
+					}
+					cline.currentStreamingContentIndex++
+					if (cline.currentStreamingContentIndex < cline.assistantMessageContent.length) {
+						presentAssistantMessage(cline)
+					} else if (cline.didCompleteReadingStream) {
+						cline.userMessageContentReady = true
+					}
+				}
+			})()
+			
+			mcpToolExecutionPromise.catch(error => {
+				console.error(`[presentAssistantMessage] MCP tool execution error:`, error)
 			})
-			break
+			
+			release()
+			return
 		}
 		case "text": {
 			if (cline.didRejectTool || cline.didAlreadyUseTool) {
@@ -701,28 +742,92 @@ export async function presentAssistantMessage(cline: Task) {
 					await checkpointSaveAndMark(cline)
 				}
 
-				// Special handling for attempt_completion (needs extra callbacks)
-				if (block.name === "attempt_completion") {
-					const completionCallbacks: AttemptCompletionCallbacks = {
-						askApproval,
-						handleError,
-						pushToolResult,
-						askFinishSubTaskApproval,
-						toolDescription,
+				// CRITICAL: Handle partial blocks synchronously for streaming
+				// Partial blocks must be processed immediately to show streaming UI
+				if (block.partial) {
+					// For partial blocks, execute synchronously and let the normal flow continue
+					// Special handling for attempt_completion (needs extra callbacks)
+					if (block.name === "attempt_completion") {
+						const completionCallbacks: AttemptCompletionCallbacks = {
+							askApproval,
+							handleError,
+							pushToolResult,
+							askFinishSubTaskApproval,
+							toolDescription,
+						}
+						await attemptCompletionTool.handle(
+							cline,
+							block as ToolUse<"attempt_completion">,
+							completionCallbacks,
+						)
+					} else {
+						// Standard tool execution via registry
+						await executor.handle(cline, block as ToolUse<any>, {
+							askApproval,
+							handleError,
+							pushToolResult,
+						})
 					}
-					await attemptCompletionTool.handle(
-						cline,
-						block as ToolUse<"attempt_completion">,
-						completionCallbacks,
-					)
-				} else {
-					// Standard tool execution via registry
-					await executor.handle(cline, block as ToolUse<any>, {
-						askApproval,
-						handleError,
-						pushToolResult,
-					})
+					// Don't return - let the normal flow continue for partial blocks
+					break
 				}
+
+				// CRITICAL OPTIMIZATION: For complete blocks, execute asynchronously without holding the lock
+				// This allows other tools to start processing while this tool runs
+				const toolExecutionPromise = (async () => {
+					try {
+						// Special handling for attempt_completion (needs extra callbacks)
+						if (block.name === "attempt_completion") {
+							const completionCallbacks: AttemptCompletionCallbacks = {
+								askApproval,
+								handleError,
+								pushToolResult,
+								askFinishSubTaskApproval,
+								toolDescription,
+							}
+							await attemptCompletionTool.handle(
+								cline,
+								block as ToolUse<"attempt_completion">,
+								completionCallbacks,
+							)
+						} else {
+							// Standard tool execution via registry
+							await executor.handle(cline, block as ToolUse<any>, {
+								askApproval,
+								handleError,
+								pushToolResult,
+							})
+						}
+					} finally {
+						// CRITICAL: After tool execution completes, ensure proper state updates
+						// This must happen after the tool finishes, not before
+						// Set userMessageContentReady if this is the last block
+						if (cline.currentStreamingContentIndex === cline.assistantMessageContent.length - 1) {
+							cline.userMessageContentReady = true
+						}
+						
+						// Increment to next block
+						cline.currentStreamingContentIndex++
+						
+						// Process next block if available
+						if (cline.currentStreamingContentIndex < cline.assistantMessageContent.length) {
+							presentAssistantMessage(cline)
+						} else if (cline.didCompleteReadingStream) {
+							cline.userMessageContentReady = true
+						}
+					}
+				})()
+				
+				// Don't await the tool execution - let it run in the background
+				// This allows the message queue to continue processing
+				toolExecutionPromise.catch(error => {
+					console.error(`[presentAssistantMessage] Tool execution error:`, error)
+				})
+				
+				// Release the lock and return immediately
+				// The tool will continue executing in the background
+				release()
+				return
 			} else {
 				// Handle unknown/invalid tool names OR custom tools
 				// This is critical for native tool calling where every tool_use MUST have a tool_result
@@ -754,25 +859,56 @@ export async function presentAssistantMessage(cline: Task) {
 							}
 						}
 
-						const result = await customTool.execute(customToolArgs, {
-							mode: mode ?? defaultModeSlug,
-							task: cline,
+						// CRITICAL: Handle partial blocks synchronously for streaming
+						if (block.partial) {
+							// For partial blocks, we typically don't execute custom tools
+							// Just break and let the normal flow continue
+							break
+						}
+
+						// CRITICAL OPTIMIZATION: For complete blocks, execute asynchronously without holding the lock
+						const customToolExecutionPromise = (async () => {
+							try {
+								const result = await customTool.execute(customToolArgs, {
+									mode: mode ?? defaultModeSlug,
+									task: cline,
+								})
+
+								console.log(
+									`${customTool.name}.execute(): ${JSON.stringify(customToolArgs)} -> ${JSON.stringify(result)}`,
+								)
+
+								pushToolResult(result)
+								cline.consecutiveMistakeCount = 0
+							} catch (executionError: any) {
+								cline.consecutiveMistakeCount++
+								// Record custom tool error with static name
+								cline.recordToolError("custom_tool", executionError.message)
+								await handleError(`executing custom tool "${block.name}"`, executionError)
+							} finally {
+								// CRITICAL: After tool execution completes, ensure proper state updates
+								if (cline.currentStreamingContentIndex === cline.assistantMessageContent.length - 1) {
+									cline.userMessageContentReady = true
+								}
+								cline.currentStreamingContentIndex++
+								if (cline.currentStreamingContentIndex < cline.assistantMessageContent.length) {
+									presentAssistantMessage(cline)
+								} else if (cline.didCompleteReadingStream) {
+									cline.userMessageContentReady = true
+								}
+							}
+						})()
+						
+						customToolExecutionPromise.catch(error => {
+							console.error(`[presentAssistantMessage] Custom tool execution error:`, error)
 						})
-
-						console.log(
-							`${customTool.name}.execute(): ${JSON.stringify(customToolArgs)} -> ${JSON.stringify(result)}`,
-						)
-
-						pushToolResult(result)
-						cline.consecutiveMistakeCount = 0
-					} catch (executionError: any) {
-						cline.consecutiveMistakeCount++
-						// Record custom tool error with static name
-						cline.recordToolError("custom_tool", executionError.message)
-						await handleError(`executing custom tool "${block.name}"`, executionError)
+						
+						release()
+						return
+					} catch (error) {
+						await handleError(`executing custom tool "${block.name}"`, error as Error)
+						break
 					}
-
-					break
 				}
 
 				// Not a custom tool - handle as unknown tool error
