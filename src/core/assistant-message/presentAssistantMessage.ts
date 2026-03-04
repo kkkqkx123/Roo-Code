@@ -28,6 +28,10 @@ import { sanitizeToolUseId } from "../../utils/tool-id"
  * OPTIMIZATION: The mutex is now used only for coordinating message processing,
  * not for blocking tool execution. Tools are executed asynchronously without
  * holding the lock, allowing concurrent tool execution.
+ * 
+ * STREAMING FIX: For partial text blocks, we skip the mutex entirely to allow
+ * real-time streaming updates. This prevents the UI from blocking after the
+ * first chunk arrives.
  */
 const messageMutex = new Mutex()
 
@@ -55,6 +59,55 @@ const messageMutex = new Mutex()
 export async function presentAssistantMessage(cline: Task) {
 	if (cline.abort) {
 		throw new Error(`[Task#presentAssistantMessage] task ${cline.taskId}.${cline.instanceId} aborted`)
+	}
+
+	// Check if we're processing a partial text block - if so, skip mutex entirely
+	// This allows real-time streaming of text content without blocking
+	const currentBlock = cline.assistantMessageContent[cline.currentStreamingContentIndex]
+	const isPartialTextBlock = currentBlock?.type === "text" && currentBlock?.partial === true
+
+	// STREAMING FIX: For partial text blocks, skip mutex to allow real-time updates
+	// This prevents the UI from blocking after the first chunk arrives
+	if (isPartialTextBlock) {
+		// Process partial text block without mutex and without waiting
+		// This allows the streaming processor to continue immediately
+		try {
+			if (cline.currentStreamingContentIndex >= cline.assistantMessageContent.length) {
+				if (cline.didCompleteReadingStream) {
+					cline.userMessageContentReady = true
+				}
+				return
+			}
+
+			const block = { ...currentBlock }
+			
+			// Handle text block
+			if (block.type === "text") {
+				if (cline.didRejectTool || cline.didAlreadyUseTool) {
+					return
+				}
+
+				let content = block.content
+				if (content) {
+					content = content.replace(/<thinking>\s?/g, "")
+					content = content.replace(/\s?<\/thinking>/g, "")
+				}
+
+				// Don't await - let it run asynchronously
+				cline.say("text", content, undefined, block.partial).catch(error => {
+					const errorMsg = error instanceof Error ? error.message : String(error)
+					if (!errorMsg.includes("aborted")) {
+						console.error(`[presentAssistantMessage] Error in async say:`, error)
+					}
+				})
+			}
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error)
+			if (!errorMsg.includes("aborted")) {
+				console.error(`[presentAssistantMessage] Error processing partial text:`, error)
+			}
+		}
+		return
 	}
 
 	// If mutex is already locked (another call is in progress), set pending flag and return.

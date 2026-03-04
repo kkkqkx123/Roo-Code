@@ -1438,8 +1438,43 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				return msg
 			}
 		}
-
 		return undefined
+	}
+
+	// Debounce timer for saveClineMessages
+	private saveClineMessagesTimer?: NodeJS.Timeout
+	private saveClineMessagesPending = false
+
+	/**
+	 * Debounced version of saveClineMessages to reduce I/O frequency during streaming.
+	 * This prevents excessive disk writes when messages are updated rapidly.
+	 */
+	public async saveClineMessagesDebounced(delayMs: number = 500): Promise<boolean> {
+		// Clear existing timer
+		if (this.saveClineMessagesTimer) {
+			clearTimeout(this.saveClineMessagesTimer)
+		}
+
+		// If a save is already pending, just update the timer
+		if (this.saveClineMessagesPending) {
+			return new Promise((resolve) => {
+				this.saveClineMessagesTimer = setTimeout(async () => {
+					this.saveClineMessagesPending = false
+					const result = await this.saveClineMessages()
+					resolve(result)
+				}, delayMs)
+			})
+		}
+
+		// Mark as pending and set timer
+		this.saveClineMessagesPending = true
+		return new Promise((resolve) => {
+			this.saveClineMessagesTimer = setTimeout(async () => {
+				this.saveClineMessagesPending = false
+				const result = await this.saveClineMessages()
+				resolve(result)
+			}, delayMs)
+		})
 	}
 
 	// Note that `partial` has three valid states true (partial message),
@@ -1969,7 +2004,15 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					lastMessage.images = images
 					lastMessage.partial = partial
 					lastMessage.progressStatus = progressStatus
-					this.updateClineMessage(lastMessage)
+					// STREAMING FIX: For partial messages, update UI asynchronously without blocking
+					// This allows the streaming processor to continue immediately
+					this.updateClineMessage(lastMessage).catch(error => {
+						console.error('[Task#say] Error updating partial message:', error)
+					})
+					// Use debounced save for partial updates to reduce I/O
+					this.saveClineMessagesDebounced(500).catch(error => {
+						console.error('[Task#say] Error saving messages:', error)
+					})
 				} else {
 					// This is a new partial message, so add it with partial state.
 					const sayTs = Date.now()
@@ -1978,7 +2021,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						this.lastMessageTs = sayTs
 					}
 
-					await this.addToClineMessages({
+					// STREAMING FIX: For new partial messages, add asynchronously without blocking
+					// This allows the streaming processor to continue immediately
+					this.addToClineMessages({
 						ts: sayTs,
 						type: "say",
 						say: type,
@@ -1988,6 +2033,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						contextCondense,
 						contextTruncation,
 						errorInfo,
+					}).catch(error => {
+						console.error('[Task#say] Error adding partial message:', error)
 					})
 				}
 			} else {
@@ -2760,7 +2807,18 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					this.didAlreadyUseTool = stateManager.didAlreadyUseTool
 				}
 
-				presentAssistantMessage(this)
+				try {
+					presentAssistantMessage(this)
+				} catch (error) {
+					// Silently handle aborted task errors to avoid unhandled promise rejections
+					const errorMsg = error instanceof Error ? error.message : String(error)
+					if (errorMsg.includes("aborted")) {
+						// Task was aborted, this is expected - no action needed
+						return
+					}
+					// Log other unexpected errors
+					console.error(`[Task#onPresentAssistant] Unexpected error:`, error)
+				}
 
 				if (stateManager) {
 					stateManager.setDidRejectTool(this.didRejectTool)

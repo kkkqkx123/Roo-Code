@@ -29,7 +29,16 @@ export async function handleTextChunk(
   updateTextBlock(context)
 
   // Present assistant message
-  context.config.onPresentAssistant()
+  try {
+    context.config.onPresentAssistant()
+  } catch (error) {
+    // Silently handle aborted task errors
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    if (errorMsg.includes("aborted")) {
+      return
+    }
+    console.error(`[TextHandler#handleTextChunk] Error in onPresentAssistant:`, error)
+  }
 
   // Publish text chunk event
   await context.eventBus?.publish('stream:chunk', {

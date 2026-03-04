@@ -99,7 +99,16 @@ async function handleToolCallStart(
   context.stateManager.addAssistantContentBlock(partialToolUse)
 
   // Present assistant message
-  context.config.onPresentAssistant()
+  try {
+		context.config.onPresentAssistant()
+	} catch (error) {
+		// Silently handle aborted task errors
+		const errorMsg = error instanceof Error ? error.message : String(error)
+		if (errorMsg.includes("aborted")) {
+			return
+		}
+		console.error(`[ToolCallHandler#handleToolCallStart] Error in onPresentAssistant:`, error)
+	}
 
   // Publish tool call start event
   await context.eventBus?.publish('tool:call:start', {
@@ -145,7 +154,16 @@ async function handleToolCallDelta(
   }
 
   // Present assistant message
-  context.config.onPresentAssistant()
+  try {
+	context.config.onPresentAssistant()
+  } catch (error) {
+	// Silently handle aborted task errors
+	const errorMsg = error instanceof Error ? error.message : String(error)
+	if (errorMsg.includes("aborted")) {
+		return
+	}
+	console.error(`[ToolCallHandler#handleToolCallDelta] Error in onPresentAssistant:`, error)
+  }
 
   // Publish tool call progress event
   await context.eventBus?.publish('tool:call:progress', {
@@ -216,7 +234,16 @@ async function handleToolCallEnd(
   }
 
   // Present assistant message
-  context.config.onPresentAssistant()
+  try {
+    context.config.onPresentAssistant()
+  } catch (error) {
+    // Silently handle aborted task errors
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    if (errorMsg.includes("aborted")) {
+      return
+    }
+    console.error(`[ToolCallHandler#handleToolCallEnd] Error in onPresentAssistant:`, error)
+  }
 }
 
 /**
@@ -270,7 +297,16 @@ async function handleDirectToolCallStart(
   context.stateManager.addAssistantContentBlock(partialToolUse)
 
   // Present assistant message
-  context.config.onPresentAssistant()
+  try {
+    context.config.onPresentAssistant()
+  } catch (error) {
+    // Silently handle aborted task errors
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    if (errorMsg.includes("aborted")) {
+      return
+    }
+    console.error(`[ToolCallHandler#handleDirectToolCallStart] Error in onPresentAssistant:`, error)
+  }
 
   // Publish tool call start event
   await context.eventBus?.publish('tool:call:start', {
@@ -333,7 +369,16 @@ async function handleDirectToolCallDelta(
   }
 
   // Present assistant message
-  context.config.onPresentAssistant()
+  try {
+    context.config.onPresentAssistant()
+  } catch (error) {
+    // Silently handle aborted task errors
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    if (errorMsg.includes("aborted")) {
+      return
+    }
+    console.error(`[ToolCallHandler#handleDirectToolCallDelta] Error in onPresentAssistant:`, error)
+  }
 
   // Publish tool call progress event
   await context.eventBus?.publish('tool:call:progress', {
@@ -417,7 +462,16 @@ async function handleDirectToolCallEnd(
   }
 
   // Present assistant message
-  context.config.onPresentAssistant()
+  try {
+    context.config.onPresentAssistant()
+  } catch (error) {
+    // Silently handle aborted task errors
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    if (errorMsg.includes("aborted")) {
+      return
+    }
+    console.error(`[ToolCallHandler#handleDirectToolCallEnd] Error in onPresentAssistant:`, error)
+  }
 }
 
 /**
@@ -447,13 +501,37 @@ async function handleCompleteToolCall(
     return
   }
 
-  ;(toolUse as any).id = chunk.id
-  context.stateManager.addAssistantContentBlock(toolUse)
+  ; (toolUse as any).id = chunk.id
 
-  // Present assistant message
-  context.config.onPresentAssistant()
+    context.stateManager.addAssistantContentBlock(toolUse)
 
-  // Publish tool call complete event for backward compatibility
+  
+
+    // Present assistant message
+
+    try {
+
+      context.config.onPresentAssistant()
+
+    } catch (error) {
+
+      // Silently handle aborted task errors
+
+      const errorMsg = error instanceof Error ? error.message : String(error)
+
+      if (errorMsg.includes("aborted")) {
+
+        return
+
+      }
+
+      console.error(`[ToolCallHandler#handleCompleteToolCall] Error in onPresentAssistant:`, error)
+
+    }
+
+  
+
+    // Publish tool call complete event for backward compatibility
   await context.eventBus?.publish('tool:call:complete', {
     toolCallId: chunk.id,
     result: {
