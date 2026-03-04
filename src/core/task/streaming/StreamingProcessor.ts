@@ -169,7 +169,7 @@ export class StreamingProcessor {
       await this.finalize()
 
       // Return result with no error
-      return this.buildResult(null)
+      return await this.buildResult(null)
     } catch (error) {
       // Handle errors
       return await this.handleError(error)
@@ -472,13 +472,13 @@ export class StreamingProcessor {
     }
 
     // Return result even after error - caller can check aborted/error status
-    return this.buildResult(streamingError)
+    return await this.buildResult(streamingError)
   }
 
   /**
    * Build the final result
    */
-  private buildResult(error: StreamingErrorType | null = null): StreamingResult {
+  private async buildResult(error: StreamingErrorType | null = null): Promise<StreamingResult> {
     // Add interruption messages if needed
     let assistantMessage = this.stateManager.getAssistantMessage()
 
@@ -514,7 +514,9 @@ export class StreamingProcessor {
     }
 
     // Publish stream complete event (cast to StreamCompleteEvent compatible shape)
-    this.eventBus?.publishAsync('stream:complete', {
+    // CRITICAL: Use publish (not publishAsync) to ensure listeners complete before returning
+    // This ensures didCompleteReadingStream is set before tool execution begins
+    await this.eventBus?.publish('stream:complete', {
       assistantMessage: result.assistantMessage,
       reasoningMessage: result.reasoningMessage,
       assistantMessageContent: result.assistantMessageContent,
