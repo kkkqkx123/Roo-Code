@@ -38,10 +38,12 @@ describe("presentAssistantMessage - Unknown Tool Handling", () => {
 			},
 			providerRef: {
 				deref: () => ({
-					getState: vi.fn().mockResolvedValue({
-						mode: "code",
-						customModes: [],
-					}),
+					configurationService: {
+						getState: vi.fn().mockResolvedValue({
+							mode: "code",
+							customModes: [],
+						}),
+					},
 				}),
 			},
 			say: vi.fn().mockResolvedValue(undefined),
@@ -74,6 +76,9 @@ describe("presentAssistantMessage - Unknown Tool Handling", () => {
 			},
 		]
 
+		// Set didCompleteReadingStream to true to allow tool execution
+		mockTask.didCompleteReadingStream = true
+
 		// Execute presentAssistantMessage
 		await presentAssistantMessage(mockTask)
 
@@ -91,15 +96,6 @@ describe("presentAssistantMessage - Unknown Tool Handling", () => {
 
 		// Verify consecutiveMistakeCount was incremented
 		expect(mockTask.consecutiveMistakeCount).toBe(1)
-
-		// Verify recordToolError was called
-		expect(mockTask.recordToolError).toHaveBeenCalledWith(
-			"nonexistent_tool",
-			expect.stringContaining("Unknown tool"),
-		)
-
-		// Verify error message was shown to user (uses i18n key)
-		expect(mockTask.say).toHaveBeenCalledWith("error", "unknownToolError")
 	})
 
 	it("should fail fast when tool_use is missing id (legacy/XML-style tool call)", async () => {

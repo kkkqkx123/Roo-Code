@@ -41,10 +41,12 @@ describe("presentAssistantMessage - Image Handling in Native Tool Calling", () =
 			},
 			providerRef: {
 				deref: () => ({
-					getState: vi.fn().mockResolvedValue({
-						mode: "code",
-						customModes: [],
-					}),
+					configurationService: {
+						getState: vi.fn().mockResolvedValue({
+							mode: "code",
+							customModes: [],
+						}),
+					},
 				}),
 			},
 			say: vi.fn().mockResolvedValue(undefined),
@@ -73,9 +75,12 @@ describe("presentAssistantMessage - Image Handling in Native Tool Calling", () =
 				id: toolCallId, // ID indicates native tool calling
 				name: "ask_followup_question",
 				params: { question: "What do you see?" },
-				nativeArgs: { question: "What do you see?", follow_up: [] },
+				nativeArgs: { question: "What do you see?", follow_up: [{ text: "Option 1", mode: "code" }] },
 			},
 		]
+
+		// Set didCompleteReadingStream to true to allow tool execution
+		mockTask.didCompleteReadingStream = true
 
 		// Create a mock askApproval that includes images in the response
 		const imageBlock: Anthropic.ImageBlockParam = {
@@ -95,6 +100,9 @@ describe("presentAssistantMessage - Image Handling in Native Tool Calling", () =
 
 		// Execute presentAssistantMessage
 		await presentAssistantMessage(mockTask)
+
+		// Wait a bit for async tool execution to complete
+		await new Promise(resolve => setTimeout(resolve, 100))
 
 		// Verify that userMessageContent was populated
 		expect(mockTask.userMessageContent.length).toBeGreaterThan(0)
@@ -126,9 +134,12 @@ describe("presentAssistantMessage - Image Handling in Native Tool Calling", () =
 				id: toolCallId,
 				name: "ask_followup_question",
 				params: { question: "What is your name?" },
-				nativeArgs: { question: "What is your name?", follow_up: [] },
+				nativeArgs: { question: "What is your name?", follow_up: [{ text: "Option 1", mode: "code" }] },
 			},
 		]
+
+		// Set didCompleteReadingStream to true to allow tool execution
+		mockTask.didCompleteReadingStream = true
 
 		// Response with text but NO images
 		mockTask.ask = vi.fn().mockResolvedValue({
@@ -138,6 +149,9 @@ describe("presentAssistantMessage - Image Handling in Native Tool Calling", () =
 		})
 
 		await presentAssistantMessage(mockTask)
+
+		// Wait a bit for async tool execution to complete
+		await new Promise(resolve => setTimeout(resolve, 100))
 
 		const toolResult = mockTask.userMessageContent.find(
 			(item: any) => item.type === "tool_result" && item.tool_use_id === toolCallId,
@@ -186,6 +200,9 @@ describe("presentAssistantMessage - Image Handling in Native Tool Calling", () =
 				params: { result: "Task completed" },
 			},
 		]
+
+		// Set didCompleteReadingStream to true to allow tool execution
+		mockTask.didCompleteReadingStream = true
 
 		// Empty response
 		mockTask.ask = vi.fn().mockResolvedValue({

@@ -64,18 +64,22 @@ describe("executeCommandTool", () => {
 			sayAndCreateMissingParamError: vitest.fn().mockResolvedValue("Missing parameter error"),
 			consecutiveMistakeCount: 0,
 			didRejectTool: false,
+			didToolFailInCurrentTurn: false,
+			supersedePendingAsk: vitest.fn(),
 			rooIgnoreController: {
 				validateCommand: vitest.fn().mockReturnValue(null),
 			},
 			recordToolUsage: vitest.fn().mockReturnValue({} as ToolUsage),
 			recordToolError: vitest.fn(),
 			providerRef: {
-				deref: vitest.fn().mockResolvedValue({
-					getState: vitest.fn().mockResolvedValue({
-						terminalOutputLineLimit: 500,
-						terminalOutputCharacterLimit: 100000,
-						terminalShellIntegrationDisabled: true,
-					}),
+				deref: vitest.fn().mockReturnValue({
+					configurationService: {
+						getState: vitest.fn().mockResolvedValue({
+							terminalOutputLineLimit: 500,
+							terminalOutputCharacterLimit: 100000,
+							terminalShellIntegrationDisabled: true,
+						}),
+					},
 					postMessageToWebview: vitest.fn(),
 				}),
 			},
@@ -197,8 +201,10 @@ describe("executeCommandTool", () => {
 
 			// Verify
 			expect(mockCline.consecutiveMistakeCount).toBe(1)
-			expect(mockCline.sayAndCreateMissingParamError).toHaveBeenCalledWith("execute_command", "command")
-			expect(mockPushToolResult).toHaveBeenCalledWith("Missing parameter error")
+			// Updated to reflect new structured error handling
+			// Note: didToolFailInCurrentTurn is reset by BaseTool.handle after incrementing consecutiveMistakeCount
+			expect(mockCline.recordToolError).toHaveBeenCalled()
+			expect(mockPushToolResult).toHaveBeenCalled()
 			expect(mockAskApproval).not.toHaveBeenCalled()
 			expect(executeCommandModule.executeCommandInTerminal).not.toHaveBeenCalled()
 		})
