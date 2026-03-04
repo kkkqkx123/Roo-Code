@@ -87,6 +87,7 @@ const geminiSchema = baseProviderSettingsSchema.extend({
 	vertexRegion: z.string().optional(),
 	vertexJsonCredentials: z.string().optional(),
 	vertexKeyFile: z.string().optional(),
+	geminiCustomModelInfo: modelInfoSchema.nullish(),
 })
 
 const openAiNativeSchema = baseProviderSettingsSchema.extend({

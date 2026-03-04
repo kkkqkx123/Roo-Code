@@ -1398,11 +1398,6 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		// This is similar to how OpenAI Compatible endpoints work
 		const info: ModelInfo = this.options.openAiCustomModelInfo || {
 			maxTokens: 4096,
-			contextWindow: 128000,
-			supportsImages: true,
-			supportsPromptCache: false,
-			inputPrice: 0.5,
-			outputPrice: 1.5,
 			supportsTemperature: true,
 			defaultTemperature: 0.7,
 		}

@@ -300,11 +300,6 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 		// This is similar to how OpenAI Compatible endpoints work
 		const info: ModelInfo = this.options.anthropicCustomModelInfo || {
 			maxTokens: 8192,
-			contextWindow: 200000,
-			supportsImages: true,
-			supportsPromptCache: false,
-			inputPrice: 3,
-			outputPrice: 15,
 			supportsTemperature: true,
 			defaultTemperature: 0,
 		}

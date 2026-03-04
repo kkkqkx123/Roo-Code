@@ -374,11 +374,6 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 		// This is similar to how OpenAI Compatible endpoints work
 		const info: ModelInfo = this.options.geminiCustomModelInfo || {
 			maxTokens: 8192,
-			contextWindow: 2000000,
-			supportsImages: true,
-			supportsPromptCache: false,
-			inputPrice: 0.5,
-			outputPrice: 1.5,
 			supportsTemperature: true,
 			defaultTemperature: 1,
 		}

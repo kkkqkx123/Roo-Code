@@ -28,7 +28,6 @@ import {
 	CollapsibleContent,
 } from "@src/components/ui"
 import { inputEventTransform, noTransform } from "./transforms"
-import { ModelPicker } from "./ModelPicker"
 import { ApiErrorMessage } from "./ApiErrorMessage"
 import { ThinkingBudget } from "./ThinkingBudget"
 import { Verbosity } from "./Verbosity"
@@ -308,6 +307,7 @@ const ApiOptions = ({
 				<Anthropic
 					apiConfiguration={apiConfiguration}
 					setApiConfigurationField={setApiConfigurationField}
+					modelValidationError={modelValidationError}
 					simplifySettings={false}
 				/>
 			)}
@@ -317,6 +317,7 @@ const ApiOptions = ({
 					apiConfiguration={apiConfiguration}
 					setApiConfigurationField={setApiConfigurationField}
 					selectedModelInfo={selectedModelInfo}
+					modelValidationError={modelValidationError}
 					simplifySettings={false}
 				/>
 			)}
@@ -325,6 +326,8 @@ const ApiOptions = ({
 				<Gemini
 					apiConfiguration={apiConfiguration}
 					setApiConfigurationField={setApiConfigurationField}
+					modelValidationError={modelValidationError}
+					simplifySettings={false}
 				/>
 			)}
 
@@ -334,26 +337,6 @@ const ApiOptions = ({
 					setApiConfigurationField={setApiConfigurationField}
 					modelValidationError={modelValidationError}
 					simplifySettings={false}
-				/>
-			)}
-
-			{activeSelectedProvider && shouldUseGenericModelPicker(activeSelectedProvider) && (
-				<ModelPicker
-					apiConfiguration={apiConfiguration}
-					setApiConfigurationField={setApiConfigurationField}
-					defaultModelId={getDefaultModelIdForProvider(activeSelectedProvider)}
-					models={getStaticModelsForProvider(activeSelectedProvider)}
-					modelIdKey="apiModelId"
-					serviceName={getProviderServiceConfig(activeSelectedProvider).serviceName}
-					serviceUrl={getProviderServiceConfig(activeSelectedProvider).serviceUrl}
-					errorMessage={modelValidationError}
-					simplifySettings={false}
-					onModelChange={() => {
-						// Clear reasoning-related fields when switching models to allow
-						// the new model's default to take effect.
-						setApiConfigurationField("reasoningEffort", undefined)
-						setApiConfigurationField("enableReasoningEffort", undefined)
-					}}
 				/>
 			)}
 

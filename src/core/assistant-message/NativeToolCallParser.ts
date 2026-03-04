@@ -678,7 +678,6 @@ export class NativeToolCallParser {
 				break
 
 			case "edit":
-			case "search_and_replace":
 				if (
 					partialArgs.file_path !== undefined ||
 					partialArgs.old_string !== undefined ||
@@ -896,7 +895,6 @@ export class NativeToolCallParser {
 					break
 
 				case "edit":
-				case "search_and_replace":
 					if (
 						args.file_path !== undefined &&
 						args.old_string !== undefined &&
