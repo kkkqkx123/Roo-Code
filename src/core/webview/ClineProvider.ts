@@ -2229,21 +2229,46 @@ export class ClineProvider
 		// Immediately mark the original instance as abandoned to prevent any residual activity
 		task.abandoned = true
 
+		// Wait for task to abort with timeout and force termination if needed
+		// Note: cancelCurrentRequest() already aborted the HTTP request synchronously,
+		// so this mainly waits for saveClineMessages() to complete
+		const abortTimeout = 3_000 // 3 seconds should be enough for cleanup
+		let abortCompleted = false
+
 		await pWaitFor(
-			() =>
-				this.getCurrentTask()! === undefined ||
-				this.getCurrentTask()!.isStreaming === false ||
-				this.getCurrentTask()!.didFinishAbortingStream ||
-				// If only the first chunk is processed, then there's no
-				// need to wait for graceful abort (closes edits, browser,
-				// etc).
-				this.getCurrentTask()!.isWaitingForFirstChunk,
+			() => {
+				const currentTask = this.getCurrentTask()
+				abortCompleted =
+					currentTask === undefined ||
+					currentTask.isStreaming === false ||
+					currentTask.didFinishAbortingStream ||
+					currentTask.isWaitingForFirstChunk
+				return abortCompleted
+			},
 			{
-				timeout: 3_000,
+				timeout: abortTimeout,
 			},
 		).catch(() => {
-			console.error("Failed to abort task")
+			console.error(`[cancelTask] Failed to abort task within ${abortTimeout}ms, forcing termination`)
+			// Force termination if abort didn't complete in time
+			const currentTask = this.getCurrentTask()
+			if (currentTask && currentTask.instanceId === originalInstanceId) {
+				console.log(`[cancelTask] Force disposing task ${currentTask.taskId}.${currentTask.instanceId}`)
+				currentTask.abandoned = true
+				try {
+					currentTask.dispose()
+				} catch (disposeError) {
+					console.error(`[cancelTask] Error during forced disposal:`, disposeError)
+				}
+			}
 		})
+
+		// Log abort status for debugging
+		if (abortCompleted) {
+			console.log(`[cancelTask] Task ${task.taskId}.${task.instanceId} aborted gracefully`)
+		} else {
+			console.warn(`[cancelTask] Task ${task.taskId}.${task.instanceId} required forced termination`)
+		}
 
 		// Defensive safeguard: if current instance already changed, skip rehydrate
 		const current = this.getCurrentTask()

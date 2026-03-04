@@ -1,6 +1,6 @@
 // npx vitest core/condense/__tests__/index.spec.ts
 
-import type { Mock } from "vitest"
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest"
 
 import { Anthropic } from "@anthropic-ai/sdk"
 
@@ -854,10 +854,10 @@ describe("summarizeConversation", () => {
 		const createMessageMock = vi.fn().mockReturnValue(emptyStream)
 		mockApiHandler.createMessage = createMessageMock as any
 
-		// We need to mock maybeRemoveImageBlocks to return the expected messages
-		;(maybeRemoveImageBlocks as Mock).mockImplementationOnce((messages: any) => {
-			return messages.map(({ role, content }: { role: string; content: any }) => ({ role, content }))
-		})
+			// We need to mock maybeRemoveImageBlocks to return the expected messages
+			; (maybeRemoveImageBlocks as Mock).mockImplementationOnce((messages: any) => {
+				return messages.map(({ role, content }: { role: string; content: any }) => ({ role, content }))
+			})
 
 		const result = await summarizeConversation({
 			messages,
@@ -938,7 +938,7 @@ describe("summarizeConversation", () => {
 				(typeof m.content === "string"
 					? m.content === "Initial ask"
 					: Array.isArray(m.content) &&
-						m.content.some((b: any) => b.type === "text" && b.text === "Initial ask")),
+					m.content.some((b: any) => b.type === "text" && b.text === "Initial ask")),
 		)
 		expect(hasInitialAsk).toBe(true)
 	})

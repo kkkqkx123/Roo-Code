@@ -52,6 +52,8 @@ import {
 	formatErrorForDisplay,
 	ErrorCategory,
 	type ExtractedErrorInfo,
+	isErrorRetryable,
+	isAuthenticationError,
 } from "@coder/types"
 
 // api
@@ -132,9 +134,8 @@ import {
 import { TaskEventBus } from "./TaskEventBus"
 import type { TaskState } from "./types"
 
-const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
-const FORCED_CONTEXT_REDUCTION_PERCENT = 75 // Keep 75% of context (remove 25%) on context window errors
-const MAX_CONTEXT_WINDOW_RETRIES = 3 // Maximum retries for context window errors
+const MAX_EXPONENTIAL_BACKOFF_SECONDS = 120 // 2 minute (reduced from 10 minutes to prevent task blocking)
+const MAX_API_RETRIES = 5 // Maximum retries for API errors (prevents infinite retry loops)
 
 export interface TaskOptions extends CreateTaskOptions {
 	provider: ClineProvider
@@ -629,11 +630,12 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// Stream chunk - handled by StreamingProcessor
 		// Individual chunk events are published by handlers
 
-		// Stream complete
-		this.eventBus.subscribe('stream:complete', async (result) => {
+		// Stream complete - keep handler fast and non-blocking
+		this.eventBus.subscribe('stream:complete', (result) => {
 			console.log(`[Task#${this.taskId}] Stream completed`)
 			this.isStreaming = false
 
+			// Update state synchronously (fast operations)
 			if (result.aborted) {
 				this.setTaskState('aborted', result.abortReason)
 			} else if (result.error) {
@@ -643,14 +645,16 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				this.setTaskState('completed')
 			}
 
-			// Update all state from streaming result
-			// Note: result.assistantMessageContent is unknown[], cast to AssistantMessageContent[]
-			this.assistantMessageContent = result.assistantMessageContent as AssistantMessageContent[]
-			this.didRejectTool = result.didRejectTool
+			// Store streaming result immediately for drain() to complete
+			this._lastStreamingResult = result as StreamingResult
 			this.didCompleteReadingStream = true
 
-			// Store streaming result for later access in recursivelyMakeClineRequests
-			this._lastStreamingResult = result as StreamingResult
+			// Defer non-critical state updates to next microtask to avoid blocking event queue
+			// This ensures abort/cancel operations can proceed without waiting
+			queueMicrotask(() => {
+				this.assistantMessageContent = result.assistantMessageContent as AssistantMessageContent[]
+				this.didRejectTool = result.didRejectTool
+			})
 		})
 
 		// Stream error
@@ -3312,12 +3316,42 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					)
 
 					// Wait for event bus to process stream:complete event
-					await this.eventBus?.drain()
+					// But check abort flag first to avoid blocking when task is being cancelled
+					if (!this.abort && !this.abandoned) {
+						// Use a timeout to prevent infinite blocking
+						const drainPromise = this.eventBus?.drain()
+						const timeoutPromise = new Promise<void>((_, reject) =>
+							setTimeout(() => reject(new Error("Event bus drain timeout")), 5000)
+						)
+						try {
+							await Promise.race([drainPromise, timeoutPromise])
+						} catch (err) {
+							console.warn(`[Task#${this.taskId}.${this.instanceId}] Event bus drain timed out or aborted:`, err)
+						}
+					}
 
 					// Get streaming result from event bus subscription
 					streamResult = this._lastStreamingResult
 					if (!streamResult) {
-						throw new Error("Streaming completed but no result was captured")
+						// If aborted, create a minimal result to allow graceful termination
+						if (this.abort || this.abandoned) {
+							streamResult = {
+								assistantMessage: "",
+								reasoningMessage: "",
+								assistantMessageContent: [],
+								userMessageContent: [],
+								groundingSources: [],
+								tokens: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, totalCost: 0 },
+								didUseTool: false,
+								didRejectTool: false,
+								aborted: true,
+								abortReason: "user_cancelled",
+								error: null,
+								extractedErrorInfo: undefined,
+							}
+						} else {
+							throw new Error("Streaming completed but no result was captured")
+						}
 					}
 
 					// Extract values needed for subsequent processing
@@ -3416,13 +3450,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						const structuredErrorInfo: ClineApiReqErrorInfo | undefined = this.abort
 							? undefined
 							: {
-									statusCode: errorInfo.status,
-									requestId: errorInfo.requestId,
-									providerName: errorInfo.providerName,
-									errorCategory: errorInfo.category,
-									retryAfter: errorInfo.retryAfter,
-									rawMessage: errorInfo.message,
-								}
+								statusCode: errorInfo.status,
+								requestId: errorInfo.requestId,
+								providerName: errorInfo.providerName,
+								errorCategory: errorInfo.category,
+								retryAfter: errorInfo.retryAfter,
+								rawMessage: errorInfo.message,
+							}
 
 						await abortStream(cancelReason, streamingFailedMessage, structuredErrorInfo)
 
@@ -3432,15 +3466,44 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 							break
 						}
 
+						// Check if this error type is retryable
+						if (!isErrorRetryable(error)) {
+							// Non-retryable error - fail immediately with a clear message
+							let errorMessage: string
+							if (isAuthenticationError(error)) {
+								errorMessage = "Authentication failed. Please check your API key and try again."
+							} else if (errorInfo.status === 404) {
+								errorMessage = "Model not found. Please check the model ID in your configuration."
+							} else if (errorInfo.status === 422) {
+								errorMessage = `Invalid request: ${errorInfo.message}`
+							} else {
+								errorMessage = `API error (${errorInfo.status || 'unknown'}): ${errorInfo.message}`
+							}
+							await this.say("error", errorMessage)
+							this.abortReason = "streaming_failed"
+							await this.abortTask()
+							break
+						}
+
+						// Check if we've exceeded max retries
+						const currentRetryAttempt = currentItem.retryAttempt ?? 0
+						if (currentRetryAttempt >= MAX_API_RETRIES) {
+							const errorMessage = `Stream failed after ${MAX_API_RETRIES} retries. Last error: ${errorInfo.message}`
+							await this.say("error", errorMessage)
+							this.abortReason = "streaming_failed"
+							await this.abortTask()
+							break
+						}
+
 						console.error(
-							`[Task#${this.taskId}.${this.instanceId}] Stream failed, will retry: ${streamingFailedMessage}`,
+							`[Task#${this.taskId}.${this.instanceId}] Stream failed, will retry (${currentRetryAttempt + 1}/${MAX_API_RETRIES}): ${streamingFailedMessage}`,
 						)
 
 						const stateForBackoff = await this.providerRef.deref()?.configurationService.getState()
 						if (stateForBackoff?.autoApprovalEnabled) {
 							const backoffError =
 								error instanceof StreamingRetryError && error.rawError ? error.rawError : error
-							await this.backoffAndAnnounce(currentItem.retryAttempt ?? 0, backoffError)
+							await this.backoffAndAnnounce(currentRetryAttempt, backoffError)
 
 							if (this.abort) {
 								console.log(
@@ -3455,7 +3518,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						stack.push({
 							userContent: currentUserContent,
 							includeFileDetails: false,
-							retryAttempt: (currentItem.retryAttempt ?? 0) + 1,
+							retryAttempt: currentRetryAttempt + 1,
 						})
 
 						continue
@@ -3749,140 +3812,6 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			state?.listApiConfigMeta?.find((profile: any) => profile.name === state?.currentApiConfigName)?.id ??
 			"default"
 		)
-	}
-
-	private async handleContextWindowExceededError(): Promise<void> {
-		const state = await this.providerRef.deref()?.configurationService.getState()
-		const { profileThresholds = {}, mode, apiConfiguration } = state ?? {}
-
-		const { contextTokens } = this.metricsService.getTokenUsage(this.clineMessages.slice(1))
-		const modelInfo = this.api.getModel().info
-
-		const maxTokens = getModelMaxOutputTokens({
-			modelId: this.api.getModel().id,
-			model: modelInfo,
-			settings: this.apiConfiguration,
-		})
-
-		// Validate required model info fields
-		if (modelInfo.contextWindow === undefined || modelInfo.contextWindow === null) {
-			throw new Error(
-				`Model info for ${this.api.getModel().id} is missing required field 'contextWindow'. ` +
-				`Please ensure the model configuration is complete.`
-			)
-		}
-
-		const contextWindow = modelInfo.contextWindow
-
-		// Get the current profile ID using the helper method
-		const currentProfileId = this.getCurrentProfileId(state)
-
-		// Log the context window error for debugging
-		console.warn(
-			`[Task#${this.taskId}] Context window exceeded for model ${this.api.getModel().id}. ` +
-			`Current tokens: ${contextTokens}, Context window: ${contextWindow}. ` +
-			`Forcing truncation to ${FORCED_CONTEXT_REDUCTION_PERCENT}% of current context.`,
-		)
-		// Send condenseTaskContextStarted to show in-progress indicator
-		await this.providerRef.deref()?.postMessageToWebview({ type: "condenseTaskContextStarted", text: this.taskId })
-
-		// Build tools for condensing metadata (same tools used for normal API calls)
-		const provider = this.providerRef.deref()
-		let allTools: import("openai").default.Chat.ChatCompletionTool[] = []
-		if (provider) {
-			const toolsResult = await buildNativeToolsArrayWithRestrictions({
-				provider,
-				cwd: this.cwd,
-				mode,
-				customModes: state?.customModes,
-				experiments: state?.experiments,
-				apiConfiguration,
-				disabledTools: state?.disabledTools,
-				modelInfo,
-				skillsEnabled: state?.skillsEnabled,
-				includeAllToolsWithRestrictions: false,
-			})
-			allTools = toolsResult.tools
-		}
-
-		// Build metadata with tools and taskId for the condensing API call
-		const metadata: ApiHandlerCreateMessageMetadata = {
-			mode,
-			taskId: this.taskId,
-			...(allTools.length > 0
-				? {
-					tools: allTools,
-					tool_choice: "auto",
-					parallelToolCalls: true,
-				}
-				: {}),
-		}
-
-		try {
-			// Generate environment details to include in the condensed summary
-			const environmentDetails = await getEnvironmentDetails(this, true)
-
-			// Force aggressive truncation by keeping only 75% of the conversation history
-			const truncateResult = await manageContext({
-				messages: this.apiConversationHistory,
-				totalTokens: contextTokens || 0,
-				maxTokens,
-				contextWindow,
-				apiHandler: this.api,
-				autoCondenseContext: true,
-				autoCondenseContextPercent: FORCED_CONTEXT_REDUCTION_PERCENT,
-				systemPrompt: await this.getSystemPrompt(),
-				taskId: this.taskId,
-				profileThresholds,
-				currentProfileId,
-				metadata,
-				environmentDetails,
-			})
-
-			if (truncateResult.messages !== this.apiConversationHistory) {
-				await this.overwriteApiConversationHistory(truncateResult.messages)
-			}
-
-			if (truncateResult.summary) {
-				const { summary, cost, prevContextTokens, newContextTokens = 0 } = truncateResult
-				const contextCondense: ContextCondense = { summary, cost, newContextTokens, prevContextTokens }
-				await this.say(
-					"condense_context",
-					undefined /* text */,
-					undefined /* images */,
-					false /* partial */,
-					undefined /* checkpoint */,
-					undefined /* progressStatus */,
-					{ isNonInteractive: true } /* options */,
-					contextCondense,
-				)
-			} else if (truncateResult.truncationId) {
-				// Sliding window truncation occurred (fallback when condensing fails or is disabled)
-				const contextTruncation: ContextTruncation = {
-					truncationId: truncateResult.truncationId,
-					messagesRemoved: truncateResult.messagesRemoved ?? 0,
-					prevContextTokens: truncateResult.prevContextTokens,
-					newContextTokens: truncateResult.newContextTokensAfterTruncation ?? 0,
-				}
-				await this.say(
-					"sliding_window_truncation",
-					undefined /* text */,
-					undefined /* images */,
-					false /* partial */,
-					undefined /* checkpoint */,
-					undefined /* progressStatus */,
-					{ isNonInteractive: true } /* options */,
-					undefined /* contextCondense */,
-					contextTruncation,
-				)
-			}
-		} finally {
-			// Notify webview that context management is complete (removes in-progress spinner)
-			// IMPORTANT: Must always be sent to dismiss the spinner, even on error
-			await this.providerRef
-				.deref()
-				?.postMessageToWebview({ type: "condenseTaskContextResponse", text: this.taskId })
-		}
 	}
 
 	/**
@@ -4258,17 +4187,50 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			this.currentRequestAbortController = undefined
 			const isContextWindowExceededError = checkContextWindowExceededError(error)
 
-			// If it's a context window error and we haven't exceeded max retries for this error type
-			if (isContextWindowExceededError && retryAttempt < MAX_CONTEXT_WINDOW_RETRIES) {
+			// If it's a context window error, show guidance and fail gracefully
+			// Automatic condensation is handled by manageContext() during normal flow
+			// If we reach here, it means automatic condensation already failed
+			if (isContextWindowExceededError) {
+				const modelInfo = this.api.getModel().info
+				const { contextTokens } = this.metricsService.getTokenUsage(this.clineMessages.slice(1))
+				const contextWindow = modelInfo.contextWindow || "unknown"
+				
 				console.warn(
 					`[Task#${this.taskId}] Context window exceeded for model ${this.api.getModel().id}. ` +
-					`Retry attempt ${retryAttempt + 1}/${MAX_CONTEXT_WINDOW_RETRIES}. ` +
-					`Attempting automatic truncation...`,
+					`Current tokens: ${contextTokens}, Context window: ${contextWindow}. ` +
+					`Automatic condensation failed or unavailable.`,
 				)
-				await this.handleContextWindowExceededError()
-				// Retry the request after handling the context window error
-				yield* this.attemptApiRequest(retryAttempt + 1)
-				return
+
+				const errorMessage = t("common:errors.context_window_exceeded_guidance")
+				await this.say("error", errorMessage)
+				throw new Error(errorMessage, { cause: error })
+			}
+
+			// Extract error info for better error handling
+			const errorInfo = extractErrorInfo(error)
+
+			// Check if this error type is retryable
+			if (!isErrorRetryable(error)) {
+				// Non-retryable error - fail immediately with a clear message
+				let errorMessage: string
+				if (isAuthenticationError(error)) {
+					errorMessage = "Authentication failed. Please check your API key and try again."
+				} else if (errorInfo.status === 404) {
+					errorMessage = "Model not found. Please check the model ID in your configuration."
+				} else if (errorInfo.status === 422) {
+					errorMessage = `Invalid request: ${errorInfo.message}`
+				} else {
+					errorMessage = `API error (${errorInfo.status || 'unknown'}): ${errorInfo.message}`
+				}
+				await this.say("error", errorMessage)
+				throw new Error(errorMessage, { cause: error })
+			}
+
+			// Check if we've exceeded max retries
+			if (retryAttempt >= MAX_API_RETRIES) {
+				const errorMessage = `API request failed after ${MAX_API_RETRIES} retries. Last error: ${errorInfo.message}`
+				await this.say("error", errorMessage)
+				throw new Error(errorMessage, { cause: error })
 			}
 
 			// note that this api_req_failed ask is unique in that we only present this option if the api hasn't streamed any content yet (ie it fails on the first chunk due), as it would allow them to hit a retry button. However if the api failed mid-stream, it could be in any arbitrary state where some tools may have executed, so that error is handled differently and requires cancelling the task entirely.

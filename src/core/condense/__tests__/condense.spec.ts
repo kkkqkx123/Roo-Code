@@ -11,6 +11,7 @@ import {
 	getEffectiveApiHistory,
 	extractCommandBlocks,
 } from "../index"
+import { describe, expect, it } from "vitest"
 
 // Create a mock ApiHandler for testing
 class MockApiHandler extends BaseProvider {
