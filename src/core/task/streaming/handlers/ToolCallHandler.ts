@@ -107,7 +107,25 @@ async function handleToolCallStart(
 		if (errorMsg.includes("aborted")) {
 			return
 		}
-		console.error(`[ToolCallHandler#handleToolCallStart] Error in onPresentAssistant:`, error)
+
+		// Log detailed error context
+		console.error(
+			`[ToolCallHandler#handleToolCallStart] Error in onPresentAssistant:`,
+			{
+				error: errorMsg,
+				toolCallId: event.id,
+				toolName: event.name,
+				toolUseIndex,
+			}
+		)
+
+		// Publish UI error event for monitoring
+		await context.eventBus?.publish('tool:call:ui_error', {
+			toolCallId: event.id,
+			toolName: event.name,
+			error: errorMsg,
+			timestamp: Date.now(),
+		})
 	}
 
   // Publish tool call start event
@@ -162,7 +180,24 @@ async function handleToolCallDelta(
 	if (errorMsg.includes("aborted")) {
 		return
 	}
-	console.error(`[ToolCallHandler#handleToolCallDelta] Error in onPresentAssistant:`, error)
+
+	// Log detailed error context
+	console.error(
+		`[ToolCallHandler#handleToolCallDelta] Error in onPresentAssistant:`,
+		{
+			error: errorMsg,
+			toolCallId: event.id,
+			toolUseIndex,
+			delta: event.delta,
+		}
+	)
+
+	// Publish UI error event for monitoring
+	await context.eventBus?.publish('tool:call:ui_error', {
+		toolCallId: event.id,
+		error: errorMsg,
+		timestamp: Date.now(),
+	})
   }
 
   // Publish tool call progress event
@@ -212,25 +247,42 @@ async function handleToolCallEnd(
     const existingToolUse = context.stateManager.getAssistantMessageContent()[toolUseIndex]
     const errorMessage = 'Tool call finalization failed: invalid JSON or missing parameters'
 
+    // Attempt to recover partial data
+    let recoveryAttempted = false
     if (existingToolUse && existingToolUse.type === "tool_use") {
+      // Mark as complete but potentially invalid
       existingToolUse.partial = false
       ;(existingToolUse as any).id = event.id
+      recoveryAttempted = true
     }
 
     context.stateManager.removeToolCallIndex(event.id)
 
-    // Publish tool call error event
+    // Publish tool call error event (with recovery information)
     await context.eventBus?.publish('tool:call:error', {
       toolCallId: event.id,
       error: new Error(errorMessage),
       isRetryable: false,
+      recoveryAttempted,
+      partialData: existingToolUse,
     })
 
-    console.error(`[ToolCallHandler] ${errorMessage} for ID: ${event.id}`)
+    console.error(
+      `[ToolCallHandler] ${errorMessage} for ID: ${event.id}`,
+      existingToolUse ? { partialData: existingToolUse } : undefined
+    )
   } else {
     // Tool call index not found - this is an error condition
     const errorMessage = `Tool call end received without matching start for ID: ${event.id}`
     console.warn(`[ToolCallHandler] ${errorMessage}`)
+
+    // Publish error event for consistency
+    await context.eventBus?.publish('tool:call:error', {
+      toolCallId: event.id,
+      error: new Error(errorMessage),
+      isRetryable: false,
+      recoveryAttempted: false,
+    })
   }
 
   // Present assistant message
@@ -242,7 +294,26 @@ async function handleToolCallEnd(
     if (errorMsg.includes("aborted")) {
       return
     }
-    console.error(`[ToolCallHandler#handleToolCallEnd] Error in onPresentAssistant:`, error)
+
+    // Log detailed error context
+    console.error(
+      `[ToolCallHandler#handleToolCallEnd] Error in onPresentAssistant:`,
+      {
+        error: errorMsg,
+        toolCallId: event.id,
+        toolUseIndex,
+        existingToolUse: toolUseIndex !== undefined 
+          ? context.stateManager.getAssistantMessageContent()[toolUseIndex]
+          : undefined,
+      }
+    )
+
+    // Publish UI error event for monitoring
+    await context.eventBus?.publish('tool:call:ui_error', {
+      toolCallId: event.id,
+      error: errorMsg,
+      timestamp: Date.now(),
+    })
   }
 }
 

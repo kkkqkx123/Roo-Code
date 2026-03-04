@@ -145,6 +145,30 @@ export interface StreamErrorEvent {
   retryDelay?: number
 }
 
+/**
+ * Stream cleanup failed event
+ * Emitted when stream cleanup fails after an iterator close failure
+ */
+export interface StreamCleanupFailedEvent {
+  /** Error message */
+  error: string
+  /** Timestamp of the failure */
+  timestamp: number
+}
+
+/**
+ * Stream event publish failed event
+ * Emitted when publishing an event to the event bus fails
+ */
+export interface StreamEventPublishFailedEvent {
+  /** The event type that failed to publish */
+  failedEventType: string
+  /** The error that occurred */
+  error: string
+  /** Timestamp of the failure */
+  timestamp: number
+}
+
 // ============================================================================
 // Tool Events
 // ============================================================================
@@ -233,6 +257,25 @@ export interface ToolCallErrorEvent {
   error: Error
   /** Whether the error is retryable */
   isRetryable: boolean
+  /** Whether a recovery attempt was made */
+  recoveryAttempted?: boolean
+  /** Partial data if recovery was attempted */
+  partialData?: unknown
+}
+
+/**
+ * Tool call UI error event
+ * Emitted when there's an error in UI-related tool call operations
+ */
+export interface ToolCallUiErrorEvent {
+  /** Tool call identifier */
+  toolCallId: string
+  /** Tool name */
+  toolName?: string
+  /** The error that occurred */
+  error: string
+  /** Timestamp of the error */
+  timestamp: number
 }
 
 // ============================================================================
@@ -327,12 +370,15 @@ export interface TaskEventMap {
   'stream:chunk': StreamChunkEvent
   'stream:complete': StreamCompleteEvent
   'stream:error': StreamErrorEvent
+  'stream:cleanup_failed': StreamCleanupFailedEvent
+  'stream:event_publish_failed': StreamEventPublishFailedEvent
 
   // Tool events
   'tool:call:start': ToolCallStartEvent
   'tool:call:progress': ToolCallProgressEvent
   'tool:call:complete': ToolCallCompleteEvent
   'tool:call:error': ToolCallErrorEvent
+  'tool:call:ui_error': ToolCallUiErrorEvent
 
   // Token events
   'token:update': TokenUpdateEvent
@@ -350,10 +396,13 @@ export type TaskEvent =
   | { type: 'stream:chunk'; data: StreamChunkEvent }
   | { type: 'stream:complete'; data: StreamCompleteEvent }
   | { type: 'stream:error'; data: StreamErrorEvent }
+  | { type: 'stream:cleanup_failed'; data: StreamCleanupFailedEvent }
+  | { type: 'stream:event_publish_failed'; data: StreamEventPublishFailedEvent }
   | { type: 'tool:call:start'; data: ToolCallStartEvent }
   | { type: 'tool:call:progress'; data: ToolCallProgressEvent }
   | { type: 'tool:call:complete'; data: ToolCallCompleteEvent }
   | { type: 'tool:call:error'; data: ToolCallErrorEvent }
+  | { type: 'tool:call:ui_error'; data: ToolCallUiErrorEvent }
   | { type: 'token:update'; data: TokenUpdateEvent }
   | { type: 'task:state:change'; data: TaskStateChangeEvent }
   | { type: 'task:abort'; data: TaskAbortEvent }

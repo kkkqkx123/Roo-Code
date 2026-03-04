@@ -10,12 +10,14 @@ import { DeadLoopDetector } from "../../../utils/deadLoopDetector"
 import { StreamingStateManager } from "./StreamingStateManager"
 import { StreamingTokenManager } from "./StreamingTokenManager"
 import { StreamingErrorHandler } from "./StreamingErrorHandler"
+import { ErrorRecoveryStrategy } from "./ErrorRecoveryStrategy"
 import { handleReasoningChunk } from "./handlers/ReasoningHandler"
 import { handleTextChunk } from "./handlers/TextHandler"
 import { handleToolCallChunk, finalizeToolCall } from "./handlers/ToolCallHandler"
 import { handleUsageChunk } from "./handlers/UsageHandler"
 import { handleGroundingChunk } from "./handlers/GroundingHandler"
 import type { TaskEventBus } from "../TaskEventBus"
+import type { TaskEventMap } from "../types"
 import type {
   StreamingProcessorConfig,
   StreamingResult,
@@ -51,6 +53,7 @@ export class StreamingProcessor {
   private stateManager: StreamingStateManager
   private tokenManager: StreamingTokenManager
   private errorHandler: StreamingErrorHandler
+  private errorRecoveryStrategy: ErrorRecoveryStrategy
   private handlers: Map<string, HandlerFunction>
   private eventBus?: TaskEventBus
   private deadLoopDetector: DeadLoopDetector
@@ -64,6 +67,10 @@ export class StreamingProcessor {
     this.errorHandler.setEventBus(config.eventBus)
     this.eventBus = config.eventBus
     this.deadLoopDetector = new DeadLoopDetector()
+    this.errorRecoveryStrategy = new ErrorRecoveryStrategy({
+      maxRetries: config.maxRetries ?? 3,
+      baseDelayMs: config.baseDelayMs ?? 1000,
+    })
     this.handlers = this.initializeHandlers()
   }
 
@@ -156,7 +163,7 @@ export class StreamingProcessor {
 
     try {
       // Publish stream start event
-      await this.eventBus?.publish('stream:start', {
+      await this.safePublishEvent('stream:start', {
         requestId,
         systemPrompt: systemPrompt || '',
         messages: apiConversationHistory || [],
@@ -226,9 +233,19 @@ export class StreamingProcessor {
       // Close iterator if interrupted
       if (interrupted && iterator.return) {
         try {
-          await iterator.return(undefined)
-        } catch (error) {
-          console.error("[StreamingProcessor] Failed to close interrupted stream iterator", error)
+          const result = await iterator.return({ value: undefined, done: true })
+          if (!result.done) {
+            console.warn(
+              "[StreamingProcessor] Iterator did not properly close after return"
+            )
+          }
+        } catch (closeError) {
+          console.error(
+            "[StreamingProcessor] Failed to close interrupted stream iterator",
+            closeError
+          )
+          // Attempt to clean up resources
+          await this.cleanupResources(closeError)
         }
       }
     }
@@ -259,17 +276,17 @@ export class StreamingProcessor {
       // Publish chunk event after successful handling
       // Note: Only publish for known chunk types that have event data mappings
       if (chunk.type === 'text') {
-        await this.eventBus?.publish('stream:chunk', {
+        await this.safePublishEvent('stream:chunk', {
           type: 'text',
           data: { type: 'text', text: chunk.text },
         })
       } else if (chunk.type === 'reasoning') {
-        await this.eventBus?.publish('stream:chunk', {
+        await this.safePublishEvent('stream:chunk', {
           type: 'reasoning',
           data: { type: 'reasoning', text: chunk.text },
         })
       } else if (chunk.type === 'usage') {
-        await this.eventBus?.publish('stream:chunk', {
+        await this.safePublishEvent('stream:chunk', {
           type: 'usage',
           data: {
             type: 'usage',
@@ -280,7 +297,7 @@ export class StreamingProcessor {
           },
         })
       } else if (chunk.type === 'grounding') {
-        await this.eventBus?.publish('stream:chunk', {
+        await this.safePublishEvent('stream:chunk', {
           type: 'grounding',
           data: { type: 'grounding', sources: chunk.sources },
         })
@@ -467,8 +484,34 @@ export class StreamingProcessor {
 
     const result = await this.errorHandler.handleError(error)
 
+    // Use unified error recovery strategy for retry logic
     if (result.shouldRetry) {
-      throw new StreamingRetryError(result.retryDelay || 1000, error)
+      const retryCount = this.stateManager.getRetryCount() ?? 0
+
+      // Check if we should retry using the strategy
+      // Note: streamingError is StreamingErrorType, we use result.abortReason to determine error type
+      const shouldRetryWithStrategy = this.errorRecoveryStrategy.shouldRetry(
+        streamingError as any,
+        retryCount
+      )
+
+      if (shouldRetryWithStrategy) {
+        // Calculate retry delay using the strategy
+        const retryDelay = this.errorRecoveryStrategy.calculateRetryDelay(
+          retryCount,
+          streamingError as any
+        )
+
+        console.log(
+          `[StreamingProcessor] Retrying after ${retryDelay}ms (attempt ${retryCount + 1})`
+        )
+
+        throw new StreamingRetryError(retryDelay, error)
+      } else {
+        console.warn(
+          `[StreamingProcessor] Error not retryable according to recovery strategy (attempt ${retryCount})`
+        )
+      }
     }
 
     // Return result even after error - caller can check aborted/error status
@@ -531,6 +574,73 @@ export class StreamingProcessor {
     } as any)
 
     return result
+  }
+
+  /**
+   * Cleanup resources (called when iterator close fails)
+   */
+  private async cleanupResources(error: unknown): Promise<void> {
+    try {
+      // 1. Drain event bus to ensure all pending events are processed
+      await this.eventBus?.drain()
+
+      // 2. Mark state as aborted
+      this.stateManager.setAborted(true, "iterator_close_failed")
+
+      // 3. Publish cleanup failed event
+      await this.eventBus?.publish('stream:cleanup_failed', {
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: Date.now(),
+      })
+
+      console.warn(
+        "[StreamingProcessor] Resources cleaned up after iterator close failure"
+      )
+    } catch (cleanupError) {
+      console.error(
+        "[StreamingProcessor] Resource cleanup also failed",
+        cleanupError
+      )
+      // Final fallback - nothing more we can do
+    }
+  }
+
+  /**
+   * Safely publish an event to the event bus with error handling
+   *
+   * Wraps eventBus.publish with error handling and logging to prevent
+   * event system failures from crashing the streaming processor.
+   *
+   * @param eventType - The type of event to publish
+   * @param data - The event data
+   */
+  private async safePublishEvent<K extends keyof TaskEventMap>(
+    eventType: K,
+    data: TaskEventMap[K]
+  ): Promise<void> {
+    try {
+      await this.eventBus?.publish(eventType, data)
+    } catch (publishError) {
+      console.error(
+        `[StreamingProcessor] Failed to publish event '${eventType}'`,
+        {
+          error: publishError instanceof Error ? publishError.message : String(publishError),
+          eventType,
+          timestamp: Date.now(),
+        }
+      )
+
+      // Try to publish event publish failure event (best effort)
+      try {
+        await this.eventBus?.publish('stream:event_publish_failed', {
+          failedEventType: eventType,
+          error: publishError instanceof Error ? publishError.message : String(publishError),
+          timestamp: Date.now(),
+        })
+      } catch {
+        // Ignore failures of event_publish_failed event
+      }
+    }
   }
 
   /**

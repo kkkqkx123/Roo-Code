@@ -115,6 +115,14 @@ export interface StreamingProcessorConfig {
 	 * Enables decoupled communication with Task and other components
 	 */
 	eventBus?: TaskEventBus
+	/**
+	 * Maximum number of retry attempts (default: 3)
+	 */
+	maxRetries?: number
+	/**
+	 * Base delay in milliseconds for exponential backoff (default: 1000)
+	 */
+	baseDelayMs?: number
 }
 
 /**

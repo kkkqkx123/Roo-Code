@@ -72,6 +72,12 @@ export class StreamingStateManager {
 	private error: StreamingErrorType | null = null
 
 	// ============================================================================
+	// Retry State
+	// ============================================================================
+
+	private retryCount: number = 0
+
+	// ============================================================================
 	// Model Info Cache
 	// ============================================================================
 
@@ -104,6 +110,7 @@ export class StreamingStateManager {
 		this.abortReason = undefined
 		this.cachedModel = undefined
 		this.error = null
+		this.retryCount = 0
 
 		// Clear NativeToolCallParser's streaming state
 		NativeToolCallParser.clearAllStreamingToolCalls()
@@ -379,6 +386,31 @@ export class StreamingStateManager {
 	 */
 	hasError(): boolean {
 		return this.error !== null
+	}
+
+	// ============================================================================
+	// Public API - Retry State
+	// ============================================================================
+
+	/**
+	 * Get the current retry count
+	 */
+	getRetryCount(): number {
+		return this.retryCount
+	}
+
+	/**
+	 * Increment the retry count
+	 */
+	incrementRetryCount(): void {
+		this.retryCount++
+	}
+
+	/**
+	 * Reset the retry count
+	 */
+	resetRetryCount(): void {
+		this.retryCount = 0
 	}
 
 	// ============================================================================
