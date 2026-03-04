@@ -761,6 +761,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				cacheReads: tokens.cacheRead ?? 0,
 				cost: tokens.totalCost,
 			} satisfies ClineApiReqInfo)
+			// Save token data to disk to prevent loss on interruption
+			await this.saveClineMessages()
 		})
 	}
 
@@ -2240,9 +2242,18 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			if (lastApiReqStartedIndex !== -1) {
 				const lastApiReqStarted = modifiedClineMessages[lastApiReqStartedIndex]
 				if (lastApiReqStarted) {
-					const { cost, cancelReason }: ClineApiReqInfo = JSON.parse(lastApiReqStarted.text || "{}")
+					const { cost, cancelReason, tokensIn, tokensOut, cacheWrites, cacheReads }: ClineApiReqInfo = JSON.parse(
+						lastApiReqStarted.text || "{}"
+					)
 
-					if (cost === undefined && cancelReason === undefined) {
+					// Only remove the api_req_started message if it has NO token data at all
+					// If it has any token data (even without cost), we should keep it to preserve token statistics
+					const hasAnyTokenData =
+						(tokensIn !== undefined && tokensIn > 0) ||
+						(tokensOut !== undefined && tokensOut > 0) ||
+						(cacheWrites !== undefined && cacheWrites > 0) ||
+						(cacheReads !== undefined && cacheReads > 0)
+					if (cost === undefined && cancelReason === undefined && !hasAnyTokenData) {
 						modifiedClineMessages.splice(lastApiReqStartedIndex, 1)
 					}
 				}
