@@ -145,6 +145,10 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 			const { response, text, images } = await task.ask("completion_result", "", false)
 
 			if (response === "yesButtonClicked") {
+				// CRITICAL FIX: Set abort flag to stop the main task loop when user confirms completion
+				// Without this, the loop continues running (while (!this.abort)) even though taskState is 'completed',
+				// preventing the task from properly ending and blocking new user input.
+				task.abort = true
 				return
 			}
 
