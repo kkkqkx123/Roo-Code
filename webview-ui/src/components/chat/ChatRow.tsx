@@ -9,6 +9,7 @@ import type {
 	FollowUpData,
 	SuggestionItem,
 	ClineApiReqInfo,
+	ClineApiReqErrorInfo,
 	ClineAskUseMcpServer,
 	ClineSayTool,
 } from "@coder/types"
@@ -240,13 +241,13 @@ export const ChatRowContent = ({
 		vscode.postMessage({ type: "selectImages", context: "edit", messageTs: message.ts })
 	}, [message.ts])
 
-	const [cost, apiReqCancelReason, apiReqStreamingFailedMessage] = useMemo(() => {
+	const [cost, apiReqCancelReason, apiReqStreamingFailedMessage, apiReqErrorInfo] = useMemo(() => {
 		if (message.text !== null && message.text !== undefined && message.say === "api_req_started") {
 			const info = safeJsonParse<ClineApiReqInfo>(message.text)
-			return [info?.cost, info?.cancelReason, info?.streamingFailedMessage]
+			return [info?.cost, info?.cancelReason, info?.streamingFailedMessage, info?.errorInfo]
 		}
 
-		return [undefined, undefined, undefined]
+		return [undefined, undefined, undefined, undefined]
 	}, [message.text, message.say])
 
 	// When resuming task, last wont be api_req_failed but a resume_task
@@ -1087,7 +1088,11 @@ export const ChatRowContent = ({
 												? "https://github.com/cline/cline/wiki/TroubleShooting-%E2%80%90-%22PowerShell-is-not-recognized-as-an-internal-or-external-command%22"
 												: undefined
 										}
-										errorDetails={apiReqStreamingFailedMessage}
+										errorDetails={apiReqErrorInfo?.rawMessage || apiReqStreamingFailedMessage}
+										code={apiReqErrorInfo?.statusCode}
+										requestId={apiReqErrorInfo?.requestId}
+										providerName={apiReqErrorInfo?.providerName}
+										retryAfter={apiReqErrorInfo?.retryAfter}
 									/>
 								)}
 						</>

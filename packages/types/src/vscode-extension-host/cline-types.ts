@@ -104,6 +104,24 @@ export interface ClineAskUseMcpServer {
 }
 
 /**
+ * ClineApiReqErrorInfo - Structured error information for API failures
+ */
+export interface ClineApiReqErrorInfo {
+	/** HTTP status code (e.g., 401, 429, 500) */
+	statusCode?: number
+	/** Request ID for debugging and support */
+	requestId?: string
+	/** Provider name (e.g., "Anthropic", "OpenAI") */
+	providerName?: string
+	/** Error category for classification */
+	errorCategory?: "authentication" | "rate_limit" | "server" | "connection" | "cancellation" | "other"
+	/** Retry-after delay in seconds for rate limit errors */
+	retryAfter?: number
+	/** Raw error message */
+	rawMessage: string
+}
+
+/**
  * ClineApiReqInfo
  */
 export interface ClineApiReqInfo {
@@ -115,6 +133,8 @@ export interface ClineApiReqInfo {
 	cost?: number
 	cancelReason?: ClineApiReqCancelReason
 	streamingFailedMessage?: string
+	/** Structured error information for better diagnostics */
+	errorInfo?: ClineApiReqErrorInfo
 	apiProtocol?: "anthropic" | "openai"
 }
 

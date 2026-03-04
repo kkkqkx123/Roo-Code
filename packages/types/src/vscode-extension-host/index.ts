@@ -59,5 +59,6 @@ export type {
 	ClineSayTool,
 	ClineAskUseMcpServer,
 	ClineApiReqInfo,
+	ClineApiReqErrorInfo,
 	ClineApiReqCancelReason,
 } from "./cline-types.js"

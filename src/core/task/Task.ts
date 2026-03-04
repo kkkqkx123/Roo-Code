@@ -31,6 +31,7 @@ import {
 	type CreateTaskOptions,
 	type ClineApiReqCancelReason,
 	type ClineApiReqInfo,
+	type ClineApiReqErrorInfo,
 	CoderEventName,
 	TaskStatus,
 	TodoItem,
@@ -3171,7 +3172,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				// anyways, so it remains solely for legacy purposes to keep track
 				// of prices in tasks from history (it's worth removing a few months
 				// from now).
-				const updateApiReqMsg = (cancelReason?: ClineApiReqCancelReason, streamingFailedMessage?: string) => {
+				const updateApiReqMsg = (
+					cancelReason?: ClineApiReqCancelReason,
+					streamingFailedMessage?: string,
+					errorInfo?: ClineApiReqErrorInfo,
+				) => {
 					if (lastApiReqIndex < 0 || !this.clineMessages[lastApiReqIndex]) {
 						return
 					}
@@ -3213,10 +3218,15 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						cost: totalCost ?? costResult.totalCost,
 						cancelReason,
 						streamingFailedMessage,
+						errorInfo,
 					} satisfies ClineApiReqInfo)
 				}
 
-				const abortStream = async (cancelReason: ClineApiReqCancelReason, streamingFailedMessage?: string) => {
+				const abortStream = async (
+					cancelReason: ClineApiReqCancelReason,
+					streamingFailedMessage?: string,
+					errorInfo?: ClineApiReqErrorInfo,
+				) => {
 					if (this.diffViewProvider.isEditing) {
 						await this.diffViewProvider.revertChanges() // closes diff view
 					}
@@ -3232,7 +3242,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 					// Update `api_req_started` to have cancelled and cost, so that
 					// we can display the cost of the partial stream and the cancellation reason
-					updateApiReqMsg(cancelReason, streamingFailedMessage)
+					updateApiReqMsg(cancelReason, streamingFailedMessage, errorInfo)
 					await this.saveClineMessages()
 
 					// Signals to provider that it can retrieve the saved messages
@@ -3396,13 +3406,25 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					if (!this.abandoned) {
 						const cancelReason: ClineApiReqCancelReason = this.abort ? "user_cancelled" : "streaming_failed"
 
-						const rawErrorMessage =
-							(error instanceof Error ? error.message : undefined) ?? JSON.stringify(serializeError(error), null, 2)
+						// Use extractErrorInfo to get structured error information
+						const errorInfo = extractErrorInfo(error)
 						const streamingFailedMessage = this.abort
 							? undefined
-							: `${t("common:interruption.streamTerminatedByProvider")}: ${rawErrorMessage}`
+							: `${t("common:interruption.streamTerminatedByProvider")}: ${errorInfo.message}`
 
-						await abortStream(cancelReason, streamingFailedMessage)
+						// Build structured error info for better diagnostics
+						const structuredErrorInfo: ClineApiReqErrorInfo | undefined = this.abort
+							? undefined
+							: {
+									statusCode: errorInfo.status,
+									requestId: errorInfo.requestId,
+									providerName: errorInfo.providerName,
+									errorCategory: errorInfo.category,
+									retryAfter: errorInfo.retryAfter,
+									rawMessage: errorInfo.message,
+								}
+
+						await abortStream(cancelReason, streamingFailedMessage, structuredErrorInfo)
 
 						if (this.abort) {
 							this.abortReason = cancelReason
