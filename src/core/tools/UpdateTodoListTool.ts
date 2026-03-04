@@ -192,6 +192,9 @@ export function parseMarkdownChecklist(md: string): TodoItem[] {
 		}
 	}
 
+	// Convert escaped newlines to actual newlines (handle \\n, \n, etc.)
+	md = md.replace(/\\n/g, "\n")
+
 	// Try to parse as JSON array format first (LLMs sometimes use this format)
 	// Format: [{"id": "1", "content": "Task 1", "status": "completed"}, ...]
 	if (md.trim().startsWith("[")) {
@@ -267,6 +270,8 @@ export function validateTodos(todos: any[], rawInput?: string): { valid: boolean
 			}
 		}
 	}
+
+	
 
 	for (const [i, t] of todos.entries()) {
 		if (!t || typeof t !== "object") return { valid: false, error: `Item ${i + 1} is not an object` }
