@@ -448,9 +448,8 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		}
 	}, [handleMessage])
 
-	useEffect(() => {
-		vscode.postMessage({ type: "webviewDidLaunch" })
-	}, [])
+	// Note: webviewDidLaunch is sent once by App.tsx on mount.
+	// This component does not need to send it again.
 
 	const contextValue: ExtensionStateContextType = {
 		...state,

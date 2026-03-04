@@ -475,6 +475,12 @@ export const webviewMessageHandler = async (
 
 	switch (message.type) {
 		case "webviewDidLaunch":
+			// Prevent duplicate initialization if webviewDidLaunch is received multiple times
+			if (provider.isViewLaunched) {
+				provider.log(`[webviewMessageHandler] Ignoring duplicate webviewDidLaunch message`)
+				break
+			}
+
 			provider.log(`[webviewMessageHandler] Received webviewDidLaunch message`)
 			// Load custom modes first
 			const customModes = await provider.customModesManager.getCustomModes()

@@ -17,7 +17,8 @@ export function useCodeIndexConfig() {
           }
         }
         window.addEventListener('message', handler)
-        vscode.postMessage({ type: 'webviewDidLaunch' })
+        // Note: webviewDidLaunch is sent once by App.tsx on mount.
+        // This hook relies on receiving the state message from that initial launch.
 
         // Timeout fallback
         setTimeout(() => {
