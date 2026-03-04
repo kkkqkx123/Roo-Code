@@ -14,8 +14,12 @@ export interface DeadLoopDetectionResult {
 }
 
 export interface DeadLoopDetectorConfig {
-	// 检查点阈值（字符数）
-	checkpoints: number[]
+	// 第一个检查点阈值（字符数）：短序列循环检测
+	checkpoint1: number
+	// 第二个检查点阈值（字符数）：段落/列表重复检测
+	checkpoint2: number
+	// 第三个检查点阈值（字符数）：尾部二次检查
+	checkpoint3: number
 	// 短序列检测窗口大小（字符）
 	shortSequenceWindowSize: number
 	// 最小重复单元长度（字符）
@@ -31,7 +35,9 @@ export interface DeadLoopDetectorConfig {
 }
 
 const DEFAULT_CONFIG: DeadLoopDetectorConfig = {
-	checkpoints: [2000, 3000, 5000],
+	checkpoint1: 1000,
+	checkpoint2: 2000,
+	checkpoint3: 4000,
 	shortSequenceWindowSize: 200,
 	minRepeatUnitLength: 2,
 	maxRepeatUnitLength: 50,
@@ -64,40 +70,54 @@ export class DeadLoopDetector {
 	public detect(reasoningMessage: string): DeadLoopDetectionResult {
 		const length = reasoningMessage.length
 
-		// 第 1 检查点：2000 字符 - 短序列循环检测
-		if (length >= 2000 && !this.checkedCheckpoints.has(2000)) {
-			this.checkedCheckpoints.add(2000)
+		// 第 1 检查点：短序列循环检测
+		if (length >= this.config.checkpoint1 && !this.checkedCheckpoints.has(1)) {
+			this.checkedCheckpoints.add(1)
 			const shortSequenceResult = this.detectShortSequenceLoop(reasoningMessage)
 			if (shortSequenceResult.detected) {
 				return shortSequenceResult
 			}
 		}
 
-		// 第 2 检查点：3000 字符 - 段落重复和有序列表重复检测
-		if (length >= 3000 && !this.checkedCheckpoints.has(3000)) {
-			this.checkedCheckpoints.add(3000)
-			// 检测 2000-3000 字符范围
+		// 第 2 检查点：段落重复和有序列表重复检测
+		if (length >= this.config.checkpoint2 && !this.checkedCheckpoints.has(2)) {
+			this.checkedCheckpoints.add(2)
 			// 先检查有序列表，因为有序列表更具体，可以避免被段落检测误报
-			const orderedListResult = this.detectOrderedListRepetition(reasoningMessage, 2000, 3000)
+			const orderedListResult = this.detectOrderedListRepetition(
+				reasoningMessage,
+				this.config.checkpoint1,
+				this.config.checkpoint2,
+			)
 			if (orderedListResult.detected) {
 				return orderedListResult
 			}
-			const paragraphResult = this.detectParagraphRepetition(reasoningMessage, 2000, 3000)
+			const paragraphResult = this.detectParagraphRepetition(
+				reasoningMessage,
+				this.config.checkpoint1,
+				this.config.checkpoint2,
+			)
 			if (paragraphResult.detected) {
 				return paragraphResult
 			}
 		}
 
-		// 第 3 检查点：5000 字符 - 尾部二次检查
-		if (length >= 5000 && !this.checkedCheckpoints.has(5000)) {
-			this.checkedCheckpoints.add(5000)
-			// 检测 3000-5000 字符范围
+		// 第 3 检查点：尾部二次检查
+		if (length >= this.config.checkpoint3 && !this.checkedCheckpoints.has(3)) {
+			this.checkedCheckpoints.add(3)
 			// 先检查有序列表，因为有序列表更具体，可以避免被段落检测误报
-			const orderedListResult = this.detectOrderedListRepetition(reasoningMessage, 3000, 5000)
+			const orderedListResult = this.detectOrderedListRepetition(
+				reasoningMessage,
+				this.config.checkpoint2,
+				this.config.checkpoint3,
+			)
 			if (orderedListResult.detected) {
 				return orderedListResult
 			}
-			const paragraphResult = this.detectParagraphRepetition(reasoningMessage, 3000, 5000)
+			const paragraphResult = this.detectParagraphRepetition(
+				reasoningMessage,
+				this.config.checkpoint2,
+				this.config.checkpoint3,
+			)
 			if (paragraphResult.detected) {
 				return paragraphResult
 			}
@@ -242,7 +262,7 @@ export class DeadLoopDetector {
 		// 步骤 2：调用通用周期检测
 		const result = this.detectPeriod(blocks)
 
-		if (result.detected) {
+		if (result.detected && result.periodLength !== undefined) {
 			return {
 				detected: true,
 				type: "paragraphRepetition",
@@ -284,7 +304,7 @@ export class DeadLoopDetector {
 		// 步骤 4：调用通用周期检测（使用相同的参数确保一致性）
 		const result = this.detectPeriod(validLines)
 
-		if (result.detected) {
+		if (result.detected && result.periodLength !== undefined) {
 			return {
 				detected: true,
 				type: "orderedListRepetition",
