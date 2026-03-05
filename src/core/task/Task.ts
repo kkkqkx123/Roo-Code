@@ -1376,7 +1376,17 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// taskHistory is maintained in-memory in the webview and updated via taskHistoryItemUpdated.
 		await provider?.postStateToWebviewWithoutTaskHistory()
 		this.emit(CoderEventName.Message, { action: "created", message })
-		await this.saveClineMessages()
+
+		// Skip saving for api_req_started messages to prevent token usage statistics loss.
+		// The api_req_started message is created before the API call completes, so it has no token data yet.
+		// Saving at this point would emit incorrect token usage (0 tokens) to the UI.
+		// The message will be saved later when token data is available (see updateApiReqMsg in recursivelyMakeClineRequests).
+		const isApiReqStartedPlaceholder =
+			message.type === "say" && message.say === "api_req_started"
+
+		if (!isApiReqStartedPlaceholder) {
+			await this.saveClineMessages()
+		}
 	}
 
 	public async overwriteClineMessages(newMessages: ClineMessage[]) {

@@ -13,7 +13,6 @@ import { modeConfigSchema } from "./mode.js"
 import { customModePromptsSchema, customSupportPromptsSchema } from "./mode.js"
 import { toolNamesSchema } from "./tool.js"
 import { languagesSchema } from "./vscode.js"
-import { type ImageGenerationConfigEntry } from "./image-generation.js"
 
 /**
  * Default delay in milliseconds after writes to allow diagnostics to detect potential problems.
