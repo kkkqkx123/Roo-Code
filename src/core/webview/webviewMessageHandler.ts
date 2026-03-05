@@ -487,8 +487,9 @@ export const webviewMessageHandler = async (
 			await updateGlobalState("customModes", customModes)
 			provider.log(`[webviewMessageHandler] Custom modes loaded: ${customModes.length} modes`)
 
-			provider.postStateToWebview()
-			provider.log(`[webviewMessageHandler] State posted to webview`)
+			// Wait for ProviderSettingsManager to be fully initialized before loading config
+			await provider.providerSettingsManager.ready()
+			provider.log(`[webviewMessageHandler] ProviderSettingsManager ready`)
 
 			provider.workspaceTracker?.initializeFilePaths() // Don't await.
 
@@ -502,13 +503,10 @@ export const webviewMessageHandler = async (
 				provider.postMessageToWebview({ type: "mcpServers", mcpServers: mcpHub.getAllServers() })
 			}
 
-			provider.providerSettingsManager
-				.listConfig()
-				.then(async (listApiConfig) => {
-					if (!listApiConfig) {
-						return
-					}
-
+			// Load config list and activate profile if needed
+			try {
+				const listApiConfig = await provider.providerSettingsManager.listConfig()
+				if (listApiConfig) {
 					const currentConfigName = getGlobalState("currentApiConfigName")
 
 					if (currentConfigName) {
@@ -519,8 +517,17 @@ export const webviewMessageHandler = async (
 
 							if (name) {
 								await provider.configurationService.activateProviderProfile({ name })
-								return
 							}
+						} else {
+							// Current config is valid, activate it to ensure provider settings are loaded
+							await provider.configurationService.activateProviderProfile({ name: currentConfigName })
+						}
+					} else {
+						// No current config name set, activate the first one
+						const name = listApiConfig[0]?.name
+						if (name) {
+							await updateGlobalState("currentApiConfigName", name)
+							await provider.configurationService.activateProviderProfile({ name })
 						}
 					}
 
@@ -528,12 +535,16 @@ export const webviewMessageHandler = async (
 						await updateGlobalState("listApiConfigMeta", listApiConfig),
 						await provider.postMessageToWebview({ type: "listApiConfig", listApiConfig }),
 					])
-				})
-				.catch((error) =>
-					provider.log(
-						`Error list api configuration: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
-					),
+				}
+			} catch (error) {
+				provider.log(
+					`Error loading api configuration: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
 				)
+			}
+
+			// Post state to webview after config is loaded
+			provider.postStateToWebview()
+			provider.log(`[webviewMessageHandler] State posted to webview`)
 
 			provider.isViewLaunched = true
 			provider.log(`[webviewMessageHandler] isViewLaunched set to true`)

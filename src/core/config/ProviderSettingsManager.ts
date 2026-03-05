@@ -63,12 +63,21 @@ export class ProviderSettingsManager {
 	}
 
 	private readonly context: ExtensionContext
+	private _initialized: Promise<void>
 
 	constructor(context: ExtensionContext) {
 		this.context = context
 
-		// TODO: We really shouldn't have async methods in the constructor.
-		this.initialize().catch(console.error)
+		// Store the initialization promise so callers can await it
+		this._initialized = this.initialize()
+	}
+
+	/**
+	 * Wait for initialization to complete. This ensures that the config is loaded
+	 * before any operations that depend on it.
+	 */
+	public async ready(): Promise<void> {
+		await this._initialized
 	}
 
 	public generateId() {
