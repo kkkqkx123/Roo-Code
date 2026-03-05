@@ -75,7 +75,7 @@ const ApiOptions = ({
 	)
 
 	// Sync local state with prop changes, avoiding dependency on customHeaders
-	useEffect(() => {
+	const syncCustomHeaders = useCallback(() => {
 		// Compare using JSON.stringify for deep comparison
 		const currentHeadersStr = JSON.stringify(customHeaders)
 		const propHeadersStr = JSON.stringify(propHeadersEntries)
@@ -87,7 +87,11 @@ const ApiOptions = ({
 			setCustomHeaders(propHeadersEntries)
 			prevHeadersRef.current = [...propHeadersEntries]
 		}
-	}, [propHeadersEntries]) // Only depend on propHeadersEntries, not customHeaders
+	}, [propHeadersEntries, customHeaders])
+
+	useEffect(() => {
+		syncCustomHeaders()
+	}, [syncCustomHeaders])
 
 	// Helper to convert array of tuples to object (filtering out empty keys).
 

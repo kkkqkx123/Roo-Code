@@ -37,7 +37,7 @@ export const CustomToolsSettings = ({ enabled, onChange }: CustomToolsSettingsPr
 	const [refreshError, setRefreshError] = useState<string | null>(null)
 	const prevEnabledRef = useRef(enabled)
 
-	useEffect(() => {
+	const syncToolsState = useCallback(() => {
 		if (enabled && prevEnabledRef.current !== enabled) {
 			vscode.postMessage({ type: "refreshCustomTools" })
 		} else if (!enabled && prevEnabledRef.current !== enabled) {
@@ -45,6 +45,10 @@ export const CustomToolsSettings = ({ enabled, onChange }: CustomToolsSettingsPr
 		}
 		prevEnabledRef.current = enabled
 	}, [enabled])
+
+	useEffect(() => {
+		syncToolsState()
+	}, [syncToolsState])
 
 	useEvent("message", (event: MessageEvent) => {
 		const message = event.data

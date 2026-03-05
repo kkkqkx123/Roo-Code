@@ -1,5 +1,5 @@
-import { memo, useState, useEffect } from "react"
-import { VSCodeTextField, VSCodeDropdown, VSCodeOption } from "@vscode/webview-ui-toolkit/react"
+import { memo } from "react"
+import { VSCodeDropdown, VSCodeOption } from "@vscode/webview-ui-toolkit/react"
 
 import type {
 	ImageGenerationConfig,
@@ -9,7 +9,7 @@ import type {
 import { DEFAULT_IMAGE_GENERATION_MODELS, getDefaultBaseUrl, getDefaultApiMethod } from "@coder/types"
 
 import { useAppTranslation } from "@/i18n/TranslationContext"
-import { Button, Input, StandardTooltip } from "@/components/ui"
+import { Input } from "@/components/ui"
 
 interface ImageGenerationConfigEditorProps {
 	config?: ImageGenerationConfig
@@ -25,12 +25,6 @@ const ImageGenerationConfigEditor = ({
 	onUpdateApiKey,
 }: ImageGenerationConfigEditorProps) => {
 	const { t } = useAppTranslation()
-
-	const [localApiKey, setLocalApiKey] = useState(apiKey || "")
-
-	useEffect(() => {
-		setLocalApiKey(apiKey || "")
-	}, [apiKey])
 
 	const handleProviderChange = (provider: ImageGenerationProvider) => {
 		const defaultBaseUrl = getDefaultBaseUrl(provider)
@@ -59,7 +53,6 @@ const ImageGenerationConfigEditor = ({
 	}
 
 	const handleApiKeyChange = (value: string) => {
-		setLocalApiKey(value)
 		onUpdateApiKey(value)
 	}
 
@@ -96,7 +89,7 @@ const ImageGenerationConfigEditor = ({
 				</label>
 				<Input
 					type="password"
-					value={localApiKey}
+					value={apiKey || ""}
 					onChange={(e) => handleApiKeyChange(e.target.value)}
 					placeholder={t("settings:imageGeneration.apiKeyPlaceholder")}
 					className="w-full"

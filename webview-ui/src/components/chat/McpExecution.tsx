@@ -67,7 +67,7 @@ export const McpExecution = ({
 	const prevToolNameRef = useRef<string | undefined>(initialToolName)
 
 	// Sync values when props change
-	useEffect(() => {
+	const syncPropValues = useCallback(() => {
 		// Handle arguments text - don't parse JSON here as it might be incomplete
 		if (text && text !== prevTextRef.current) {
 			setArgumentsText(text)
@@ -90,6 +90,10 @@ export const McpExecution = ({
 			prevToolNameRef.current = initialToolName
 		}
 	}, [text, useMcpServer?.response, initialServerName, initialToolName])
+
+	useEffect(() => {
+		syncPropValues()
+	}, [syncPropValues])
 
 	// Try to parse JSON and return both the result and formatted text
 	const tryParseJson = useCallback((text: string): { isJson: boolean; formatted: string } => {

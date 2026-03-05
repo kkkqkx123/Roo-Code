@@ -9,7 +9,6 @@ import type {
 	FollowUpData,
 	SuggestionItem,
 	ClineApiReqInfo,
-	ClineApiReqErrorInfo,
 	ClineAskUseMcpServer,
 	ClineSayTool,
 } from "@coder/types"

@@ -411,7 +411,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 		checkUnsavedChanges(() => {
 			setOpen(false)
 		})
-	}, [checkUnsavedChanges])
+	}, [checkUnsavedChanges, setOpen])
 
 	// Use the shared ESC key handler hook - respects unsaved changes logic
 	useEscapeKey(isOpen, handlePopoverClose)

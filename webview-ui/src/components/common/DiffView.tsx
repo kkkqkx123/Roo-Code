@@ -104,7 +104,7 @@ const DiffView = memo(({ source, filePath }: DiffViewProps) => {
 	const prevHunksRef = useRef<Hunk[]>(hunks)
 
 	// Effect to handle async highlighting
-	useEffect(() => {
+	const processHunksEffect = useCallback(() => {
 		if (!shouldHighlight) {
 			if (prevHunksRef.current !== hunks) {
 				setProcessedHunks(hunks)
@@ -144,6 +144,10 @@ const DiffView = memo(({ source, filePath }: DiffViewProps) => {
 
 		processHunks()
 	}, [hunks, shouldHighlight, normalizedLang, isLightTheme, filePath])
+
+	useEffect(() => {
+		processHunksEffect()
+	}, [processHunksEffect])
 
 	// Render helper that uses precomputed highlighting
 	const renderContent = (line: DiffLine, hunk: Hunk, lineIndexInHunk: number): React.ReactNode => {

@@ -33,12 +33,16 @@ function FormattedTextFieldInner<T>(
 	const prevValueRef = useRef<T | undefined>(undefined)
 
 	// Update raw input when external value changes (but not when we're actively typing)
-	useEffect(() => {
+	const updateRawInput = useCallback(() => {
 		if (!isTyping && prevValueRef.current !== value) {
 			setRawInput(formatter.format(value))
 			prevValueRef.current = value
 		}
 	}, [value, formatter, isTyping])
+
+	useEffect(() => {
+		updateRawInput()
+	}, [updateRawInput])
 
 	const handleInput = useCallback(
 		(e: React.FormEvent<HTMLInputElement>) => {

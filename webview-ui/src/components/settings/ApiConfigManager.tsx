@@ -90,13 +90,17 @@ const ApiConfigManager = ({
 
 	// Reset state when current profile changes.
 	const prevConfigNameRef = useRef(currentApiConfigName)
-	useEffect(() => {
+	const resetConfigState = useCallback(() => {
 		if (prevConfigNameRef.current !== currentApiConfigName) {
 			resetCreateState()
 			resetRenameState()
 			prevConfigNameRef.current = currentApiConfigName
 		}
 	}, [currentApiConfigName])
+
+	useEffect(() => {
+		resetConfigState()
+	}, [resetConfigState])
 
 	const handleSelectConfig = (configName: string) => {
 		if (!configName) return

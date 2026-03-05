@@ -23,12 +23,16 @@ const FileChangesPanel = memo(({ clineMessages, className }: FileChangesPanelPro
 	const prevClineMessagesRef = useRef<ClineMessage[] | undefined>(undefined)
 
 	// Reset expanded file rows when switching to a different task (clineMessages identity change)
+	const resetExpandedPaths = useCallback(() => {
+		setExpandedPaths(new Set())
+		prevClineMessagesRef.current = clineMessages
+	}, [clineMessages])
+
 	useEffect(() => {
 		if (prevClineMessagesRef.current !== clineMessages) {
-			setExpandedPaths(new Set())
-			prevClineMessagesRef.current = clineMessages
+			resetExpandedPaths()
 		}
-	}, [clineMessages])
+	}, [clineMessages, resetExpandedPaths])
 
 	const fileChanges = useMemo(() => fileChangesFromMessages(clineMessages), [clineMessages])
 

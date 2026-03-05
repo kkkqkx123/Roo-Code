@@ -594,7 +594,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				// Reset history navigation when user types (non-urgent, outside batch)
 				resetOnInputChange()
 			},
-			[setInputValue, setFileSearchResults, setSearchLoading, resetOnInputChange, shouldComputeMenu],
+			[setInputValue, setFileSearchResults, setSearchLoading, resetOnInputChange, shouldComputeMenu, setSearchRequestId],
 		)
 
 		useEffect(() => {

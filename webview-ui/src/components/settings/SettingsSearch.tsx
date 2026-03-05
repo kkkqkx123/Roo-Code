@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from "react"
+import { useRef, useEffect, useCallback, useReducer } from "react"
 import type { LucideIcon } from "lucide-react"
 
 import { useSettingsSearch, SearchResult, SearchableSettingData } from "./useSettingsSearch"
@@ -12,17 +12,32 @@ interface SettingsSearchProps {
 	sections: { id: SectionName; icon: LucideIcon }[]
 }
 
+type SearchStateAction =
+	| { type: "SET_HIGHLIGHTED"; value: string | undefined }
+	| { type: "RESET_HIGHLIGHTED" }
+
+function highlightedReducer(state: string | undefined, action: SearchStateAction): string | undefined {
+	switch (action.type) {
+		case "SET_HIGHLIGHTED":
+			return action.value
+		case "RESET_HIGHLIGHTED":
+			return undefined
+		default:
+			return state
+	}
+}
+
 export function SettingsSearch({ index, onNavigate, sections }: SettingsSearchProps) {
 	const inputRef = useRef<HTMLInputElement>(null)
 	const { searchQuery, setSearchQuery, results, isOpen, setIsOpen, clearSearch } = useSettingsSearch({ index })
-	const [highlightedResultId, setHighlightedResultId] = useState<string | undefined>(undefined)
+	const [highlightedResultId, dispatch] = useReducer(highlightedReducer, undefined)
 
 	// Handle selection of a search result
 	const handleSelectResult = useCallback(
 		(result: SearchResult) => {
 			onNavigate(result.section, result.settingId)
 			clearSearch()
-			setHighlightedResultId(undefined)
+			dispatch({ type: "RESET_HIGHLIGHTED" })
 			// Keep focus in the input so dropdown remains open for follow-up search
 			setIsOpen(true)
 			requestAnimationFrame(() => inputRef.current?.focus())
@@ -37,7 +52,7 @@ export function SettingsSearch({ index, onNavigate, sections }: SettingsSearchPr
 			const flatIds = results.map((r) => r.settingId)
 			const currentIndex = highlightedResultId ? flatIds.indexOf(highlightedResultId) : -1
 			const nextIndex = (currentIndex + direction + flatIds.length) % flatIds.length
-			setHighlightedResultId(flatIds[nextIndex])
+			dispatch({ type: "SET_HIGHLIGHTED", value: flatIds[nextIndex] })
 		},
 		[highlightedResultId, results],
 	)
@@ -46,7 +61,7 @@ export function SettingsSearch({ index, onNavigate, sections }: SettingsSearchPr
 		(event: React.KeyboardEvent<HTMLInputElement>) => {
 			if (event.key === "Escape") {
 				setIsOpen(false)
-				setHighlightedResultId(undefined)
+				dispatch({ type: "RESET_HIGHLIGHTED" })
 				inputRef.current?.blur()
 				return
 			}
@@ -80,22 +95,22 @@ export function SettingsSearch({ index, onNavigate, sections }: SettingsSearchPr
 	// Reset highlight based on focus and available results
 	const prevOpenRef = useRef(isOpen)
 	const prevResultsRef = useRef(results.length)
+
 	useEffect(() => {
 		const prevOpen = prevOpenRef.current
 		const prevResults = prevResultsRef.current
 
 		if (!isOpen || !results.length) {
 			if (prevOpen !== isOpen || prevResults !== results.length) {
-				setHighlightedResultId(undefined)
+				dispatch({ type: "RESET_HIGHLIGHTED" })
 			}
-		} else {
-			setHighlightedResultId((current) =>
-				current && results.some((r) => r.settingId === current) ? current : results[0]?.settingId,
-			)
+		} else if (!highlightedResultId || !results.some((r) => r.settingId === highlightedResultId)) {
+			dispatch({ type: "SET_HIGHLIGHTED", value: results[0]?.settingId })
 		}
+
 		prevOpenRef.current = isOpen
 		prevResultsRef.current = results.length
-	}, [isOpen, results])
+	}, [isOpen, results, highlightedResultId])
 
 	// Ensure highlighted search result stays visible within dropdown
 	useEffect(() => {

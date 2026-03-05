@@ -1,8 +1,7 @@
 import { VSCodeCheckbox } from "@vscode/webview-ui-toolkit/react"
-import { useEffect, useState, useRef } from "react"
-import { useAppTranslation } from "@/i18n/TranslationContext"
 import { useDebounce } from "react-use"
 
+import { useAppTranslation } from "@/i18n/TranslationContext"
 import { Slider } from "@/components/ui"
 
 interface TemperatureControlProps {
@@ -14,35 +13,23 @@ interface TemperatureControlProps {
 
 export const TemperatureControl = ({ value, onChange, maxValue = 1, defaultValue }: TemperatureControlProps) => {
 	const { t } = useAppTranslation()
-	const [isCustomTemperature, setIsCustomTemperature] = useState(value !== undefined)
-	const [inputValue, setInputValue] = useState(value)
-	const prevValueRef = useRef(value)
+	const hasCustomTemperature = value !== undefined && value !== null
 
 	// Debounce onChange callback with null check
 	useDebounce(() => {
 		if (onChange) {
-			onChange(inputValue)
+			onChange(value)
 		}
-	}, 50, [onChange, inputValue])
-
-	// Sync internal state with prop changes when switching profiles.
-	useEffect(() => {
-		if (prevValueRef.current !== value) {
-			const hasCustomTemperature = value !== undefined && value !== null
-			setIsCustomTemperature(hasCustomTemperature)
-			setInputValue(value)
-			prevValueRef.current = value
-		}
-	}, [value])
+	}, 50, [onChange, value])
 
 	return (
 		<>
 			<div>
 				<VSCodeCheckbox
-					checked={isCustomTemperature}
+					checked={hasCustomTemperature}
 					onChange={(e: any) => {
 						const isChecked = e.target.checked
-						setIsCustomTemperature(isChecked)
+						onChange(isChecked ? defaultValue ?? 0.5 : undefined)
 
 						if (!isChecked) {
 							setInputValue(null) // Unset the temperature, note that undefined is unserializable.
@@ -58,7 +45,7 @@ export const TemperatureControl = ({ value, onChange, maxValue = 1, defaultValue
 				</div>
 			</div>
 
-			{isCustomTemperature && (
+			{hasCustomTemperature && (
 				<div className="flex flex-col gap-3 pl-3 border-l-2 border-vscode-button-background">
 					<div>
 						<div className="flex items-center gap-2">
@@ -66,10 +53,10 @@ export const TemperatureControl = ({ value, onChange, maxValue = 1, defaultValue
 								min={0}
 								max={maxValue}
 								step={0.01}
-								value={[inputValue ?? 0]}
-								onValueChange={([value]) => setInputValue(value)}
+								value={[value ?? 0]}
+								onValueChange={([newVal]) => onChange(newVal)}
 							/>
-							<span className="w-10">{inputValue}</span>
+							<span className="w-10">{value}</span>
 						</div>
 						<div className="text-vscode-descriptionForeground text-sm mt-1">
 							{t("settings:temperature.rangeDescription")}

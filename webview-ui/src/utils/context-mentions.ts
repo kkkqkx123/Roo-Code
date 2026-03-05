@@ -345,17 +345,12 @@ export function getContextMenuOptions(
 	const seen = new Set()
 	const deduped = allItems.filter((item) => {
 		// Normalize paths for deduplication by ensuring leading slashes
-		const normalizedValue = item.value
-		let key = ""
-		if (
+		const key =
 			item.type === ContextMenuOptionType.File ||
 			item.type === ContextMenuOptionType.Folder ||
 			item.type === ContextMenuOptionType.OpenedFile
-		) {
-			key = normalizedValue!
-		} else {
-			key = `${item.type}-${normalizedValue}`
-		}
+				? item.value!
+				: `${item.type}-${item.value}`
 		if (seen.has(key)) return false
 		seen.add(key)
 		return true

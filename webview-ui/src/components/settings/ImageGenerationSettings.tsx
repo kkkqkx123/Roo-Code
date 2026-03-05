@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react"
+import React from "react"
 import { VSCodeCheckbox } from "@vscode/webview-ui-toolkit/react"
 
 import type { ImageGenerationConfigEntry, ImageGenerationConfig } from "@coder/types"

@@ -148,11 +148,16 @@ export function useScrollLifecycle({
 	const scrollToBottomSmooth = useMemo(
 		() =>
 			debounce(
-				() => virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "smooth" }),
+				() => {
+					if (virtuosoRef.current) {
+						virtuosoRef.current.scrollToIndex({ index: "LAST", align: "end", behavior: "smooth" })
+					}
+				},
 				10,
 				{ immediate: true },
 			),
-		[virtuosoRef],
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[],
 	)
 
 	const scrollToBottomAuto = useCallback(() => {
@@ -172,32 +177,41 @@ export function useScrollLifecycle({
 		}
 	}, [])
 
-	const finishHydrationWindow = useCallback(() => {
-		if (!isMountedRef.current || !isHydratingRef.current) {
-			return
-		}
+	const finishHydrationWindowRef = useRef<(() => void) | null>(null)
 
-		if (scrollPhaseRef.current === "HYDRATING_PINNED_TO_BOTTOM") {
-			if (isAtBottomRef.current) {
-				enterAnchoredFollowing()
-			} else {
-				if (!hydrationRetryUsedRef.current) {
-					hydrationRetryUsedRef.current = true
-					scrollToBottomAuto()
-					hydrationTimeoutRef.current = window.setTimeout(() => {
-						finishHydrationWindow()
-					}, HYDRATION_RETRY_WINDOW_MS)
-					return
-				}
-
-				// Retry budget exhausted. Keep anchored follow rather than
-				// downgrading to browsing mode due to non-user transient drift.
-				enterAnchoredFollowing()
+	// Update ref callback outside of render
+	useEffect(() => {
+		finishHydrationWindowRef.current = () => {
+			if (!isMountedRef.current || !isHydratingRef.current) {
+				return
 			}
-		}
 
-		clearHydrationWindow()
-	}, [clearHydrationWindow, enterAnchoredFollowing, scrollToBottomAuto])
+			if (scrollPhaseRef.current === "HYDRATING_PINNED_TO_BOTTOM") {
+				if (isAtBottomRef.current) {
+					enterAnchoredFollowing()
+				} else {
+					if (!hydrationRetryUsedRef.current) {
+						hydrationRetryUsedRef.current = true
+						scrollToBottomAuto()
+						hydrationTimeoutRef.current = window.setTimeout(() => {
+							finishHydrationWindowRef.current?.()
+						}, HYDRATION_RETRY_WINDOW_MS)
+						return
+					}
+
+					// Retry budget exhausted. Keep anchored follow rather than
+					// downgrading to browsing mode due to non-user transient drift.
+					enterAnchoredFollowing()
+				}
+			}
+
+			clearHydrationWindow()
+		}
+	}, [clearHydrationWindow, enterAnchoredFollowing, scrollToBottomAuto, isMountedRef, isHydratingRef, scrollPhaseRef, isAtBottomRef, hydrationRetryUsedRef, hydrationTimeoutRef])
+
+	const finishHydrationWindow = useCallback(() => {
+		finishHydrationWindowRef.current?.()
+	}, [])
 
 	const startHydrationWindow = useCallback(() => {
 		isHydratingRef.current = true

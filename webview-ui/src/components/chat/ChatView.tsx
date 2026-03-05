@@ -455,7 +455,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 				setSecondaryButtonText(undefined)
 			}
 		}
-	}, [clineAsk, currentTaskItem?.parentTaskId, messages, t])
+	}, [clineAsk, currentTaskItem?.parentTaskId, messages, t, setPrimaryButtonText, setSecondaryButtonText])
 
 	useEffect(() => {
 		if (messages.length === 0) {
@@ -465,7 +465,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			setPrimaryButtonText(undefined)
 			setSecondaryButtonText(undefined)
 		}
-	}, [messages.length])
+	}, [messages.length, setSendingDisabled, setClineAsk, setEnableButtons, setPrimaryButtonText, setSecondaryButtonText])
 
 	// Reset UI states when task changes. Scroll lifecycle is handled by
 	// useScrollLifecycle which has its own effect keyed on taskTs.
@@ -576,7 +576,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		// Do not reset mode here as it should persist.
 		// setPrimaryButtonText(undefined)
 		// setSecondaryButtonText(undefined)
-	}, [])
+	}, [setClineAsk, setEnableButtons, setSendingDisabled])
 
 	/**
 	 * Handles sending messages to the extension
@@ -658,7 +658,6 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			sendingDisabled,
 			isStreaming,
 			messageQueue.length,
-			apiConfiguration?.apiProvider,
 		], // messagesRef and clineAskRef are stable
 	)
 
@@ -776,7 +775,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			setPrimaryButtonText(undefined)
 			setSecondaryButtonText(undefined)
 		},
-		[clineAsk, startNewTask, currentTaskItem?.parentTaskId],
+		[clineAsk, startNewTask, currentTaskItem?.parentTaskId, setClineAsk, setEnableButtons, setPrimaryButtonText, setSecondaryButtonText, setSendingDisabled, setInputValue, setSelectedImages],
 	)
 
 	const handleSecondaryButtonClick = useCallback(
@@ -825,7 +824,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			setClineAsk(undefined)
 			setEnableButtons(false)
 		},
-		[clineAsk, startNewTask, isStreaming, setDidClickCancel],
+		[clineAsk, startNewTask, isStreaming, setDidClickCancel, setClineAsk, setEnableButtons, setSendingDisabled, setInputValue, setSelectedImages],
 	)
 
 	const { info: model } = useSelectedModel(apiConfiguration)
@@ -932,6 +931,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			handleSecondaryButtonClick,
 			setCheckpointWarning,
 			playSound,
+			setSendingDisabled,
 		],
 	)
 
@@ -1121,11 +1121,15 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 	// Track when condensing started to capture timestamp
 	const [condensingTime, setCondensingTime] = useState<number>(0)
 
-	useEffect(() => {
+	const updateCondensingTime = useCallback(() => {
 		if (isCondensing) {
 			setCondensingTime(Date.now())
 		}
 	}, [isCondensing])
+
+	useEffect(() => {
+		updateCondensingTime()
+	}, [isCondensing, updateCondensingTime])
 
 	const groupedMessages = useMemo(() => {
 		const filtered: ClineMessage[] = visibleMessages

@@ -97,13 +97,17 @@ export default function MermaidBlock({ code }: MermaidBlockProps) {
 	const prevCodeRef = useRef<string>(code)
 
 	// Reset loading and error state when code changes
-	useEffect(() => {
+	const resetLoadingState = useCallback(() => {
 		if (prevCodeRef.current !== code) {
 			setIsLoading(true)
 			setError(null)
 			prevCodeRef.current = code
 		}
 	}, [code])
+
+	useEffect(() => {
+		resetLoadingState()
+	}, [resetLoadingState])
 
 	// 2) Debounce the actual parse/render
 	useDebounceEffect(

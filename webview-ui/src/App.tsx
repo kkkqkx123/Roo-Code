@@ -57,16 +57,12 @@ const App = () => {
 
 	// Mark announcement as shown when conditions are met
 	useEffect(() => {
-		if (shouldShowAnnouncement && tab === "chat") {
-			setShowAnnouncement((prev) => {
-				if (!prev) {
-					vscode.postMessage({ type: "didShowAnnouncement" })
-					return true
-				}
-				return prev
-			})
+		if (shouldShowAnnouncement && tab === "chat" && !showAnnouncement) {
+			vscode.postMessage({ type: "didShowAnnouncement" })
+			// eslint-disable-next-line react-hooks/set-state-in-effect
+			setShowAnnouncement(true)
 		}
-	}, [shouldShowAnnouncement, tab])
+	}, [shouldShowAnnouncement, tab, showAnnouncement])
 
 	const [deleteMessageDialogState, setDeleteMessageDialogState] = useState<DeleteMessageDialogState>({
 		isOpen: false,

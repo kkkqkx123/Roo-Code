@@ -14,7 +14,7 @@ export const useTaskSearch = () => {
 	const [showAllWorkspaces, setShowAllWorkspaces] = useState(false)
 	const prevSearchQueryRef = useRef(searchQuery)
 
-	useEffect(() => {
+	const updateSortOption = useCallback(() => {
 		const prevSearchQuery = prevSearchQueryRef.current
 		if (searchQuery && sortOption !== "mostRelevant" && !lastNonRelevantSort && prevSearchQuery !== searchQuery) {
 			setLastNonRelevantSort(sortOption)
@@ -25,6 +25,10 @@ export const useTaskSearch = () => {
 		}
 		prevSearchQueryRef.current = searchQuery
 	}, [searchQuery, sortOption, lastNonRelevantSort])
+
+	useEffect(() => {
+		updateSortOption()
+	}, [updateSortOption])
 
 	const presentableTasks = useMemo(() => {
 		let tasks = taskHistory.filter((item) => item.ts && item.task)

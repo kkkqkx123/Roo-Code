@@ -15,6 +15,13 @@ const Thumbnails = ({ images, style, setImages, onHeightChange }: ThumbnailsProp
 	const { width } = useWindowSize()
 	const prevImagesRef = useRef<string[]>(images)
 
+	const resetHoveredIndex = useCallback(() => {
+		if (prevImagesRef.current !== images) {
+			setHoveredIndex(null)
+			prevImagesRef.current = images
+		}
+	}, [images])
+
 	useLayoutEffect(() => {
 		if (containerRef.current) {
 			let height = containerRef.current.clientHeight
@@ -24,11 +31,8 @@ const Thumbnails = ({ images, style, setImages, onHeightChange }: ThumbnailsProp
 			}
 			onHeightChange?.(height)
 		}
-		if (prevImagesRef.current !== images) {
-			setHoveredIndex(null)
-			prevImagesRef.current = images
-		}
-	}, [images, width, onHeightChange])
+		resetHoveredIndex()
+	}, [images, width, onHeightChange, resetHoveredIndex])
 
 	const handleDelete = (index: number) => {
 		setImages?.((prevImages) => prevImages.filter((_, i) => i !== index))

@@ -74,13 +74,17 @@ export const usePromptHistory = ({
 	const promptHistory = filteredPromptHistory
 
 	// Reset navigation state when filtered history changes
-	useEffect(() => {
+	const resetNavigationState = useCallback(() => {
 		if (prevFilteredHistoryRef.current !== filteredPromptHistory) {
 			setHistoryIndex(-1)
 			setTempInput("")
 			prevFilteredHistoryRef.current = filteredPromptHistory
 		}
 	}, [filteredPromptHistory])
+
+	useEffect(() => {
+		resetNavigationState()
+	}, [resetNavigationState])
 
 	// Reset history navigation when user types (but not when we're setting it programmatically)
 	const resetOnInputChange = useCallback(() => {

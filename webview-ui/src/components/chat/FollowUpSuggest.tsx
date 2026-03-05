@@ -36,6 +36,39 @@ export const FollowUpSuggest = ({
 	const intervalIdRef = useRef<NodeJS.Timeout | null>(null)
 
 	// Start countdown timer when auto-approval is enabled for follow-up questions
+	const startCountdown = useCallback(() => {
+		const timeoutMs =
+			typeof followupAutoApproveTimeoutMs === "number" && !isNaN(followupAutoApproveTimeoutMs)
+				? followupAutoApproveTimeoutMs
+				: DEFAULT_FOLLOWUP_TIMEOUT_MS
+
+		// Convert milliseconds to seconds for the countdown
+		setCountdown(Math.floor(timeoutMs / 1000))
+
+		// Update countdown every second
+		intervalIdRef.current = setInterval(() => {
+			setCountdown((prevCountdown) => {
+				if (prevCountdown === null || prevCountdown <= 1) {
+					if (intervalIdRef.current) {
+						clearInterval(intervalIdRef.current)
+						intervalIdRef.current = null
+					}
+					return null
+				}
+				return prevCountdown - 1
+			})
+		}, COUNTDOWN_INTERVAL_MS)
+	}, [followupAutoApproveTimeoutMs])
+
+	const stopCountdown = useCallback(() => {
+		if (intervalIdRef.current) {
+			clearInterval(intervalIdRef.current)
+			intervalIdRef.current = null
+		}
+		timerStartedRef.current = false
+		setCountdown(null)
+	}, [])
+
 	useEffect(() => {
 		// Only start countdown if auto-approval is enabled for follow-up questions and no suggestion has been selected
 		// Also stop countdown if the question has been answered or auto-approval is paused (user is typing)
@@ -49,44 +82,15 @@ export const FollowUpSuggest = ({
 
 		if (shouldStartTimer && !timerStartedRef.current) {
 			timerStartedRef.current = true
-			// Start with the configured timeout in seconds
-			const timeoutMs =
-				typeof followupAutoApproveTimeoutMs === "number" && !isNaN(followupAutoApproveTimeoutMs)
-					? followupAutoApproveTimeoutMs
-					: DEFAULT_FOLLOWUP_TIMEOUT_MS
-
-			// Convert milliseconds to seconds for the countdown
-			setCountdown(Math.floor(timeoutMs / 1000))
-
-			// Update countdown every second
-			intervalIdRef.current = setInterval(() => {
-				setCountdown((prevCountdown) => {
-					if (prevCountdown === null || prevCountdown <= 1) {
-						if (intervalIdRef.current) {
-							clearInterval(intervalIdRef.current)
-							intervalIdRef.current = null
-						}
-						return null
-					}
-					return prevCountdown - 1
-				})
-			}, COUNTDOWN_INTERVAL_MS)
+			startCountdown()
 		} else if (!shouldStartTimer) {
 			// Clean up if conditions are no longer met
-			if (intervalIdRef.current) {
-				clearInterval(intervalIdRef.current)
-				intervalIdRef.current = null
-			}
-			timerStartedRef.current = false
-			setCountdown(null)
+			stopCountdown()
 		}
 
 		// Clean up interval on unmount
 		return () => {
-			if (intervalIdRef.current) {
-				clearInterval(intervalIdRef.current)
-				intervalIdRef.current = null
-			}
+			stopCountdown()
 			// Notify parent component that this component is unmounting
 			// so it can clear any related timeouts
 			onCancelAutoApproval?.()
@@ -95,11 +99,12 @@ export const FollowUpSuggest = ({
 		autoApprovalEnabled,
 		alwaysAllowFollowupQuestions,
 		suggestions,
-		followupAutoApproveTimeoutMs,
 		suggestionSelected,
 		onCancelAutoApproval,
 		isAnswered,
 		isFollowUpAutoApprovalPaused,
+		startCountdown,
+		stopCountdown,
 	])
 	const handleSuggestionClick = useCallback(
 		(suggestion: SuggestionItem, event: React.MouseEvent) => {

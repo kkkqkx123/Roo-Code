@@ -32,9 +32,7 @@ import {
 } from "lucide-react"
 
 import {
-	type ProviderSettings,
 	type ImageGenerationConfig,
-	type ImageGenerationConfigEntry,
 	DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
 } from "@coder/types"
 
@@ -151,11 +149,12 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 
 	const [isDiscardDialogShow, setDiscardDialogShow] = useState(false)
 	const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined)
-	const [activeTab, setActiveTab] = useState<SectionName>(
-		targetSection && sectionNames.includes(targetSection as SectionName)
-			? (targetSection as SectionName)
-			: "providers",
-	)
+	const [activeTab, setActiveTab] = useState<SectionName>(() => {
+		if (targetSection && sectionNames.includes(targetSection as SectionName)) {
+			return targetSection as SectionName
+		}
+		return "providers"
+	})
 
 	const scrollPositions = useRef<Record<SectionName, number>>(
 		Object.fromEntries(sectionNames.map((s) => [s, 0])) as Record<SectionName, number>,
@@ -540,14 +539,20 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 		[], // No dependencies needed now
 	)
 
-	// Update target section logic to set active tab
+	// Update active tab when targetSection changes
 	const prevTargetSectionRef = useRef(targetSection)
 	useEffect(() => {
-		if (targetSection && sectionNames.includes(targetSection as SectionName) && prevTargetSectionRef.current !== targetSection) {
+		if (
+			targetSection &&
+			sectionNames.includes(targetSection as SectionName) &&
+			prevTargetSectionRef.current !== targetSection &&
+			activeTab !== targetSection
+		) {
+			// eslint-disable-next-line react-hooks/set-state-in-effect
 			setActiveTab(targetSection as SectionName)
 			prevTargetSectionRef.current = targetSection
 		}
-	}, [targetSection, sectionNames])
+	}, [targetSection, activeTab])
 
 	// Function to scroll the active tab into view for vertical layout
 	const scrollToActiveTab = useCallback(() => {

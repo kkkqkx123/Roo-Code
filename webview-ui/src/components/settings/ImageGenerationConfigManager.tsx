@@ -1,8 +1,6 @@
-import { memo, useEffect, useRef, useState } from "react"
-import { VSCodeTextField } from "@vscode/webview-ui-toolkit/react"
+import { memo, useEffect, useRef, useReducer } from "react"
 
-import type { ImageGenerationConfigEntry, ImageGenerationProvider } from "@coder/types"
-import { DEFAULT_IMAGE_GENERATION_MODELS, getDefaultBaseUrl, getDefaultApiMethod } from "@coder/types"
+import type { ImageGenerationConfigEntry } from "@coder/types"
 
 import { useAppTranslation } from "@/i18n/TranslationContext"
 import {
@@ -24,6 +22,55 @@ interface ImageGenerationConfigManagerProps {
 	onUpsertConfig: (configName: string) => void
 }
 
+interface State {
+	isRenaming: boolean
+	isCreating: boolean
+	inputValue: string
+	newProfileName: string
+	error: string | null
+}
+
+type Action =
+	| { type: "START_RENaming"; value: string }
+	| { type: "START_CREATING" }
+	| { type: "SET_INPUT_VALUE"; value: string }
+	| { type: "SET_NEW_PROFILE_NAME"; value: string }
+	| { type: "SET_ERROR"; value: string | null }
+	| { type: "RESET_RENAMING" }
+	| { type: "RESET_CREATING" }
+	| { type: "RESET_ALL" }
+
+const initialState: State = {
+	isRenaming: false,
+	isCreating: false,
+	inputValue: "",
+	newProfileName: "",
+	error: null,
+}
+
+function reducer(state: State, action: Action): State {
+	switch (action.type) {
+		case "START_RENaming":
+			return { ...state, isRenaming: true, inputValue: action.value, error: null }
+		case "START_CREATING":
+			return { ...state, isCreating: true, newProfileName: "", error: null }
+		case "SET_INPUT_VALUE":
+			return { ...state, inputValue: action.value }
+		case "SET_NEW_PROFILE_NAME":
+			return { ...state, newProfileName: action.value }
+		case "SET_ERROR":
+			return { ...state, error: action.value }
+		case "RESET_RENAMING":
+			return { ...state, isRenaming: false, inputValue: "", error: null }
+		case "RESET_CREATING":
+			return { ...state, isCreating: false, newProfileName: "", error: null }
+		case "RESET_ALL":
+			return { ...initialState }
+		default:
+			return state
+	}
+}
+
 const ImageGenerationConfigManager = ({
 	currentImageGenerationConfigName = "",
 	listImageGenerationConfigMeta = [],
@@ -34,11 +81,8 @@ const ImageGenerationConfigManager = ({
 }: ImageGenerationConfigManagerProps) => {
 	const { t } = useAppTranslation()
 
-	const [isRenaming, setIsRenaming] = useState(false)
-	const [isCreating, setIsCreating] = useState(false)
-	const [inputValue, setInputValue] = useState("")
-	const [newProfileName, setNewProfileName] = useState("")
-	const [error, setError] = useState<string | null>(null)
+	const [state, dispatch] = useReducer(reducer, initialState)
+	const { isRenaming, isCreating, inputValue, newProfileName, error } = state
 	const inputRef = useRef<any>(null)
 	const newProfileInputRef = useRef<any>(null)
 
@@ -63,18 +107,6 @@ const ImageGenerationConfigManager = ({
 		return null
 	}
 
-	const resetCreateState = () => {
-		setIsCreating(false)
-		setNewProfileName("")
-		setError(null)
-	}
-
-	const resetRenameState = () => {
-		setIsRenaming(false)
-		setInputValue("")
-		setError(null)
-	}
-
 	// Focus input when entering rename mode.
 	useEffect(() => {
 		if (isRenaming) {
@@ -95,8 +127,7 @@ const ImageGenerationConfigManager = ({
 	const prevConfigNameRef = useRef(currentImageGenerationConfigName)
 	useEffect(() => {
 		if (prevConfigNameRef.current !== currentImageGenerationConfigName) {
-			resetCreateState()
-			resetRenameState()
+			dispatch({ type: "RESET_ALL" })
 			prevConfigNameRef.current = currentImageGenerationConfigName
 		}
 	}, [currentImageGenerationConfigName])
@@ -107,18 +138,15 @@ const ImageGenerationConfigManager = ({
 	}
 
 	const handleAdd = () => {
-		resetCreateState()
-		setIsCreating(true)
+		dispatch({ type: "START_CREATING" })
 	}
 
 	const handleStartRename = () => {
-		setIsRenaming(true)
-		setInputValue(currentImageGenerationConfigName || "")
-		setError(null)
+		dispatch({ type: "START_RENaming", value: currentImageGenerationConfigName || "" })
 	}
 
 	const handleCancel = () => {
-		resetRenameState()
+		dispatch({ type: "RESET_RENAMING" })
 	}
 
 	const handleSave = () => {
@@ -126,19 +154,19 @@ const ImageGenerationConfigManager = ({
 		const error = validateName(trimmedValue, false)
 
 		if (error) {
-			setError(error)
+			dispatch({ type: "SET_ERROR", value: error })
 			return
 		}
 
 		if (isRenaming && currentImageGenerationConfigName) {
 			if (currentImageGenerationConfigName === trimmedValue) {
-				resetRenameState()
+				dispatch({ type: "RESET_RENAMING" })
 				return
 			}
 			onRenameConfig(currentImageGenerationConfigName, trimmedValue)
 		}
 
-		resetRenameState()
+		dispatch({ type: "RESET_RENAMING" })
 	}
 
 	const handleNewProfileSave = () => {
@@ -146,12 +174,12 @@ const ImageGenerationConfigManager = ({
 		const error = validateName(trimmedValue, true)
 
 		if (error) {
-			setError(error)
+			dispatch({ type: "SET_ERROR", value: error })
 			return
 		}
 
 		onUpsertConfig(trimmedValue)
-		resetCreateState()
+		dispatch({ type: "RESET_CREATING" })
 	}
 
 	const handleDelete = () => {
@@ -175,7 +203,7 @@ const ImageGenerationConfigManager = ({
 							<Input
 								ref={inputRef}
 								value={inputValue}
-								onChange={(e) => setInputValue(e.target.value)}
+								onChange={(e) => dispatch({ type: "SET_INPUT_VALUE", value: e.target.value })}
 								onKeyDown={(e) => {
 									if (e.key === "Enter") {
 										e.preventDefault()
@@ -238,7 +266,7 @@ const ImageGenerationConfigManager = ({
 			{error && <div className="text-destructive text-sm">{error}</div>}
 
 			{/* New Profile Dialog */}
-			<Dialog open={isCreating} onOpenChange={(open) => !open && resetCreateState()}>
+			<Dialog open={isCreating} onOpenChange={(open) => !open && dispatch({ type: "RESET_CREATING" })}>
 				<DialogContent>
 					<DialogTitle>{t("settings:imageGeneration.newConfig")}</DialogTitle>
 					<div className="space-y-4">
@@ -247,7 +275,7 @@ const ImageGenerationConfigManager = ({
 							<Input
 								ref={newProfileInputRef}
 								value={newProfileName}
-								onChange={(e) => setNewProfileName(e.target.value)}
+								onChange={(e) => dispatch({ type: "SET_NEW_PROFILE_NAME", value: e.target.value })}
 								onKeyDown={(e) => {
 									if (e.key === "Enter") {
 										e.preventDefault()
@@ -259,7 +287,7 @@ const ImageGenerationConfigManager = ({
 						</div>
 						{error && <div className="text-destructive text-sm">{error}</div>}
 						<div className="flex justify-end gap-2">
-							<Button variant="outline" onClick={resetCreateState}>
+							<Button variant="outline" onClick={() => dispatch({ type: "RESET_CREATING" })}>
 								{t("common:cancel")}
 							</Button>
 							<Button onClick={handleNewProfileSave}>{t("common:create")}</Button>

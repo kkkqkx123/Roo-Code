@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 
 import { vscode } from "@/utils/vscode"
@@ -18,23 +18,28 @@ export const SystemPromptPreviewDialog = ({ open, onOpenChange }: SystemPromptPr
 	const [systemPrompt, setSystemPrompt] = useState<string>("")
 	const [isLoading, setIsLoading] = useState(false)
 
+	const fetchSystemPrompt = useCallback(() => {
+		setIsLoading(true)
+		setSystemPrompt("")
+		vscode.postMessage({ type: "getSystemPrompt" })
+
+		const handleMessage = (event: MessageEvent) => {
+			if (event.data.type === "systemPrompt") {
+				setSystemPrompt(event.data.text || "")
+				setIsLoading(false)
+			}
+		}
+
+		window.addEventListener("message", handleMessage)
+		return () => window.removeEventListener("message", handleMessage)
+	}, [])
+
 	useEffect(() => {
 		if (open) {
-			setIsLoading(true)
-			setSystemPrompt("")
-			vscode.postMessage({ type: "getSystemPrompt" })
-
-			const handleMessage = (event: MessageEvent) => {
-				if (event.data.type === "systemPrompt") {
-					setSystemPrompt(event.data.text || "")
-					setIsLoading(false)
-				}
-			}
-
-			window.addEventListener("message", handleMessage)
-			return () => window.removeEventListener("message", handleMessage)
+			const cleanup = fetchSystemPrompt()
+			return cleanup
 		}
-	}, [open])
+	}, [open, fetchSystemPrompt])
 
 	const handleCopy = async () => {
 		if (systemPrompt) {
