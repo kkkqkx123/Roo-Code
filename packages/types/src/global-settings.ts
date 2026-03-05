@@ -13,6 +13,7 @@ import { modeConfigSchema } from "./mode.js"
 import { customModePromptsSchema, customSupportPromptsSchema } from "./mode.js"
 import { toolNamesSchema } from "./tool.js"
 import { languagesSchema } from "./vscode.js"
+import { type ImageGenerationConfigEntry } from "./image-generation.js"
 
 /**
  * Default delay in milliseconds after writes to allow diagnostics to detect potential problems.
@@ -73,6 +74,16 @@ export const MAX_CHECKPOINT_TIMEOUT_SECONDS = 60
 export const DEFAULT_CHECKPOINT_TIMEOUT_SECONDS = 15
 
 /**
+ * Image generation configuration entry schema
+ */
+export const imageGenerationConfigEntrySchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	provider: z.enum(["openai", "anthropic", "custom"]),
+	modelId: z.string().optional(),
+})
+
+/**
  * GlobalSettings
  */
 
@@ -86,10 +97,9 @@ export const globalSettingsSchema = z.object({
 	taskHistory: z.array(historyItemSchema).optional(),
 	dismissedUpsells: z.array(z.string()).optional(),
 
-	// Image generation settings (experimental) - flattened for simplicity
-	imageGenerationProvider: z.enum(["openrouter"]).optional(),
-	openRouterImageApiKey: z.string().optional(),
-	openRouterImageGenerationSelectedModel: z.string().optional(),
+	// Image generation settings (new configuration system)
+	currentImageGenerationConfigName: z.string().optional(),
+	listImageGenerationConfigMeta: z.array(imageGenerationConfigEntrySchema).optional(),
 
 	customCondensingPrompt: z.string().optional(),
 
@@ -241,6 +251,19 @@ export const globalSettingsSchema = z.object({
 	 * Special value "*" disables all skills.
 	 */
 	disabledSkills: z.array(z.string()).optional(),
+
+	// Codebase index settings
+	codebaseIndexEmbedderProvider: z.string().optional(),
+	codebaseIndexEmbedderBaseUrl: z.string().optional(),
+	codebaseIndexEmbedderModelId: z.string().optional(),
+	codebaseIndexEmbedderModelDimension: z.number().optional(),
+	codebaseIndexQdrantUrl: z.string().optional(),
+	codebaseIndexSearchMinScore: z.number().optional(),
+	codebaseIndexSearchMaxResults: z.number().optional(),
+	codebaseIndexAllowedProjects: z.array(z.string()).optional(),
+	vectorStorageMode: z.string().optional(),
+	vectorStoragePreset: z.string().optional(),
+	vectorStorageThresholds: z.record(z.string(), z.number()).optional(),
 })
 
 export type GlobalSettings = z.infer<typeof globalSettingsSchema>
@@ -270,9 +293,8 @@ export const SECRET_STATE_KEYS = [
 ] as const
 
 // Global secrets that are part of GlobalSettings (not ProviderSettings)
-export const GLOBAL_SECRET_KEYS = [
-	"openRouterImageApiKey", // For image generation
-] as const
+// Note: Image generation API keys are now stored per-configuration
+export const GLOBAL_SECRET_KEYS: readonly string[] = []
 
 // Type for the actual secret storage keys
 type _ProviderSecretKey = (typeof SECRET_STATE_KEYS)[number]
@@ -292,8 +314,7 @@ export const isSecretStateKey = (key: string): key is keyof SecretState =>
 /**
  * GlobalState
  */
-
-export type GlobalState = Omit<CoderSettings, keyof SecretState>
+export type GlobalState = z.infer<typeof coderSettingsSchema>
 
 export const GLOBAL_STATE_KEYS = [...GLOBAL_SETTINGS_KEYS, ...PROVIDER_SETTINGS_KEYS].filter(
 	(key: keyof CoderSettings) => !isSecretStateKey(key),

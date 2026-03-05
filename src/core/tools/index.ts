@@ -58,6 +58,7 @@ import { newTaskTool } from "./NewTaskTool"
 import { runSlashCommandTool } from "./RunSlashCommandTool"
 import { skillTool } from "./SkillTool"
 import { useMcpTool } from "./UseMcpTool"
+import { generateImageTool } from "./GenerateImageTool"
 
 // ─── Register All Built-in Tools ──────────────────────────────────────────────
 
@@ -91,6 +92,9 @@ toolExecutorRegistry.register("run_slash_command", runSlashCommandTool)
 // MCP group
 toolExecutorRegistry.register("use_mcp", useMcpTool)
 
+// Image generation group
+toolExecutorRegistry.register("generate_image", generateImageTool)
+
 // ─── Re-export individual tools for backward compatibility ────────────────────
 
 export { readFileTool } from "./ReadFileTool"
@@ -113,3 +117,4 @@ export { newTaskTool } from "./NewTaskTool"
 export { runSlashCommandTool } from "./RunSlashCommandTool"
 export { skillTool } from "./SkillTool"
 export { useMcpTool } from "./UseMcpTool"
+export { generateImageTool } from "./GenerateImageTool"

@@ -86,9 +86,6 @@ export class ContextProxy {
 
 		await Promise.all(promises)
 
-		// Migration: Check for old nested image generation settings and migrate them
-		await this.migrateImageGenerationSettings()
-
 		// Migration: Sanitize invalid/removed API providers
 		await this.migrateInvalidApiProvider()
 
@@ -241,13 +238,6 @@ export class ContextProxy {
 				`Error during invalid API provider migration: ${error instanceof Error ? error.message : String(error)}`,
 			)
 		}
-	}
-
-	/**
-	 * Migrates old settings to the new flattened structure
-	 */
-	private async migrateImageGenerationSettings() {
-		// Migration removed - OpenRouter is no longer supported
 	}
 
 	public get extensionUri() {

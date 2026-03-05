@@ -1,6 +1,6 @@
 import { HTMLAttributes } from "react"
 
-import type { Experiments, ImageGenerationProvider } from "@coder/types"
+import type { Experiments, ImageGenerationConfigEntry, ImageGenerationConfig } from "@coder/types"
 
 import { EXPERIMENT_IDS, experimentConfigsMap } from "@coder/experiments"
 
@@ -20,12 +20,15 @@ type ExperimentalSettingsProps = HTMLAttributes<HTMLDivElement> & {
 	setExperimentEnabled: SetExperimentEnabled
 	apiConfiguration?: any
 	setApiConfigurationField?: any
-	imageGenerationProvider?: ImageGenerationProvider
-	openRouterImageApiKey?: string
-	openRouterImageGenerationSelectedModel?: string
-	setImageGenerationProvider?: (provider: ImageGenerationProvider) => void
-	setOpenRouterImageApiKey?: (apiKey: string) => void
-	setImageGenerationSelectedModel?: (model: string) => void
+	currentImageGenerationConfigName?: string
+	listImageGenerationConfigMeta?: ImageGenerationConfigEntry[]
+	imageGenerationApiKey?: string
+	onSelectImageGenerationConfig?: (configName: string) => void
+	onDeleteImageGenerationConfig?: (configName: string) => void
+	onRenameImageGenerationConfig?: (oldName: string, newName: string) => void
+	onUpsertImageGenerationConfig?: (configName: string) => void
+	onUpdateImageGenerationConfig?: (config: Partial<ImageGenerationConfig>) => void
+	onUpdateImageGenerationApiKey?: (apiKey: string) => void
 }
 
 export const ExperimentalSettings = ({
@@ -33,12 +36,15 @@ export const ExperimentalSettings = ({
 	setExperimentEnabled,
 	apiConfiguration,
 	setApiConfigurationField,
-	imageGenerationProvider,
-	openRouterImageApiKey,
-	openRouterImageGenerationSelectedModel,
-	setImageGenerationProvider,
-	setOpenRouterImageApiKey,
-	setImageGenerationSelectedModel,
+	currentImageGenerationConfigName,
+	listImageGenerationConfigMeta,
+	imageGenerationApiKey,
+	onSelectImageGenerationConfig,
+	onDeleteImageGenerationConfig,
+	onRenameImageGenerationConfig,
+	onUpsertImageGenerationConfig,
+	onUpdateImageGenerationConfig,
+	onUpdateImageGenerationApiKey,
 	className,
 	...props
 }: ExperimentalSettingsProps) => {
@@ -58,9 +64,12 @@ export const ExperimentalSettings = ({
 
 						if (
 							config[0] === "IMAGE_GENERATION" &&
-							setImageGenerationProvider &&
-							setOpenRouterImageApiKey &&
-							setImageGenerationSelectedModel
+							onSelectImageGenerationConfig &&
+							onDeleteImageGenerationConfig &&
+							onRenameImageGenerationConfig &&
+							onUpsertImageGenerationConfig &&
+							onUpdateImageGenerationConfig &&
+							onUpdateImageGenerationApiKey
 						) {
 							return (
 								<SearchableSetting
@@ -73,12 +82,15 @@ export const ExperimentalSettings = ({
 										onChange={(enabled) =>
 											setExperimentEnabled(EXPERIMENT_IDS.IMAGE_GENERATION, enabled)
 										}
-										imageGenerationProvider={imageGenerationProvider}
-										openRouterImageApiKey={openRouterImageApiKey}
-										openRouterImageGenerationSelectedModel={openRouterImageGenerationSelectedModel}
-										setImageGenerationProvider={setImageGenerationProvider}
-										setOpenRouterImageApiKey={setOpenRouterImageApiKey}
-										setImageGenerationSelectedModel={setImageGenerationSelectedModel}
+										currentImageGenerationConfigName={currentImageGenerationConfigName}
+										listImageGenerationConfigMeta={listImageGenerationConfigMeta}
+										imageGenerationApiKey={imageGenerationApiKey}
+										onSelectConfig={onSelectImageGenerationConfig}
+										onDeleteConfig={onDeleteImageGenerationConfig}
+										onRenameConfig={onRenameImageGenerationConfig}
+										onUpsertConfig={onUpsertImageGenerationConfig}
+										onUpdateConfig={onUpdateImageGenerationConfig}
+										onUpdateApiKey={onUpdateImageGenerationApiKey}
 									/>
 								</SearchableSetting>
 							)

@@ -16,6 +16,7 @@ import type { SkillMetadata } from "../skills.js"
 import type { WorktreeIncludeStatus } from "../worktree.js"
 import type { Experiments } from "../experiment.js"
 import type { Command } from "./commands.js"
+import type { ImageGenerationConfigEntry } from "../image-generation.js"
 
 /**
  * ExtensionMessage
@@ -267,8 +268,8 @@ export type ExtensionState = Pick<
 	| "includeDiagnosticMessages"
 	| "maxDiagnosticMessages"
 	| "ignoreMode"
-	| "imageGenerationProvider"
-	| "openRouterImageGenerationSelectedModel"
+	| "currentImageGenerationConfigName"
+	| "listImageGenerationConfigMeta"
 	| "includeTaskHistoryInEnhance"
 	| "reasoningBlockCollapsed"
 	| "enterBehavior"
@@ -321,7 +322,7 @@ export type ExtensionState = Pick<
 	autoCondenseContextPercent: number
 	profileThresholds: Record<string, number>
 	hasOpenedModeSelector: boolean
-	openRouterImageApiKey?: string
+	listImageGenerationConfigMeta?: ImageGenerationConfigEntry[]
 	messageQueue?: QueuedMessage[]
 	lastShownAnnouncementId?: string
 	apiModelId?: string

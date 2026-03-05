@@ -33,6 +33,8 @@ import {
 
 import {
 	type ProviderSettings,
+	type ImageGenerationConfig,
+	type ImageGenerationConfigEntry,
 	DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
 } from "@coder/types"
 
@@ -123,7 +125,14 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 	const { t } = useAppTranslation()
 
 	const extensionState = useExtensionState()
-	const { currentApiConfigName, listApiConfigMeta, uriScheme, settingsImportedAt } = extensionState
+	const {
+		currentApiConfigName,
+		listApiConfigMeta,
+		currentImageGenerationConfigName,
+		listImageGenerationConfigMeta,
+		uriScheme,
+		settingsImportedAt,
+	} = extensionState
 
 	// Use settingsStore for state management
 	const store = useSettingsStore()
@@ -204,9 +213,9 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 		includeDiagnosticMessages,
 		maxDiagnosticMessages,
 		includeTaskHistoryInEnhance,
-		imageGenerationProvider,
-		openRouterImageApiKey,
-		openRouterImageGenerationSelectedModel,
+		// imageGenerationProvider,
+		// openRouterImageApiKey,
+		// openRouterImageGenerationSelectedModel,
 		reasoningBlockCollapsed,
 		enterBehavior,
 		includeCurrentTime,
@@ -376,9 +385,11 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 					includeCurrentCost: includeCurrentCost ?? true,
 					maxGitStatusFiles: maxGitStatusFiles ?? 0,
 					profileThresholds,
-					imageGenerationProvider,
-					openRouterImageApiKey,
-					openRouterImageGenerationSelectedModel,
+					// imageGenerationProvider,
+					// openRouterImageApiKey,
+					// openRouterImageGenerationSelectedModel,
+					currentImageGenerationConfigName,
+					listImageGenerationConfigMeta,
 					experiments,
 					customSupportPrompts,
 				},
@@ -391,6 +402,51 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 
 			commitChanges()
 		}
+	}
+
+	// 图像生成配置处理函数
+	const handleSelectImageGenerationConfig = (configName: string) => {
+		vscode.postMessage({ type: "selectImageGenerationConfig", text: configName })
+	}
+
+	const handleDeleteImageGenerationConfig = (configName: string) => {
+		vscode.postMessage({ type: "deleteImageGenerationConfig", text: configName })
+	}
+
+	const handleRenameImageGenerationConfig = (oldName: string, newName: string) => {
+		vscode.postMessage({
+			type: "renameImageGenerationConfig",
+			values: { oldName, newName },
+		})
+	}
+
+	const handleUpsertImageGenerationConfig = (configName: string) => {
+		// When creating a new config, send a default config
+		const defaultConfig: ImageGenerationConfig = {
+			name: configName,
+			provider: "openai",
+			modelId: "dall-e-3",
+			apiMethod: "images_api",
+		}
+		vscode.postMessage({
+			type: "upsertImageGenerationConfig",
+			text: configName,
+			imageGenerationConfig: defaultConfig,
+		})
+	}
+
+	const handleUpdateImageGenerationConfig = (imageGenerationConfig: Partial<ImageGenerationConfig>) => {
+		vscode.postMessage({
+			type: "updateImageGenerationConfig",
+			imageGenerationConfig,
+		})
+	}
+
+	const handleUpdateImageGenerationApiKey = (apiKey: string) => {
+		vscode.postMessage({
+			type: "updateImageGenerationApiKey",
+			apiKey,
+		})
 	}
 
 	const checkUnsaveChanges = useCallback(
@@ -860,6 +916,14 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 								experiments={experiments ?? {}}
 								apiConfiguration={apiConfiguration}
 								setApiConfigurationField={setApiConfigurationField}
+								currentImageGenerationConfigName={currentImageGenerationConfigName}
+								listImageGenerationConfigMeta={listImageGenerationConfigMeta}
+								onSelectImageGenerationConfig={handleSelectImageGenerationConfig}
+								onDeleteImageGenerationConfig={handleDeleteImageGenerationConfig}
+								onRenameImageGenerationConfig={handleRenameImageGenerationConfig}
+								onUpsertImageGenerationConfig={handleUpsertImageGenerationConfig}
+								onUpdateImageGenerationConfig={handleUpdateImageGenerationConfig}
+								onUpdateImageGenerationApiKey={handleUpdateImageGenerationApiKey}
 							/>
 						)}
 

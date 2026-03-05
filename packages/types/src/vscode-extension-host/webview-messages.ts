@@ -11,6 +11,7 @@ import type { TodoItem } from "../todo.js"
 import type { QueuedMessage } from "../message.js"
 import type { CoderSettings } from "../global-settings.js"
 import type { IndexingStatusPayload, IndexClearedPayload } from "./indexing.js"
+import { imageGenerationConfigSchema } from "../image-generation.js"
 
 /**
  * WebviewMessage
@@ -161,6 +162,12 @@ export interface WebviewMessageBase {
 	| "requestModes"
 	| "switchMode"
 	| "debugSetting"
+	| "selectImageGenerationConfig"
+	| "deleteImageGenerationConfig"
+	| "renameImageGenerationConfig"
+	| "upsertImageGenerationConfig"
+	| "updateImageGenerationConfig"
+	| "updateImageGenerationApiKey"
 	// Worktree messages
 	| "listWorktrees"
 	| "createWorktree"
@@ -279,6 +286,9 @@ export interface WebviewMessageBase {
 	worktreeForce?: boolean
 	worktreeNewWindow?: boolean
 	worktreeIncludeContent?: string
+	// Image generation properties
+	imageGenerationConfig?: z.infer<typeof imageGenerationConfigSchema> | z.infer<ReturnType<typeof imageGenerationConfigSchema.partial>>
+	apiKey?: string
 }
 
 export type WebviewMessageType = WebviewMessageBase["type"]
@@ -347,3 +357,31 @@ export type WebViewMessagePayload =
 	| IndexClearedPayload
 	| UpdateTodoListPayload
 	| EditQueuedMessagePayload
+
+export const selectImageGenerationConfigPayloadSchema = z.object({
+	text: z.string(),
+})
+
+export const deleteImageGenerationConfigPayloadSchema = z.object({
+	text: z.string(),
+})
+
+export const renameImageGenerationConfigPayloadSchema = z.object({
+	values: z.object({
+		oldName: z.string(),
+		newName: z.string(),
+	}),
+})
+
+export const upsertImageGenerationConfigPayloadSchema = z.object({
+	text: z.string(),
+	imageGenerationConfig: imageGenerationConfigSchema,
+})
+
+export const updateImageGenerationConfigPayloadSchema = z.object({
+	imageGenerationConfig: imageGenerationConfigSchema.partial(),
+})
+
+export const updateImageGenerationApiKeyPayloadSchema = z.object({
+	apiKey: z.string(),
+})
